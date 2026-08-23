@@ -65,6 +65,21 @@ pub struct GameInfo {
     pub can_copy: bool,
 }
 
+/// The installed games, and why any library is missing from them.
+///
+/// The two are returned together because a partial list is still worth showing.
+/// Steam almost always answers, so returning an error the moment Playnite fails
+/// would throw away a usable list — but reporting only the games silently drops
+/// the reason the other library is absent, which reads as "Playnite is not
+/// supported" rather than "Playnite needs an exporter extension".
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameList {
+    pub games: Vec<GameInfo>,
+    /// One line per library that could not be read. Empty on a clean run.
+    pub problems: Vec<String>,
+}
+
 /// One game's metadata when creating a multi-game bundle cartridge.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +95,9 @@ pub struct BundleGameRequest {
     /// Absolute path to a user-chosen cover image for this game.
     #[serde(default)]
     pub cover_source: Option<String>,
+    /// The game's folder, when the user pointed at one themselves.
+    #[serde(default)]
+    pub source_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -95,9 +113,25 @@ pub struct CartridgeRequest {
     /// Playnite GUID, when the cover should come from Playnite's cache.
     #[serde(default)]
     pub playnite_id: Option<String>,
+    /// The game's folder, when the user pointed at one themselves.
+    ///
+    /// Playnite is not the only way to own a game. A folder chosen here is
+    /// copied exactly as a Playnite install directory would be, which is what
+    /// makes a cartridge of anything that is not in a launcher's library.
+    #[serde(default)]
+    pub source_dir: Option<String>,
     /// Absolute path to a user-chosen cover image instead.
     #[serde(default)]
     pub cover_source: Option<String>,
+    /// Absolute path to a user-chosen Explorer icon for a single game.
+    #[serde(default)]
+    pub icon_source: Option<String>,
+    /// Absolute path to a user-chosen launcher background for a single game.
+    #[serde(default)]
+    pub background_source: Option<String>,
+    /// Absolute path to a user-chosen title logo for a single game.
+    #[serde(default)]
+    pub logo_source: Option<String>,
     /// Format the drive first. `format_confirmation` must match the drive's
     /// current label or nothing happens.
     #[serde(default)]
@@ -127,6 +161,15 @@ pub struct CartridgeRequest {
     /// Absolute path to the collection's cover image for a bundle.
     #[serde(default)]
     pub collection_cover_source: Option<String>,
+    /// Absolute path to the collection's Explorer icon.
+    #[serde(default)]
+    pub collection_icon_source: Option<String>,
+    /// Absolute path to the collection's launcher background.
+    #[serde(default)]
+    pub collection_background_source: Option<String>,
+    /// Absolute path to the collection's launcher title logo.
+    #[serde(default)]
+    pub collection_logo_source: Option<String>,
     /// Close Steam if it is in the way.
     ///
     /// Steam holds its library list in memory and writes it out when it exits,
@@ -160,6 +203,10 @@ impl CartridgeRequest {
             app_id: game.app_id.clone(),
             playnite_id: game.playnite_id.clone(),
             cover_source: game.cover_source.clone(),
+            // Per game, never inherited: the collection has no one folder, and
+            // `..self.clone()` below would otherwise give every game in the
+            // bundle the same source.
+            source_dir: game.source_dir.clone(),
             games: None,
             // The format runs once, before any game is copied.
             format_drive: false,
@@ -214,7 +261,7 @@ pub struct CartridgeResult {
 /// auto-discovery did not find Playnite. Corresponds to the `PLAYNITE_ROOT`
 /// environment variable, but can be set per-invocation without touching the
 /// environment.
-pub fn list_games(playnite_root_override: Option<&str>) -> Result<Vec<GameInfo>, String> {
+pub fn list_games(playnite_root_override: Option<&str>) -> Result<GameList, String> {
     let mut out = Vec::new();
     let mut problems = Vec::new();
 
@@ -248,7 +295,10 @@ pub fn list_games(playnite_root_override: Option<&str>) -> Result<Vec<GameInfo>,
     }
 
     out.sort_by_key(|a| a.name.to_lowercase());
-    Ok(out)
+    Ok(GameList {
+        games: out,
+        problems,
+    })
 }
 
 fn playnite_games(playnite_root_override: Option<&str>) -> Result<Vec<GameInfo>, String> {
@@ -256,28 +306,14 @@ fn playnite_games(playnite_root_override: Option<&str>) -> Result<Vec<GameInfo>,
         .map(PathBuf::from)
         .or_else(playnite::playnite_root)
         .ok_or_else(|| "Playnite not found.".to_string())?;
-    let exports = playnite::find_exports(&root);
-    if exports.is_empty() {
-        return Err(format!(
+    let (_, games) = playnite::import_newest_in(&root).map_err(|e| match e {
+        playnite::ImportError::NotFound => format!(
             "Playnite is installed at {} but has no JSON library export. \
              Install a JSON library exporter extension and run it.",
             root.display()
-        ));
-    }
-
-    // Newest export wins, since several extensions may have written one.
-    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
-    for path in exports {
-        let modified = std::fs::metadata(&path)
-            .and_then(|m| m.modified())
-            .unwrap_or(std::time::UNIX_EPOCH);
-        if newest.as_ref().map(|(t, _)| modified > *t).unwrap_or(true) {
-            newest = Some((modified, path));
-        }
-    }
-    let (_, path) = newest.expect("exports was not empty");
-
-    let games = playnite::import_from(&path).map_err(|e| e.to_string())?;
+        ),
+        other => other.to_string(),
+    })?;
 
     Ok(games
         .into_iter()
@@ -420,8 +456,9 @@ pub fn create_cartridge(
     };
 
     // Never trust the window's idea of where to write. The allowed set is
-    // re-derived and an exact match required.
-    let root = resolve_target(&request.drive_path)?;
+    // re-derived and an exact match required. Mutable: formatting can move
+    // this (see the format step below).
+    let mut root = resolve_target(&request.drive_path)?;
 
     // Every file copied across, with the sum taken as it was written. Only
     // filled in when the build was asked to check its own work.
@@ -470,13 +507,25 @@ pub fn create_cartridge(
             total_bytes: 0,
         });
 
-        format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
+        // A fresh filesystem gets a fresh label, and on Linux the desktop
+        // automounts by label — so the drive very often does not come back at
+        // the path it was just at. Remember which device is actually behind
+        // `root` before formatting erases that mapping, so it can be found
+        // again afterward under whatever new name it gets, if format_drive's
+        // own attempt below did not already resolve it.
+        let device = current_device(&root);
+
+        let remounted = format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
             .map_err(|e| e.to_string())?;
         result.formatted = true;
         result.formatted_filesystem = Some(filesystem);
 
-        // The mount point may take a moment to come back after mkfs.
-        wait_for_mount(&root);
+        // format_drive already tries to mount the fresh filesystem itself;
+        // this only falls back to polling when that did not land in time.
+        root = match remounted {
+            Some(path) => PathBuf::from(path),
+            None => wait_for_remount(root, device.as_deref())?,
+        };
     }
 
     // ---- 2. Bundle mode: build every game, then bail early ---------------
@@ -597,6 +646,27 @@ pub fn create_cartridge(
             },
             None => None,
         };
+        let collection_icon = request
+            .collection_icon_source
+            .as_deref()
+            .map(Path::new)
+            .filter(|path| path.is_file())
+            .and_then(|source| copy_cover(source, &root, "icon").ok())
+            .map(|name| root.join(name));
+        let collection_background = request
+            .collection_background_source
+            .as_deref()
+            .map(Path::new)
+            .filter(|path| path.is_file())
+            .and_then(|source| copy_cover(source, &root, "background").ok())
+            .map(|name| root.join(name));
+        let collection_logo = request
+            .collection_logo_source
+            .as_deref()
+            .map(Path::new)
+            .filter(|path| path.is_file())
+            .and_then(|source| copy_cover(source, &root, "logo").ok())
+            .map(|name| root.join(name));
         result.cover_written = collection_cover.is_some();
 
         // ---- cartridge.conf -----------------------------------------------
@@ -607,6 +677,18 @@ pub fn create_cartridge(
         let conf = render_bundle_conf(
             &title,
             collection_cover
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            collection_icon
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            collection_background
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            collection_logo
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .and_then(|n| n.to_str()),
@@ -624,7 +706,11 @@ pub fn create_cartridge(
             done_bytes: 0,
             total_bytes: 0,
         });
-        match autorun::write_autorun(&root, &title, collection_cover.as_deref()) {
+        match autorun::write_autorun(
+            &root,
+            &title,
+            collection_icon.as_deref().or(collection_cover.as_deref()),
+        ) {
             Ok(icon) => {
                 result.autorun_written = true;
                 result.icon = icon;
@@ -701,14 +787,42 @@ pub fn create_cartridge(
     };
     result.cover_written = cover_destination.is_some();
 
+    // The launcher's title logo, background and Explorer icon — each optional,
+    // unrelated to the cover and to each other, and never guessed at: only
+    // copied when the wizard (or SteamGridDB through it) actually chose one.
+    let icon_destination = request
+        .icon_source
+        .as_deref()
+        .map(Path::new)
+        .filter(|path| path.is_file())
+        .and_then(|source| copy_cover(source, &root, "icon").ok())
+        .map(|name| root.join(name));
+    let background_destination = request
+        .background_source
+        .as_deref()
+        .map(Path::new)
+        .filter(|path| path.is_file())
+        .and_then(|source| copy_cover(source, &root, "background").ok())
+        .map(|name| root.join(name));
+    let logo_destination = request
+        .logo_source
+        .as_deref()
+        .map(Path::new)
+        .filter(|path| path.is_file())
+        .and_then(|source| copy_cover(source, &root, "logo").ok())
+        .map(|name| root.join(name));
+
     // ---- 5. cartridge.conf ----------------------------------------------
+    fn file_name(p: &Option<PathBuf>) -> Option<&str> {
+        p.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str())
+    }
     let conf = render_cartridge_conf(
         &title,
         &executable,
-        cover_destination
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str()),
+        file_name(&cover_destination),
+        file_name(&icon_destination),
+        file_name(&background_destination),
+        file_name(&logo_destination),
     );
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
@@ -723,11 +837,12 @@ pub fn create_cartridge(
         total_bytes: 0,
     });
 
-    match autorun::write_autorun(&root, &title, cover_destination.as_deref()) {
+    let autorun_source = icon_destination.as_deref().or(cover_destination.as_deref());
+    match autorun::write_autorun(&root, &title, autorun_source) {
         Ok(icon) => {
             result.autorun_written = true;
             result.icon = icon;
-            if result.cover_written && result.icon.is_none() {
+            if autorun_source.is_some() && result.icon.is_none() {
                 warnings.push(
                     "Explorer needs an .ico for a custom drive icon and the cover is a JPEG, \
                      so the drive keeps its default icon. Drop a cover.ico on the cartridge \
@@ -992,6 +1107,16 @@ fn copy_portable_game(
         return Err(format!("{} is not there any more", source.display()));
     }
 
+    // Copying the cartridge onto itself never terminates. Reachable as soon as
+    // the source is a folder somebody picked, since the picker will happily
+    // open on the drive being written to.
+    if source == root || source.starts_with(root) {
+        return Err(format!(
+            "{} is on the cartridge already, so there is nothing to copy from",
+            source.display()
+        ));
+    }
+
     let title = sanitize_conf_value(&request.title);
     let folder_name = portable::safe_folder_name(&title);
     // Everything the wizard copies lives under Games/, so the cartridge root
@@ -1046,7 +1171,58 @@ fn copy_portable_game(
 }
 
 /// Where a non-Steam game's files currently live.
+/// Check a folder the user chose before anything is copied out of it.
+///
+/// The path arrives from the window, so it is re-checked here rather than
+/// trusted: a command is reachable whatever the interface allowed. None of this
+/// is about a hostile user — it is about the two mistakes that are easy to make
+/// with a folder picker and expensive to make with a copy.
+pub fn check_source_dir(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("No folder was chosen.".to_string());
+    }
+    let dir = PathBuf::from(trimmed);
+
+    if !dir.is_dir() {
+        return Err(format!("{} is not a folder.", dir.display()));
+    }
+
+    // A drive root has no parent. Copying one would take the recycle bin, the
+    // system volume information and every other game on the disk with it.
+    if dir.parent().is_none() {
+        return Err(format!(
+            "{} is a whole drive. Choose the folder that holds the game.",
+            dir.display()
+        ));
+    }
+
+    // Windows itself is never a game, and the mistake is one click away in a
+    // folder picker that opens on C:.
+    for var in ["SystemRoot", "windir"] {
+        if let Some(system) = std::env::var_os(var) {
+            let system = PathBuf::from(system);
+            if dir == system || dir.starts_with(&system) {
+                return Err(format!(
+                    "{} is inside Windows itself, which is not a game.",
+                    dir.display()
+                ));
+            }
+        }
+    }
+
+    Ok(dir)
+}
+
 fn portable_source(request: &CartridgeRequest) -> Result<Option<PathBuf>, String> {
+    // A folder the user chose wins: they said exactly which one, and it is the
+    // only route for a game no launcher knows about.
+    if let Some(chosen) = request.source_dir.as_deref().map(str::trim) {
+        if !chosen.is_empty() {
+            return check_source_dir(chosen).map(Some);
+        }
+    }
+
     let Some(playnite_id) = request.playnite_id.as_deref() else {
         return Ok(None);
     };
@@ -1118,6 +1294,13 @@ fn playnite_play_action(request: &CartridgeRequest) -> Option<String> {
 }
 
 /// Candidates for what Play should start, best guess first.
+pub fn executable_choices_in(dir: &str, title: &str) -> Result<Vec<portable::Candidate>, String> {
+    let dir = check_source_dir(dir)?;
+    // No play action to go on: nothing recorded which file this folder starts,
+    // which is the whole reason the ranking in portable.rs exists.
+    Ok(portable::find_executables(&dir, title, None))
+}
+
 pub fn executable_choices(playnite_id: &str) -> Result<Vec<portable::Candidate>, String> {
     let root = playnite::playnite_root().ok_or_else(|| "Could not find Playnite.".to_string())?;
     let game = playnite::find_exports(&root)
@@ -1220,7 +1403,7 @@ fn copy_steam_game(
             .ok_or_else(|| "the manifest has no filename".to_string())?,
     );
     std::fs::create_dir_all(root.join("steamapps"))
-        .and_then(|_| std::fs::copy(&game.manifest_path, &manifest_destination).map(|_| ()))
+        .and_then(|_| copy_small_file(&game.manifest_path, &manifest_destination))
         .map_err(|e| format!("could not copy the app manifest: {e}"))?;
 
     progress(Progress {
@@ -1246,13 +1429,53 @@ fn copy_steam_game(
 }
 
 /// After a format the mount point can briefly disappear.
-fn wait_for_mount(root: &Path) {
+/// The device node currently mounted at `path`, if any.
+///
+/// Only meaningful on Linux, where a device can be looked up in
+/// `/proc/mounts`; on Windows the drive letter is the handle used throughout
+/// a format, so there is nothing to remember ahead of time.
+#[cfg(not(windows))]
+fn current_device(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string("/proc/mounts").ok()?;
+    drives::parse_proc_mounts(&text)
+        .into_iter()
+        .find(|entry| entry.mount == path)
+        .map(|entry| entry.device)
+}
+
+#[cfg(windows)]
+fn current_device(_path: &Path) -> Option<String> {
+    None
+}
+
+/// Wait for the drive to come back after formatting.
+///
+/// On Windows the drive letter survives a format, so this just polls `path`
+/// itself. On Linux the desktop automounts by volume label, so a freshly
+/// labelled filesystem can land at an entirely new path; when the device that
+/// used to be at `path` is known, this looks for wherever *it* ended up
+/// instead of waiting on a path that may never reappear.
+fn wait_for_remount(path: PathBuf, device: Option<&str>) -> Result<PathBuf, String> {
     for _ in 0..40 {
-        if root.is_dir() {
-            return;
+        if path.is_dir() {
+            return Ok(path);
+        }
+        if let Some(device) = device {
+            if let Ok(text) = std::fs::read_to_string("/proc/mounts") {
+                if let Some(entry) = drives::parse_proc_mounts(&text)
+                    .into_iter()
+                    .find(|entry| entry.device == device)
+                {
+                    return Ok(entry.mount);
+                }
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
+    Err(format!(
+        "{} did not come back after formatting. Reconnect the drive and try again.",
+        path.display()
+    ))
 }
 
 /// A default volume name derived from the title, for the default filesystem.
@@ -1381,9 +1604,35 @@ pub(crate) fn copy_cover(source: &Path, root: &Path, stem: &str) -> Result<Strin
         .unwrap_or_else(|| "jpg".to_string());
     let relative = format!("{stem}.{extension}");
 
-    std::fs::copy(source, root.join(&relative))
+    copy_small_file(source, &root.join(&relative))
         .map_err(|e| format!("could not write {}: {e}", root.join(&relative).display()))?;
     Ok(relative)
+}
+
+/// Copy one small file without the OS fast path.
+///
+/// `std::fs::copy` (and `std::io::copy` between two `File`s) can try
+/// `copy_file_range`/`sendfile` on Linux, which some FUSE filesystems don't
+/// implement — an exFAT driver has been observed failing both calls above
+/// with ENOSYS even though the destination mount is otherwise writable. A
+/// manual buffer loop sidesteps that fast path entirely; both files here are
+/// small enough (a manifest, a cover under `MAX_COVER_BYTES`) that losing it
+/// costs nothing worth trading reliability for.
+fn copy_small_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::io::{Read, Write};
+
+    let mut source = std::fs::File::open(from)?;
+    let mut destination = std::fs::File::create(to)?;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = source.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        destination.write_all(&buffer[..read])?;
+    }
+    destination.sync_all()?;
+    Ok(())
 }
 
 /// Strip anything that would corrupt the `key=value` file.
@@ -1450,7 +1699,14 @@ pub fn validate_executable(executable: &str, root: &Path) -> Result<(), String> 
 }
 
 /// Render the conf file, with a header explaining where it came from.
-pub fn render_cartridge_conf(title: &str, executable: &str, cover: Option<&str>) -> String {
+pub fn render_cartridge_conf(
+    title: &str,
+    executable: &str,
+    cover: Option<&str>,
+    icon: Option<&str>,
+    background: Option<&str>,
+    logo: Option<&str>,
+) -> String {
     let mut out = String::new();
     out.push_str("# PC GamePak\n");
     out.push_str("# Written by the create-cartridge wizard. Safe to edit by hand.\n");
@@ -1460,6 +1716,15 @@ pub fn render_cartridge_conf(title: &str, executable: &str, cover: Option<&str>)
     if let Some(cover) = cover {
         out.push_str(&format!("cover={cover}\n"));
     }
+    if let Some(icon) = icon {
+        out.push_str(&format!("icon={icon}\n"));
+    }
+    if let Some(background) = background {
+        out.push_str(&format!("background={background}\n"));
+    }
+    if let Some(logo) = logo {
+        out.push_str(&format!("logo={logo}\n"));
+    }
     out
 }
 
@@ -1468,6 +1733,9 @@ pub fn render_cartridge_conf(title: &str, executable: &str, cover: Option<&str>)
 pub fn render_bundle_conf(
     collection_title: &str,
     collection_cover: Option<&str>,
+    collection_icon: Option<&str>,
+    collection_background: Option<&str>,
+    collection_logo: Option<&str>,
     games: &[(&str, &str, Option<&str>)],
 ) -> String {
     let mut out = String::new();
@@ -1478,6 +1746,15 @@ pub fn render_bundle_conf(
     out.push_str(&format!("title={collection_title}\n"));
     if let Some(cover) = collection_cover {
         out.push_str(&format!("cover={cover}\n"));
+    }
+    if let Some(icon) = collection_icon {
+        out.push_str(&format!("icon={icon}\n"));
+    }
+    if let Some(background) = collection_background {
+        out.push_str(&format!("background={background}\n"));
+    }
+    if let Some(logo) = collection_logo {
+        out.push_str(&format!("logo={logo}\n"));
     }
     out.push('\n');
     for (title, executable, cover) in games {
@@ -1600,11 +1877,22 @@ mod tests {
             "Hollow Knight",
             "steam://rungameid/367520",
             Some("cover.jpg"),
+            Some("icon.ico"),
+            Some("background.jpg"),
+            Some("logo.png"),
         );
         assert!(conf.contains("title=Hollow Knight\n"));
         assert!(conf.contains("executable=steam://rungameid/367520\n"));
         assert!(conf.contains("cover=cover.jpg\n"));
-        assert!(!render_cartridge_conf("X", "steam://rungameid/1", None).contains("cover="));
+        assert!(conf.contains("icon=icon.ico\n"));
+        assert!(conf.contains("background=background.jpg\n"));
+        assert!(conf.contains("logo=logo.png\n"));
+
+        let bare = render_cartridge_conf("X", "steam://rungameid/1", None, None, None, None);
+        assert!(!bare.contains("cover="));
+        assert!(!bare.contains("icon="));
+        assert!(!bare.contains("background="));
+        assert!(!bare.contains("logo="));
     }
 
     #[test]
@@ -1633,6 +1921,66 @@ mod tests {
         ] {
             assert!(validate_executable(bad, root).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_chosen_game_folder_is_checked_before_anything_is_copied() {
+        let scratch = crate::testutil::Scratch::new("source");
+        let game = scratch.join("Split Fiction");
+        std::fs::create_dir_all(&game).unwrap();
+
+        assert_eq!(check_source_dir(game.to_str().unwrap()).unwrap(), game);
+        // Surrounding whitespace is a paste, not a different folder.
+        let padded = format!("  {}  ", game.display());
+        assert_eq!(check_source_dir(&padded).unwrap(), game);
+
+        // Nothing chosen, and a path that is not a folder.
+        assert!(check_source_dir("").is_err());
+        assert!(check_source_dir("   ").is_err());
+        std::fs::write(scratch.join("notes.txt"), b"x").unwrap();
+        assert!(check_source_dir(scratch.join("notes.txt").to_str().unwrap()).is_err());
+        assert!(check_source_dir(scratch.join("nope").to_str().unwrap()).is_err());
+
+        // A whole drive: copying one takes every other game on the disk, the
+        // recycle bin and System Volume Information with it.
+        let root = if cfg!(windows) { "C:\\" } else { "/" };
+        let err = check_source_dir(root).unwrap_err();
+        assert!(err.contains("whole drive"), "{err}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_itself_is_never_a_game_folder() {
+        // One click away in a picker that opens on C:.
+        let system = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+        let err = check_source_dir(&system).unwrap_err();
+        assert!(err.contains("inside Windows itself"), "{err}");
+
+        let err = check_source_dir(&format!("{system}\\System32")).unwrap_err();
+        assert!(err.contains("inside Windows itself"), "{err}");
+    }
+
+    #[test]
+    fn a_bundle_does_not_hand_every_game_the_same_folder() {
+        // for_game() fills the rest of the request with `..self.clone()`, so a
+        // source folder set on the collection would otherwise be copied once
+        // per game under each game's name.
+        let request = CartridgeRequest {
+            source_dir: Some("/games/wukong".to_string()),
+            ..Default::default()
+        };
+        let job = request.for_game(&BundleGameRequest {
+            title: "Split Fiction".to_string(),
+            source_dir: Some("/games/split".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(job.source_dir.as_deref(), Some("/games/split"));
+
+        let job = request.for_game(&BundleGameRequest {
+            title: "Hades".to_string(),
+            ..Default::default()
+        });
+        assert_eq!(job.source_dir, None);
     }
 
     #[test]
@@ -1819,6 +2167,9 @@ mod tests {
         let conf = render_bundle_conf(
             "God of War Collection",
             Some("collection.jpg"),
+            None,
+            None,
+            None,
             &[
                 (
                     "God of War",

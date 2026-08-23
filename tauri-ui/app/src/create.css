@@ -71,7 +71,7 @@
   align-items: center;
   gap: 9px;
   margin: 0 0 12px;
-  font-size: 10px;
+  font-size: var(--text-label);
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: 0.17em;
@@ -88,7 +88,7 @@
   background: color-mix(in oklch, var(--accent) 22%, transparent);
   border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
   color: color-mix(in oklch, var(--accent) 90%, var(--ink));
-  font-size: 9.5px;
+  font-size: var(--text-label);
   letter-spacing: 0;
 }
 
@@ -98,7 +98,7 @@
 .field input,
 .field select {
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--ink);
   background: var(--sunk);
   border: 1px solid var(--hairline-soft);
@@ -129,7 +129,7 @@
 #games-wrap,
 #drives-wrap {
   flex: 1;
-  min-height: 0;
+  min-height: 220px;
   border: 1px solid var(--hairline-soft);
   border-radius: 6px;
   background: oklch(0 0 0 / 0.22);
@@ -175,7 +175,7 @@
   background: none;
   color: var(--ink);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
   transition: background-color 110ms linear;
@@ -212,7 +212,7 @@ li:last-child .row {
   flex: none;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   color: var(--ink-3);
 }
 
@@ -225,7 +225,7 @@ li:last-child .row {
 #drives-empty {
   margin: 0;
   padding: 16px 14px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   color: var(--ink-3);
 }
@@ -236,7 +236,7 @@ li:last-child .row {
   border: 0;
   padding: 8px 0 0;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--text);
   color: var(--ink-2);
   text-align: left;
   text-decoration: underline;
@@ -253,16 +253,18 @@ li:last-child .row {
 /* --- Preview ------------------------------------------------------------ */
 
 #preview {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 18px;
 }
 
 #preview-art {
   position: relative;
-  /* 2:3 — the shape Steam caches library art in. */
-  aspect-ratio: 2 / 3;
+  /* The launcher is a cover-shaped 3:4 preview, not a library thumbnail. */
+  aspect-ratio: 3 / 4;
+  width: min(100%, 220px);
+  align-self: center;
   border-radius: 4px;
   overflow: hidden;
   background: var(--sunk);
@@ -278,8 +280,11 @@ li:last-child .row {
   display: block;
 }
 
+/* `display` on an id selector beats the browser's [hidden] rule, so hiding
+   the preview has to be spelled out here too. */
 #preview-img:not([src]),
-#preview-img[src=""] {
+#preview-img[src=""],
+#preview-img[hidden] {
   display: none;
 }
 
@@ -293,7 +298,7 @@ li:last-child .row {
     oklch(0.185 0.005 65) 0 7px,
     oklch(0.16 0.005 65) 7px 14px
   );
-  font-size: 8px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.2em;
   color: var(--ink-3);
@@ -303,27 +308,114 @@ li:last-child .row {
   display: none;
 }
 
-#preview-meta {
-  min-width: 0;
-  align-self: center;
+#preview-chrome,
+#preview-stage {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 1;
+}
+
+#preview-chrome {
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 11px;
+  background: linear-gradient(to bottom, oklch(0.08 0.004 65 / 0.72), transparent);
+}
+
+.preview-chrome__brand {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--ink-2);
+}
+
+.preview-chrome__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+#preview-stage {
+  bottom: 0;
+  top: auto;
+  padding: 44px 11px 11px;
+  background: linear-gradient(to top, oklch(0.07 0.004 65 / 0.96), transparent);
+}
+
+#preview-stage .eyebrow {
+  font-size: 7px;
 }
 
 #preview-title {
-  margin: 7px 0 0;
-  font-size: 19px;
+  margin: 5px 0 0;
+  font-size: 17px;
   font-weight: 800;
-  font-stretch: 108%;
-  line-height: 1.05;
-  letter-spacing: -0.015em;
+  line-height: 0.98;
+  text-transform: uppercase;
   text-wrap: balance;
 }
 
 #preview-sub {
+  margin: 5px 0 0;
+  font-size: 8px;
+  color: var(--ink-2);
+}
+
+#preview-games {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   margin: 7px 0 0;
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--ink-3);
-  overflow-wrap: anywhere;
+  padding: 0;
+  list-style: none;
+}
+
+#preview-games[hidden] {
+  display: none;
+}
+
+#preview-games li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 5px;
+  border: 1px solid oklch(1 0 0 / 0.16);
+  border-radius: 2px;
+  background: oklch(0 0 0 / 0.35);
+  font-size: 8px;
+}
+
+#preview-games kbd,
+#preview-actions kbd {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 7px;
+  color: var(--accent);
+}
+
+#preview-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+#preview-actions span {
+  flex: 1;
+  padding: 5px 4px;
+  border: 1px solid oklch(1 0 0 / 0.2);
+  border-radius: 3px;
+  font-size: 7px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+#preview-actions span:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 #preview-source {
@@ -357,7 +449,7 @@ li:last-child .row {
 .field__label {
   display: block;
   margin-bottom: 5px;
-  font-size: 9px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -366,14 +458,14 @@ li:last-child .row {
 
 .field__hint {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   color: var(--ink-3);
 }
 
 .field__hint code {
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-label);
   color: var(--ink-2);
 }
 
@@ -384,6 +476,30 @@ li:last-child .row {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 16px;
+}
+
+#advanced-options {
+  margin: 2px 0 0 23px;
+  border-top: 1px solid var(--hairline-soft);
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+#advanced-options summary {
+  padding: 9px 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+#advanced-options summary::marker {
+  color: var(--accent);
+}
+
+#advanced-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 0 10px;
 }
 
 .opt {
@@ -409,7 +525,7 @@ li:last-child .row {
 
 .opt__label {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1.3;
 }
@@ -417,7 +533,7 @@ li:last-child .row {
 .opt__hint {
   display: block;
   margin-top: 3px;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--ink-3);
 }
@@ -437,8 +553,8 @@ li:last-child .row {
   gap: 9px;
   margin: 2px 0 0 23px;
   padding: 11px 12px;
-  border-left: 2px solid color-mix(in oklch, var(--danger) 55%, transparent);
-  background: color-mix(in oklch, var(--danger) 7%, transparent);
+  border-left: 1px solid color-mix(in oklch, var(--danger) 45%, transparent);
+  background: color-mix(in oklch, var(--danger) 6%, transparent);
   border-radius: 0 4px 4px 0;
   animation: rise 320ms var(--ease) both;
 }
@@ -475,17 +591,30 @@ li:last-child .row {
 }
 
 #progress-fill {
+  --progress-pct: 0;
   height: 100%;
-  width: 0;
+  width: 100%;
   border-radius: inherit;
   background: var(--accent);
-  transition: width 200ms linear;
+  transform-origin: left center;
+  transform: scaleX(var(--progress-pct));
+  transition: transform 200ms linear;
 }
 
 /* A step with no byte count still needs to look alive. */
 #progress-fill.is-indeterminate {
-  width: 35%;
+  width: 100%;
+  transform-origin: left center;
   animation: sweep 1100ms ease-in-out infinite;
+}
+
+/* With the sweep off, an indeterminate bar would scale to nothing and read as
+   a stalled build. It fills instead, dimmed, and the text carries the step. */
+@media (prefers-reduced-motion: reduce) {
+  #progress-fill.is-indeterminate {
+    transform: scaleX(1);
+    opacity: 0.45;
+  }
 }
 
 @keyframes sweep {
@@ -495,7 +624,7 @@ li:last-child .row {
 
 #progress-text {
   margin: 6px 0 0;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   color: var(--ink-3);
 }
 
@@ -521,6 +650,12 @@ li:last-child .row {
   flex: 1;
 }
 
+#ready-message {
+  margin: 0 0 2px;
+  min-height: 1.4em;
+  color: var(--ink-3);
+}
+
 .btn--tiny {
   min-height: 30px;
   padding: 0 10px;
@@ -529,7 +664,7 @@ li:last-child .row {
 #status {
   margin: 12px 0 0;
   min-height: 1.4em;
-  font-size: 11.5px;
+  font-size: var(--text);
   line-height: 1.5;
   color: var(--ink-2);
 }
@@ -559,7 +694,7 @@ li:last-child .row {
 
 #exe-choices {
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 11.5px;
+  font-size: var(--text);
   width: 100%;
   padding: 8px 10px;
   color: var(--ink);
@@ -639,7 +774,7 @@ li:last-child .row {
   padding: 4px 6px;
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .edit-row__name:hover {
@@ -661,7 +796,7 @@ li:last-child .row {
   border-radius: 3px;
   background: color-mix(in oklch, var(--accent) 22%, transparent);
   color: color-mix(in oklch, var(--accent) 90%, var(--ink));
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 700;
 }
 
@@ -671,7 +806,7 @@ li:last-child .row {
   background: none;
   padding: 2px 5px;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--text-lg);
   line-height: 1;
   color: var(--ink-3);
   cursor: pointer;
@@ -694,7 +829,7 @@ li:last-child .row {
   background: none;
   padding: 2px 5px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-3);
   cursor: pointer;
   border-radius: 3px;
@@ -734,7 +869,7 @@ li:last-child .row {
 
 .sgdb-head h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 
 #sgdb-results {
@@ -769,7 +904,7 @@ li:last-child .row {
 .sgdb-card span {
   display: block;
   margin-top: 4px;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   color: var(--ink-3);
 }
 
@@ -778,11 +913,68 @@ li:last-child .row {
   justify-content: flex-end;
 }
 
+@media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+
+  #shell {
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    border-radius: 0;
+  }
+
+  #columns {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  #pick-game,
+  #pick-target {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  #pick-game {
+    min-height: 380px;
+  }
+
+  #games-wrap {
+    flex: none;
+    height: 260px;
+  }
+
+  #pick-target {
+    border-top: 1px solid var(--hairline-soft);
+    border-left: 0;
+    overflow: visible;
+  }
+
+  #actions {
+    position: sticky;
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+}
+
+/* The folder picker sits beside its Clear, with the chosen path underneath. */
+.folder-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  flex-wrap: wrap;
+}
+
+#folder-chosen {
+  overflow-wrap: anywhere;
+}
+
 /* --- Bundle panel -------------------------------------------------------- */
 
 #drive-space {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
   margin: 4px 0 0;
 }
 
@@ -812,7 +1004,7 @@ li:last-child .row {
   background: var(--sunk);
   border: 1px solid var(--hairline-soft);
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: var(--text);
 }
 
 .bundle-item__name {
@@ -823,19 +1015,36 @@ li:last-child .row {
 }
 
 .bundle-item__size {
-  font-size: 11px;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
   white-space: nowrap;
+}
+
+.bundle-item__art {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.bundle-item__art:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .bundle-item__remove {
   padding: 2px 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   border-radius: 4px;
   background: transparent;
   border: 1px solid var(--hairline-soft);
   cursor: pointer;
-  color: var(--muted);
+  color: var(--ink-3);
   line-height: 1;
 }
 
@@ -845,8 +1054,8 @@ li:last-child .row {
 }
 
 #bundle-space {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
   text-align: right;
 }
 
@@ -867,7 +1076,7 @@ li:last-child .row {
 }
 
 #collection-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   width: 100%;
   padding: 7px 10px;
   color: var(--ink);
@@ -884,12 +1093,12 @@ li:last-child .row {
 /* Bundle-toggle button on game rows */
 .row__bundle-btn {
   padding: 3px 9px;
-  font-size: 11px;
+  font-size: var(--text-sm);
   border-radius: 4px;
   background: transparent;
   border: 1px solid var(--hairline-soft);
   cursor: pointer;
-  color: var(--muted);
+  color: var(--ink-3);
   white-space: nowrap;
   align-self: center;
   line-height: 1.4;

@@ -2,17 +2,20 @@
  * Create-cartridge wizard.
  *
  * Backend contract (src-tauri/src/create.rs):
- *   list_games()                     -> [{ id, name, library, source, sizeOnDisk,
- *                                          hasCover, executable, canCopy }]
+ *   list_games()                     -> { games: [{ id, name, library, source,
+ *                                          sizeOnDisk, hasCover, executable,
+ *                                          canCopy }],
+ *                                          problems: ["why a library is absent"] }
  *   game_cover({ library, id })      -> "data:image/…" | ""
  *   get_settings()                    -> { steamgriddbEnabled, steamgriddbApiKey }
  *   set_settings({ settings })        -> the settings as stored
  *   suggest_collection_name({ titles }) -> "God of War Collection"
  *   sgdb_search_games({ query })      -> [{ id, name }]
  *   sgdb_get_artwork({ gameId, artType }) -> [{ id, url, thumb, width, height }]
- *   sgdb_download_artwork({ url, cacheKey, gameKey? }) -> "/abs/path/image.jpg"
+ *   sgdb_download_artwork({ url, cacheKey, gameKey? }) -> { path, dataUri }
  *   sgdb_last_used_artwork({ gameKey }) -> { path, dataUri } | null
  *   pick_cover_image()               -> { path, preview } | null
+ *   pick_game_folder()               -> { path, name, sizeBytes, choices[] } | null
  *   host_platform()                  -> "windows" | "linux" | …
  *   read_cartridge_for_edit({ drivePath }) -> { title, cover, games[], … }
  *   update_cartridge({ request })    -> { confPath, coverWritten, warnings[] }
@@ -20,7 +23,8 @@
  *   apply_tuning({ drivePath, tweaks, applying }) -> [what was done, …]
  *   list_target_drives()             -> [{ path, label, totalBytes, freeBytes, hasCartridge }]
  *   format_plan({ drivePath })       -> { path, currentLabel, device, totalBytes, warning }
- *   executable_choices({ playniteId }) -> [{ relative, name, score }]  best first
+ *   executable_choices({ playniteId } | { sourceDir, title })
+ *                                    -> [{ relative, name, score }]  best first
  *   create_cartridge({ request })    -> { confPath, coverWritten, autorunWritten, icon,
  *                                          formatted, formattedFilesystem,
  *                                          gameCopied, bytesCopied,
@@ -42,16 +46,20 @@ const el = {
   customTitle: document.getElementById("custom-title"),
   customExec: document.getElementById("custom-exec"),
   btnCustom: document.getElementById("btn-custom"),
-  playniteLocate: document.getElementById("playnite-locate"),
-  playniteRoot: document.getElementById("playnite-root"),
-  btnPlayniteLocate: document.getElementById("btn-playnite-locate"),
+  btnPickFolder: document.getElementById("btn-pick-folder"),
+  btnClearFolder: document.getElementById("btn-clear-folder"),
+  folderChosen: document.getElementById("folder-chosen"),
   previewArt: document.getElementById("preview-art"),
   previewImg: document.getElementById("preview-img"),
   previewTitle: document.getElementById("preview-title"),
   previewSub: document.getElementById("preview-sub"),
+  previewGames: document.getElementById("preview-games"),
   previewSource: document.getElementById("preview-source"),
   previewEyebrow: document.getElementById("preview-eyebrow"),
   btnSgdb: document.getElementById("btn-sgdb"),
+  btnGameLogo: document.getElementById("btn-game-logo"),
+  btnGameBackground: document.getElementById("btn-game-background"),
+  btnGameIcon: document.getElementById("btn-game-icon"),
   drives: document.getElementById("drives"),
   drivesEmpty: document.getElementById("drives-empty"),
   driveSpace: document.getElementById("drive-space"),
@@ -74,9 +82,11 @@ const el = {
   unregister: document.getElementById("btn-unregister"),
   close: document.getElementById("btn-close"),
   progress: document.getElementById("progress"),
+  progressTrack: document.getElementById("progress-track"),
   progressFill: document.getElementById("progress-fill"),
   progressText: document.getElementById("progress-text"),
   status: document.getElementById("status"),
+  readyMessage: document.getElementById("ready-message"),
   optCopyLabel: document.getElementById("opt-copy-label"),
   optCloseSteamRow: document.getElementById("opt-close-steam-row"),
   optCloseSteam: document.getElementById("opt-close-steam"),
@@ -89,6 +99,10 @@ const el = {
   btnTuneCommands: document.getElementById("btn-tune-commands"),
   btnTuneUndo: document.getElementById("btn-tune-undo"),
   btnCollectionCover: document.getElementById("btn-collection-cover"),
+  btnCollectionGridSgdb: document.getElementById("btn-collection-grid-sgdb"),
+  btnCollectionLogo: document.getElementById("btn-collection-logo"),
+  btnCollectionIcon: document.getElementById("btn-collection-icon"),
+  btnCollectionBackground: document.getElementById("btn-collection-background"),
   btnCollectionCoverClear: document.getElementById("btn-collection-cover-clear"),
   btnEdit: document.getElementById("btn-edit"),
   editDialog: document.getElementById("edit-dialog"),
@@ -128,6 +142,14 @@ let drives = [];
 let selectedGame = null;
 let selectedDrive = null;
 let manualMode = false;
+/**
+ * The game folder the user pointed at, when they did.
+ *
+ * `{ path, name, sizeBytes, choices }`. This is what makes a cartridge of a
+ * game no launcher knows about: the folder is copied and Play is pointed at
+ * a file inside it, exactly as for a Playnite game with an install directory.
+ */
+let chosenFolder = null;
 /** What the backend says formatting the chosen drive would destroy. */
 let formatPlan = null;
 let building = false;
@@ -144,6 +166,14 @@ const TWEAKS = ["defender", "indexing"];
 let settings = { steamgriddbEnabled: false, steamgriddbApiKey: "" };
 /** Artwork chosen for the collection: { path, preview }. */
 let collectionCover = null;
+let collectionLogo = null;
+let collectionIcon = null;
+let collectionBackground = null;
+/** Same three, for a single game rather than a collection. */
+let gameLogo = null;
+let gameIcon = null;
+let gameBackground = null;
+let artworkTarget = null;
 /** The cartridge being edited, once one has been read. */
 let editing = null;
 /** True when Steam already lists the selected drive as a library folder. */
@@ -151,6 +181,8 @@ let driveIsSteamLibrary = false;
 let sgdbSearchTimer = null;
 let sgdbResultsFor = [];
 let sgdbSelectedGameId = null;
+let sgdbSearchNonce = 0;
+const sgdbThumbCache = new Map();
 /** Games added to the bundle (Map of game.id → game object). Order preserved. */
 let bundleGames = new Map();
 
@@ -189,6 +221,9 @@ function renderGames() {
 
   for (const game of matches) {
     const li = document.createElement("li");
+    // An option has to be owned by the listbox; a plain listitem in between
+    // orphans it and aria-selected is dropped on the floor.
+    li.setAttribute("role", "presentation");
     const row = document.createElement("button");
     row.type = "button";
     row.className = "row";
@@ -240,15 +275,24 @@ async function selectGame(game) {
   el.custom.hidden = true;
   selectedGame = game;
   selectedCoverSource = null;
+  gameLogo = null;
+  gameIcon = null;
+  gameBackground = null;
+  resetGameArtButtonLabels();
+  // The folder belonged to the by-hand entry that is being left behind.
+  chosenFolder = null;
+  renderChosenFolder();
 
   el.previewTitle.textContent = game.name;
   el.previewSub.textContent = game.executable;
+  el.previewGames.hidden = true;
+  el.previewGames.replaceChildren();
   setPreviewArt("", "");
   renderGames();
   refreshOptions();
   refreshCreateButton();
 
-  const gameKey = `${game.library}:${game.id}`;
+  const gameKey = `${game.library}:${game.id}:game`;
   try {
     const cached = await invoke("sgdb_last_used_artwork", { gameKey });
     if (cached?.dataUri && selectedGame?.id === game.id) {
@@ -287,9 +331,11 @@ function safePreviewSrc(src) {
 function setPreviewArt(src, source = "") {
   const safeSrc = safePreviewSrc(src);
   if (safeSrc) {
+    el.previewImg.hidden = false;
     el.previewImg.src = safeSrc;
     el.previewArt.classList.add("has-art");
   } else {
+    el.previewImg.hidden = true;
     el.previewImg.removeAttribute("src");
     el.previewArt.classList.remove("has-art");
   }
@@ -301,14 +347,67 @@ function enterManualMode() {
   manualMode = true;
   selectedGame = null;
   selectedCoverSource = null;
+  gameLogo = null;
+  gameIcon = null;
+  gameBackground = null;
+  resetGameArtButtonLabels();
   el.custom.hidden = false;
   setPreviewArt("", "");
   el.previewTitle.textContent = "By hand";
   el.previewSub.textContent = "No cover art will be copied.";
+  el.previewGames.hidden = true;
+  el.previewGames.replaceChildren();
+  renderChosenFolder();
   renderGames();
   refreshOptions();
   refreshCreateButton();
   el.customTitle.focus();
+}
+
+/** Show, or stop showing, the folder the user chose. */
+function renderChosenFolder() {
+  el.btnClearFolder.hidden = !chosenFolder;
+  el.folderChosen.hidden = !chosenFolder;
+  const label = el.btnPickFolder.querySelector(".btn__label") ?? el.btnPickFolder;
+  if (!chosenFolder) {
+    label.textContent = "Choose folder…";
+    return;
+  }
+  label.textContent = "Change folder…";
+  const size = chosenFolder.sizeBytes ? ` · ${formatBytes(chosenFolder.sizeBytes)}` : "";
+  el.folderChosen.textContent = `${chosenFolder.path}${size}`;
+}
+
+async function pickGameFolder() {
+  el.btnPickFolder.disabled = true;
+  try {
+    const picked = await invoke("pick_game_folder");
+    // Cancelled. Whatever was chosen before stays chosen.
+    if (!picked) return;
+
+    chosenFolder = picked;
+    // The folder name is nearly always the title, so offer it rather than
+    // making it be typed. Anything already typed is left alone.
+    if (!el.customTitle.value.trim()) el.customTitle.value = picked.name;
+    el.previewTitle.textContent = el.customTitle.value.trim() || picked.name;
+    el.previewSub.textContent = picked.path;
+    renderChosenFolder();
+    refreshOptions();
+    await refreshExePicker();
+    refreshCreateButton();
+  } catch (error) {
+    status(String(error), "error");
+  } finally {
+    el.btnPickFolder.disabled = false;
+  }
+}
+
+async function clearGameFolder() {
+  chosenFolder = null;
+  renderChosenFolder();
+  refreshOptions();
+  await refreshExePicker();
+  refreshCreateButton();
 }
 
 /* ----------------------------------------------------------------- bundle */
@@ -318,6 +417,21 @@ function toggleBundleGame(game) {
     bundleGames.delete(game.id);
   } else {
     bundleGames.set(game.id, game);
+  }
+
+  // One game is not a collection, so bundle mode does not start until the
+  // second. Until it does, the single added game has to be the chosen one:
+  // otherwise adding one game leaves the panel showing it, the row marked as
+  // selected, and Write disabled with nothing on screen saying why. Two games
+  // then hand over to the collection UI, which has its own title and cover.
+  const sole = bundleGames.size === 1 ? [...bundleGames.values()][0] : null;
+  if (sole && selectedGame?.id !== sole.id) {
+    // Fires the art lookup and refreshes everything below; the panel is drawn
+    // here first so the two do not race.
+    renderBundlePanel();
+    refreshCollectionPreview();
+    void selectGame(sole);
+    return;
   }
   renderGames();
   renderBundlePanel();
@@ -344,6 +458,13 @@ function renderBundlePanel() {
     size.className = "bundle-item__size";
     size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "";
 
+    const artBtn = document.createElement("button");
+    artBtn.type = "button";
+    artBtn.className = "bundle-item__art";
+    artBtn.textContent = game.coverSource ? "Grid ✓" : "Choose grid";
+    artBtn.setAttribute("aria-label", `Choose grid art for ${game.name}`);
+    artBtn.addEventListener("click", () => openSgdbDialog({ kind: "game", game }));
+
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "bundle-item__remove";
@@ -351,7 +472,7 @@ function renderBundlePanel() {
     removeBtn.textContent = "✕";
     removeBtn.addEventListener("click", () => toggleBundleGame(game));
 
-    li.append(name, size, removeBtn);
+    li.append(name, size, artBtn, removeBtn);
     el.bundleList.append(li);
   }
 
@@ -417,6 +538,18 @@ async function refreshCollectionPreview() {
   el.previewTitle.textContent =
     el.collectionTitle.value.trim() || el.collectionTitle.placeholder || "Collection";
   el.previewSub.textContent = `${list.length} games`;
+  el.previewGames.replaceChildren(
+    ...list.map((game, index) => {
+      const item = document.createElement("li");
+      const key = document.createElement("kbd");
+      key.textContent = index < 9 ? String(index + 1) : "";
+      const title = document.createElement("span");
+      title.textContent = game.name;
+      item.append(key, title);
+      return item;
+    }),
+  );
+  el.previewGames.hidden = false;
 
   // Chosen artwork wins, so the preview shows what will be written; failing
   // that the first game's, which is what the backend falls back to anyway.
@@ -425,6 +558,10 @@ async function refreshCollectionPreview() {
     return;
   }
   const first = list[0];
+  if (first.coverPreview) {
+    setPreviewArt(first.coverPreview, `Grid from ${first.name}`);
+    return;
+  }
   if (!first.hasCover) {
     setPreviewArt("", "");
     return;
@@ -582,6 +719,17 @@ function applySettings() {
   el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
   el.btnSgdb.hidden = !settings.steamgriddbEnabled;
+  el.btnGameLogo.hidden = !settings.steamgriddbEnabled;
+  el.btnGameBackground.hidden = !settings.steamgriddbEnabled;
+  el.btnGameIcon.hidden = !settings.steamgriddbEnabled;
+}
+
+/** Put the three per-game art buttons' labels back to their "nothing chosen
+ * yet" state — called whenever the game they'd apply to changes. */
+function resetGameArtButtonLabels() {
+  el.btnGameLogo.querySelector(".btn__label").textContent = "Find title logo…";
+  el.btnGameBackground.querySelector(".btn__label").textContent = "Find launcher hero…";
+  el.btnGameIcon.querySelector(".btn__label").textContent = "Find cartridge icon…";
 }
 
 async function loadSettings() {
@@ -628,6 +776,9 @@ function renderDrives() {
 
   for (const drive of drives) {
     const li = document.createElement("li");
+    // An option has to be owned by the listbox; a plain listitem in between
+    // orphans it and aria-selected is dropped on the floor.
+    li.setAttribute("role", "presentation");
     const row = document.createElement("button");
     row.type = "button";
     row.className = "row";
@@ -717,12 +868,26 @@ function refreshOptions() {
   // Hidden entirely until the lookup is switched on: an always-visible button
   // that only ever explains why it cannot work is worse than no button.
   el.btnSgdb.hidden = !settings.steamgriddbEnabled;
-  el.btnSgdb.disabled = !((selectedGame && !manualMode) || el.customTitle.value.trim());
+  const gameChosen = (selectedGame && !manualMode) || el.customTitle.value.trim();
+  el.btnSgdb.disabled = !gameChosen;
+  // Logo/background/icon are per-game art with nowhere to go in a bundle —
+  // that art lives at the collection level, chosen further up in the panel
+  // bundle mode shows instead.
+  el.btnGameLogo.hidden = !settings.steamgriddbEnabled || bundle;
+  el.btnGameLogo.disabled = !gameChosen;
+  el.btnGameBackground.hidden = !settings.steamgriddbEnabled || bundle;
+  el.btnGameBackground.disabled = !gameChosen;
+  el.btnGameIcon.hidden = !settings.steamgriddbEnabled || bundle;
+  el.btnGameIcon.disabled = !gameChosen;
 
   // Every chosen game has to be copyable, since the option copies all of them.
   const copyable = bundle
     ? list.length > 0 && list.every((g) => g.canCopy)
-    : !manualMode && Boolean(selectedGame?.canCopy);
+    : manualMode
+      // By hand, a folder is the whole of what makes a game copyable: there is
+      // no library entry to ask where it is installed.
+      ? Boolean(chosenFolder)
+      : Boolean(selectedGame?.canCopy);
   el.optCopy.disabled = !copyable;
   if (!copyable) el.optCopy.checked = false;
 
@@ -743,7 +908,7 @@ function refreshOptions() {
       ? "Also registers the drive as a Steam library, so Steam plays from the cartridge instead of your internal copy."
       : "Copies the game's folder onto the cartridge and points Play at a file inside it. No launcher needed.";
   } else if (manualMode) {
-    hint = "Only available for a game picked from the list.";
+    hint = "Choose the game's folder above and it can be copied across.";
   } else if (chosen.length === 0) {
     hint = "Pick a game first.";
   } else {
@@ -794,10 +959,10 @@ async function refreshExePicker() {
   // game, so each game's program is picked by the ranking in portable.rs.
   const needed =
     el.optCopy.checked &&
-    !manualMode &&
     !isBundleMode() &&
-    selectedGame &&
-    selectedGame.library !== "steam";
+    (manualMode
+      ? Boolean(chosenFolder)
+      : Boolean(selectedGame) && selectedGame.library !== "steam");
 
   el.exePick.hidden = !needed;
   if (!needed) {
@@ -809,7 +974,14 @@ async function refreshExePicker() {
   el.exeHint.textContent = "Looking for the game's program…";
 
   try {
-    exeCandidates = await invoke("executable_choices", { playniteId: selectedGame.id });
+    // A folder the user chose is looked in directly; otherwise Playnite is
+    // asked where the game lives.
+    exeCandidates = chosenFolder
+      ? await invoke("executable_choices", {
+          sourceDir: chosenFolder.path,
+          title: el.customTitle.value.trim() || chosenFolder.name,
+        })
+      : await invoke("executable_choices", { playniteId: selectedGame.id });
   } catch (error) {
     exeCandidates = [];
     el.exeHint.textContent = String(error);
@@ -897,21 +1069,85 @@ function defaultLabel(title, filesystem) {
 /* -------------------------------------------------------------- SteamGridDB */
 
 function sgdbGameKey() {
-  if (selectedGame && !manualMode) return `${selectedGame.library}:${selectedGame.id}`;
+  const effectiveKind = sgdbEffectiveTargetKind();
+  const game = sgdbTargetGame();
+  if (game && !manualMode) return `${game.library}:${game.id}:${effectiveKind || "game"}`;
   const title = el.customTitle.value.trim();
+  // Bundle mode: this art belongs to the collection. Otherwise (typed title,
+  // no library entry): it belongs to whatever single game is being built.
+  const prefix = isBundleMode() ? "collection" : "manual";
+  const seed = isBundleMode()
+    ? el.collectionTitle.value.trim() || el.collectionTitle.placeholder
+    : title;
+  if (effectiveKind === "collection-grid") return `${prefix}:grid:${seed}`;
+  if (effectiveKind === "logo") return `${prefix}:logo:${seed}`;
+  if (effectiveKind === "background") return `${prefix}:hero:${seed}`;
+  if (effectiveKind === "icon") return `${prefix}:icon:${seed}`;
   return title ? `manual:${title}` : "";
 }
 
-function openSgdbDialog() {
-  const seed = selectedGame?.name || el.customTitle.value.trim();
+function sgdbEffectiveTargetKind() {
+  if (artworkTarget?.kind === "game") return "game";
+  const type = String(el.sgdbType?.value || "grid").toLowerCase();
+  if (type === "hero") return "background";
+  if (type === "icon") return "icon";
+  if (type === "logo") return "logo";
+  return "collection-grid";
+}
+
+function sgdbTargetGame() {
+  return artworkTarget?.kind === "game" ? artworkTarget.game : selectedGame;
+}
+
+function sgdbTargetSeed(target) {
+  if (target?.kind === "game") return target.game?.name || "";
+  if (!isBundleMode()) {
+    // Logo/icon/background for a single game: search on that game's own
+    // name, same as the cover would, rather than the collection title input
+    // a single-game build never shows.
+    return (selectedGame && !manualMode ? selectedGame.name : "") || el.customTitle.value.trim();
+  }
+  return (
+    el.collectionTitle.value.trim() ||
+    el.collectionTitle.placeholder ||
+    [...bundleGames.values()][0]?.name ||
+    ""
+  );
+}
+
+function normalizeArtworkTarget(target) {
+  if (target && typeof target === "object" && "kind" in target) {
+    return target;
+  }
+  if (selectedGame) {
+    return { kind: "game", game: selectedGame };
+  }
+  return { kind: "collection-grid" };
+}
+
+function openSgdbDialog(target = null) {
+  const resolvedTarget = normalizeArtworkTarget(target);
+  artworkTarget = resolvedTarget;
+  const seed = sgdbTargetSeed(resolvedTarget);
   if (!seed) {
     status("Pick a game or type a title first.", "error");
     return;
   }
+  // Invalidate in-flight SGDB requests from previous dialog sessions.
+  sgdbSearchNonce += 1;
+  clearTimeout(sgdbSearchTimer);
   el.sgdbSearch.value = seed;
   el.sgdbStatus.textContent = "Searching…";
   el.sgdbResults.replaceChildren();
   sgdbSelectedGameId = null;
+  el.sgdbType.value =
+    resolvedTarget.kind === "logo"
+      ? "logo"
+      : resolvedTarget.kind === "background"
+      ? "hero"
+      : resolvedTarget.kind === "icon"
+        ? "icon"
+        : "grid";
   if (typeof el.sgdbDialog.showModal === "function") {
     el.sgdbDialog.showModal();
   }
@@ -924,6 +1160,7 @@ function queueSgdbSearch() {
 }
 
 async function loadSgdbGamesAndArtwork() {
+  const nonce = ++sgdbSearchNonce;
   const query = el.sgdbSearch.value.trim();
   if (!query) {
     el.sgdbStatus.textContent = "Type a game title.";
@@ -933,32 +1170,38 @@ async function loadSgdbGamesAndArtwork() {
   el.sgdbStatus.textContent = "Searching…";
   try {
     const gamesFound = await invoke("sgdb_search_games", { query });
+    if (nonce !== sgdbSearchNonce) return;
     if (!Array.isArray(gamesFound) || gamesFound.length === 0) {
       sgdbResultsFor = [];
       el.sgdbResults.replaceChildren();
       el.sgdbStatus.textContent = "No SteamGridDB matches yet.";
       return;
     }
-    sgdbSelectedGameId =
-      gamesFound.find((g) => g.name?.toLowerCase() === query.toLowerCase())?.id || gamesFound[0].id;
-    await loadSgdbArtwork(gamesFound[0].name || query);
+    const chosen =
+      gamesFound.find((g) => g.name?.toLowerCase() === query.toLowerCase()) ||
+      gamesFound[0];
+    sgdbSelectedGameId = chosen.id;
+    await loadSgdbArtwork(chosen.name || query, chosen.id, nonce);
   } catch (error) {
+    if (nonce !== sgdbSearchNonce) return;
     el.sgdbStatus.textContent = `SteamGridDB unavailable. You can still paste a URL. (${String(error)})`;
   }
 }
 
-async function loadSgdbArtwork(matchName) {
-  if (!sgdbSelectedGameId) return;
+async function loadSgdbArtwork(matchName, gameId = sgdbSelectedGameId, nonce = sgdbSearchNonce) {
+  if (!gameId) return;
   el.sgdbStatus.textContent = "Loading artwork…";
   try {
     const artType = el.sgdbType.value;
-    const list = await invoke("sgdb_get_artwork", { gameId: sgdbSelectedGameId, artType });
+    const list = await invoke("sgdb_get_artwork", { gameId, artType });
+    if (nonce !== sgdbSearchNonce) return;
     sgdbResultsFor = Array.isArray(list) ? list : [];
     renderSgdbResults(matchName);
     el.sgdbStatus.textContent = sgdbResultsFor.length
       ? `Showing ${sgdbResultsFor.length} ${artType} image${sgdbResultsFor.length === 1 ? "" : "s"} for ${matchName}.`
       : "No artwork found for that type.";
   } catch (error) {
+    if (nonce !== sgdbSearchNonce) return;
     el.sgdbStatus.textContent = `Artwork lookup failed: ${String(error)}`;
     sgdbResultsFor = [];
     renderSgdbResults(matchName);
@@ -973,8 +1216,14 @@ function renderSgdbResults(matchName) {
     card.className = "sgdb-card";
 
     const img = document.createElement("img");
-    img.src = safePreviewSrc(art.thumb || art.url);
+    const thumbCacheKey = `${art.id}:${el.sgdbType.value}`;
+    const cachedThumb = sgdbThumbCache.get(thumbCacheKey);
+    img.src = cachedThumb || safePreviewSrc(art.thumb || art.url);
+    img.loading = "lazy";
     img.alt = `${matchName} artwork`;
+    img.addEventListener("error", () => hydrateSgdbThumb(img, art, thumbCacheKey), {
+      once: true,
+    });
 
     const meta = document.createElement("span");
     meta.textContent = art.width && art.height ? `${art.width}×${art.height}` : "SteamGridDB";
@@ -985,38 +1234,140 @@ function renderSgdbResults(matchName) {
   }
 }
 
-async function chooseSgdbArtwork(art) {
-  const keyBase = (selectedGame?.name || el.customTitle.value.trim() || "manual").toLowerCase();
-  const cacheKey = `${keyBase}-${el.sgdbType.value}-${art.id}`;
-  const gameKey = sgdbGameKey();
+async function hydrateSgdbThumb(img, art, cacheKey) {
+  if (!art?.thumb && !art?.url) return;
   try {
-    const cachedPath = await invoke("sgdb_download_artwork", {
-      url: art.url,
-      cacheKey,
-      gameKey: gameKey || null,
+    const cached = await invoke("sgdb_download_artwork", {
+      url: art.thumb || art.url,
+      cacheKey: `thumb-${cacheKey}`,
+      gameKey: null,
     });
-    selectedCoverSource = cachedPath;
-    setPreviewArt(art.url, "From SteamGridDB");
+    if (!cached?.dataUri) return;
+    sgdbThumbCache.set(cacheKey, cached.dataUri);
+    img.src = cached.dataUri;
+  } catch {
+    // Keep the broken-image placeholder; selection can still use the full art URL.
+  }
+}
+
+async function chooseSgdbArtwork(art) {
+  const targetGame = sgdbTargetGame();
+  const effectiveKind = sgdbEffectiveTargetKind();
+  const keyBase = (targetGame?.name || el.collectionTitle.value.trim() || el.customTitle.value.trim() || "manual").toLowerCase();
+  const cacheKeyBase = `${keyBase}-${el.sgdbType.value}-${art.id}`;
+  const gameKey = sgdbGameKey();
+  const candidates = [art?.url, art?.thumb]
+    .map((u) => String(u || "").trim())
+    .filter((u, i, all) => u.length > 0 && all.indexOf(u) === i);
+  if (candidates.length === 0) {
+    el.sgdbStatus.textContent = "That artwork has no downloadable URL.";
+    status("That artwork has no downloadable URL.", "error");
+    return;
+  }
+  el.sgdbStatus.textContent = "Applying artwork…";
+
+  let cached = null;
+  let lastError = null;
+  for (let i = 0; i < candidates.length; i += 1) {
+    const url = candidates[i];
+    const cacheKey = `${cacheKeyBase}-${i}`;
+    try {
+      cached = await invoke("sgdb_download_artwork", {
+        url,
+        cacheKey,
+        gameKey: gameKey || null,
+      });
+      if (cached?.dataUri && cached?.path) break;
+      cached = null;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!cached) {
+    const message = `Could not download artwork: ${String(lastError || "no usable image URL")}`;
+    el.sgdbStatus.textContent = message;
+    status(message, "error");
+    return;
+  }
+
+  try {
+    applyDownloadedArtwork(effectiveKind, cached);
+    el.sgdbStatus.textContent = "Artwork applied.";
     status("Selected artwork from SteamGridDB.", "good");
     if (el.sgdbDialog.open) el.sgdbDialog.close("selected");
   } catch (error) {
-    status(`Could not download artwork: ${String(error)}`, "error");
+    const message = `Could not apply artwork: ${String(error)}`;
+    el.sgdbStatus.textContent = message;
+    status(message, "error");
   }
+}
+
+/** Route downloaded artwork to the right slot for what it was fetched for.
+ *
+ * "game" is always a single game's own cover, in or out of a bundle. The
+ * other three are per-cartridge art: in a bundle that means the collection
+ * (logo/icon/background live at that level only); outside one, the single
+ * game being built takes their place instead.
+ */
+function applyDownloadedArtwork(effectiveKind, cached) {
+  if (effectiveKind === "game") {
+    artworkTarget.game.coverSource = cached.path;
+    artworkTarget.game.coverPreview = cached.dataUri;
+    selectedCoverSource = cached.path;
+    if (isBundleMode()) renderBundlePanel();
+  } else if (effectiveKind === "collection-grid") {
+    collectionCover = { path: cached.path, preview: cached.dataUri };
+    el.btnCollectionCover.querySelector(".btn__label").textContent = "Change collection grid…";
+    el.btnCollectionCoverClear.hidden = false;
+  } else if (effectiveKind === "logo") {
+    if (isBundleMode()) {
+      collectionLogo = cached;
+      el.btnCollectionLogo.querySelector(".btn__label").textContent = "Change title logo…";
+    } else {
+      gameLogo = cached;
+      el.btnGameLogo.querySelector(".btn__label").textContent = "Change title logo…";
+    }
+  } else if (effectiveKind === "icon") {
+    if (isBundleMode()) {
+      collectionIcon = cached;
+      el.btnCollectionIcon.querySelector(".btn__label").textContent = "Change cartridge icon…";
+    } else {
+      gameIcon = cached;
+      el.btnGameIcon.querySelector(".btn__label").textContent = "Change cartridge icon…";
+    }
+  } else if (effectiveKind === "background") {
+    if (isBundleMode()) {
+      collectionBackground = cached;
+      el.btnCollectionBackground.querySelector(".btn__label").textContent = "Change launcher hero…";
+    } else {
+      gameBackground = cached;
+      el.btnGameBackground.querySelector(".btn__label").textContent = "Change launcher hero…";
+    }
+  }
+  // The poster in the preview card is the cover, and only the cover — a logo,
+  // hero or icon download must not overwrite it, or picking one throws away
+  // whatever cover was already chosen with no way to see that happened.
+  if (effectiveKind === "game" || effectiveKind === "collection-grid") {
+    setPreviewArt(cached.dataUri, `From SteamGridDB · ${el.sgdbType.value}`);
+  }
+  refreshCollectionPreview();
 }
 
 async function useManualSgdbUrl() {
   const url = el.sgdbManualUrl.value.trim();
   if (!url) return;
-  const keyBase = (selectedGame?.name || el.customTitle.value.trim() || "manual").toLowerCase();
+  const targetGame = sgdbTargetGame();
+  const effectiveKind = sgdbEffectiveTargetKind();
+  const keyBase = (targetGame?.name || el.collectionTitle.value.trim() || el.customTitle.value.trim() || "manual").toLowerCase();
   const gameKey = sgdbGameKey();
   try {
-    const cachedPath = await invoke("sgdb_download_artwork", {
+    const cached = await invoke("sgdb_download_artwork", {
       url,
       cacheKey: `${keyBase}-manual-url`,
       gameKey: gameKey || null,
     });
-    selectedCoverSource = cachedPath;
-    setPreviewArt(url, "From SteamGridDB");
+    applyDownloadedArtwork(effectiveKind, cached);
     status("Selected artwork URL.", "good");
     if (el.sgdbDialog.open) el.sgdbDialog.close("selected");
   } catch (error) {
@@ -1044,6 +1395,7 @@ function intent() {
       executable: el.customExec.value.trim(),
       appId: null,
       playniteId: null,
+      sourceDir: chosenFolder?.path ?? null,
     };
   }
   if (selectedGame) {
@@ -1060,8 +1412,17 @@ function intent() {
 function refreshCreateButton() {
   if (building) {
     el.create.disabled = true;
+    el.readyMessage.textContent = "Writing the cartridge…";
     return;
   }
+
+  el.create.querySelector(".btn__label").textContent = el.optFormat.checked
+    ? "Format and write cartridge"
+    : "Write cartridge";
+
+  const setReady = (message) => {
+    el.readyMessage.textContent = message ? `Ready when: ${message}` : "Ready to write.";
+  };
 
   // Bundle: need 2+ games and a drive. Check for space overflow.
   if (isBundleMode()) {
@@ -1084,11 +1445,19 @@ function refreshCreateButton() {
       ok = Boolean(formatPlan) && typed === formatPlan.currentLabel && Boolean(el.formatLabel.value.trim());
     }
     el.create.disabled = !ok;
+    setReady(
+      ok ? "" : !hasTitle ? "name the collection" : !selectedDrive ? "choose a cartridge" : noSpace ? "free enough space" : el.optFormat.checked && !formatPlan ? "load the drive format details" : el.optFormat.checked ? "type the current drive name to confirm" : "finish the cartridge choices",
+    );
     return;
   }
 
   const want = intent();
-  let ok = Boolean(want && want.title && want.executable && selectedDrive);
+  // A folder being copied supplies the launch target itself: the wizard picks
+  // the program inside it, so there is nothing for the user to type.
+  const copyingFolder = manualMode && Boolean(chosenFolder) && el.optCopy.checked;
+  let ok = Boolean(
+    want && want.title && (want.executable || copyingFolder) && selectedDrive,
+  );
 
   // A non-Steam copy has nothing to point Play at until a program is chosen.
   if (ok && !el.exePick.hidden && exeCandidates.length === 0) {
@@ -1111,14 +1480,19 @@ function refreshCreateButton() {
     ok = Boolean(formatPlan) && typed === formatPlan.currentLabel && Boolean(el.formatLabel.value.trim());
   }
   el.create.disabled = !ok;
+  setReady(
+    ok ? "" : !want?.title ? "choose a game or enter a title" : !selectedDrive ? "choose a cartridge" : !want.executable && !copyingFolder ? "choose what Play should start" : !el.exePick.hidden && exeCandidates.length === 0 ? "choose a runnable program" : el.optCopy.checked && selectedGame && selectedDrive && selectedGame.sizeOnDisk > 0 && selectedGame.sizeOnDisk > (el.optFormat.checked ? drives.find((d) => d.path === selectedDrive)?.totalBytes : drives.find((d) => d.path === selectedDrive)?.freeBytes) ? "free enough space" : el.optFormat.checked && !formatPlan ? "load the drive format details" : el.optFormat.checked ? "type the current drive name to confirm" : "finish the cartridge choices",
+  );
 }
 
 function showProgress(on) {
   el.progress.hidden = !on;
   if (!on) {
-    el.progressFill.style.width = "0";
+    el.progressFill.style.setProperty("--progress-pct", "0");
     el.progressFill.classList.remove("is-indeterminate");
     el.progressText.textContent = "";
+    el.progressTrack.removeAttribute("aria-valuenow");
+    el.progressTrack.removeAttribute("aria-valuetext");
   }
 }
 
@@ -1127,13 +1501,23 @@ function onProgress(p) {
   if (p.totalBytes > 0) {
     el.progressFill.classList.remove("is-indeterminate");
     const pct = Math.min(100, (p.doneBytes / p.totalBytes) * 100);
-    el.progressFill.style.width = `${pct.toFixed(1)}%`;
+    el.progressFill.style.setProperty("--progress-pct", `${(pct / 100).toFixed(3)}`);
     el.progressText.textContent =
       `${p.message} ${formatBytes(p.doneBytes)} of ${formatBytes(p.totalBytes)}`;
+    // The bar is the only thing moving for minutes at a time, so it carries
+    // real progressbar semantics rather than leaving a screen reader in
+    // silence between the first click and the final status line.
+    el.progressTrack.setAttribute("aria-valuenow", pct.toFixed(0));
+    el.progressTrack.setAttribute(
+      "aria-valuetext",
+      `${p.message} ${formatBytes(p.doneBytes)} of ${formatBytes(p.totalBytes)}, ${pct.toFixed(0)}%`,
+    );
   } else {
     // Steps without a byte count (format, autorun) still need to look alive.
     el.progressFill.classList.add("is-indeterminate");
     el.progressText.textContent = p.message;
+    el.progressTrack.removeAttribute("aria-valuenow");
+    el.progressTrack.setAttribute("aria-valuetext", p.message);
   }
 }
 
@@ -1167,6 +1551,7 @@ async function writeCartridge() {
         verifyCopy: el.optVerify.checked,
         trimAfterWrite: el.optTrim.checked,
         collectionCoverSource: collectionCover?.path ?? null,
+        collectionLogoSource: collectionLogo?.path ?? null,
         games: bundleList.map((g) => ({
           title: g.name,
           executable: g.executable,
@@ -1174,8 +1559,10 @@ async function writeCartridge() {
           playniteId: g.library === "playnite" ? g.id : null,
           // Left for the backend to work out from the ids, the same way a
           // single game's art is found.
-          coverSource: null,
+          coverSource: g.coverSource ?? null,
         })),
+        collectionIconSource: collectionIcon?.path ?? null,
+        collectionBackgroundSource: collectionBackground?.path ?? null,
       };
     } else {
       request = {
@@ -1184,7 +1571,11 @@ async function writeCartridge() {
         executable: want.executable,
         appId: want.appId,
         playniteId: want.playniteId,
+        sourceDir: want.sourceDir ?? null,
         coverSource: selectedCoverSource,
+        iconSource: gameIcon?.path ?? null,
+        backgroundSource: gameBackground?.path ?? null,
+        logoSource: gameLogo?.path ?? null,
         formatDrive: el.optFormat.checked,
         formatFilesystem: el.formatFilesystem.value,
         formatLabel: el.formatLabel.value.trim() || null,
@@ -1286,25 +1677,25 @@ async function showTuningCommands() {
 
 /* ------------------------------------------------------------------- load */
 
-async function loadGames(playniteRoot = null) {
+async function loadGames() {
   try {
-    games = await invoke("list_games", playniteRoot ? { playniteRoot } : {});
+    const result = await invoke("list_games");
+    games = result.games ?? [];
+    const problems = result.problems ?? [];
     renderGames();
-    // If we loaded successfully with a custom path, keep the panel visible so
-    // the user can change it, but dim the hint since it worked.
-    if (playniteRoot) {
-      el.playniteLocate.hidden = false;
-    } else {
-      el.playniteLocate.hidden = true;
+
+    // A library that could not be read is worth saying out loud even when the
+    // list is not empty. Steam almost always answers, so without this the
+    // wizard silently shows Steam alone and looks like it supports nothing
+    // else.
+    if (problems.length) {
+      status(problems.join(" "), "error");
     }
   } catch (error) {
     games = [];
     renderGames();
     el.gamesEmpty.hidden = false;
     el.gamesEmpty.textContent = `${error} You can still enter a game by hand.`;
-    // Show the manual Playnite path field whenever auto-discovery fails so the
-    // user can point the wizard at a non-standard installation.
-    el.playniteLocate.hidden = false;
   }
 }
 
@@ -1328,21 +1719,17 @@ async function loadDrives({ keepSelection = false, quiet = false } = {}) {
 
 el.search.addEventListener("input", renderGames);
 el.btnCustom.addEventListener("click", enterManualMode);
-el.btnSgdb.addEventListener("click", openSgdbDialog);
+el.btnPickFolder.addEventListener("click", pickGameFolder);
+el.btnClearFolder.addEventListener("click", clearGameFolder);
+el.btnSgdb.addEventListener("click", () => openSgdbDialog());
+el.btnGameLogo.addEventListener("click", () => openSgdbDialog({ kind: "logo" }));
+el.btnGameBackground.addEventListener("click", () => openSgdbDialog({ kind: "background" }));
+el.btnGameIcon.addEventListener("click", () => openSgdbDialog({ kind: "icon" }));
 el.sgdbSearch.addEventListener("input", queueSgdbSearch);
 el.sgdbType.addEventListener("change", () => {
   if (sgdbSelectedGameId) loadSgdbArtwork(el.sgdbSearch.value.trim());
 });
 el.sgdbUseManual.addEventListener("click", useManualSgdbUrl);
-el.btnPlayniteLocate.addEventListener("click", async () => {
-  const path = el.playniteRoot.value.trim();
-  if (!path) return;
-  el.btnPlayniteLocate.disabled = true;
-  status("Loading Playnite library…");
-  await loadGames(path);
-  status(games.length ? `Loaded ${games.length} game${games.length === 1 ? "" : "s"}.` : "");
-  el.btnPlayniteLocate.disabled = false;
-});
 el.customTitle.addEventListener("input", () => {
   refreshCreateButton();
   refreshOptions();
@@ -1398,6 +1785,18 @@ el.btnCollectionCover.addEventListener("click", async () => {
   } finally {
     el.btnCollectionCover.disabled = false;
   }
+});
+el.btnCollectionGridSgdb.addEventListener("click", () => {
+  openSgdbDialog({ kind: "collection-grid" });
+});
+el.btnCollectionLogo.addEventListener("click", () => {
+  openSgdbDialog({ kind: "logo" });
+});
+el.btnCollectionIcon.addEventListener("click", () => {
+  openSgdbDialog({ kind: "icon" });
+});
+el.btnCollectionBackground.addEventListener("click", () => {
+  openSgdbDialog({ kind: "background" });
 });
 el.btnCollectionCoverClear.addEventListener("click", () => {
   collectionCover = null;
@@ -1456,6 +1855,10 @@ el.unregister.addEventListener("click", async () => {
 
 el.close.addEventListener("click", closeWindow);
 
+if (tauri?.event) {
+  tauri.event.listen("open-settings", openSettings);
+}
+
 document.addEventListener("keydown", (event) => {
   // Never let Escape discard a half-written cartridge.
   if (event.key === "Escape" && !building) {
@@ -1491,7 +1894,7 @@ async function start() {
 async function demoInvoke(command, args) {
   switch (command) {
     case "list_games":
-      return [
+      return { problems: [], games: [
         { id: "367520", name: "Hollow Knight", library: "steam", source: "Steam",
           sizeOnDisk: 9_106_886_656, hasCover: true,
           executable: "steam://rungameid/367520", canCopy: true },
@@ -1513,7 +1916,7 @@ async function demoInvoke(command, args) {
         { id: "413150", name: "Stardew Valley", library: "steam", source: "Steam",
           sizeOnDisk: 1_006_632_960, hasCover: false,
           executable: "steam://rungameid/413150", canCopy: true },
-      ];
+      ] };
     case "get_settings":
       // The preview mirrors a fresh install: offline until switched on.
       return { steamgriddbEnabled: false, steamgriddbApiKey: "" };
@@ -1588,7 +1991,7 @@ async function demoInvoke(command, args) {
         },
       ];
     case "sgdb_download_artwork":
-      return "/tmp/sgdb-cache/demo-cover.jpg";
+      return { path: "/tmp/sgdb-cache/demo-cover.jpg", dataUri: "src/demo/cover.jpg" };
     case "list_target_drives":
       return [
         { path: "/run/media/harry/CINDER", label: "CINDER",
@@ -1602,6 +2005,16 @@ async function demoInvoke(command, args) {
         { relative: "bin/launcher.exe", name: "launcher.exe", score: -40 },
         { relative: "unins000.exe", name: "unins000.exe", score: -400 },
       ];
+    case "pick_game_folder":
+      return {
+        path: "B:\Games\Split Fiction",
+        name: "Split Fiction",
+        sizeBytes: 74_088_775_680,
+        choices: [
+          { relative: "Split/b1.exe", name: "b1.exe", score: 100 },
+          { relative: "unins000.exe", name: "unins000.exe", score: -400 },
+        ],
+      };
     case "steam_registration":
       return args.drivePath.endsWith("HOLLOW");
     case "unregister_from_steam":

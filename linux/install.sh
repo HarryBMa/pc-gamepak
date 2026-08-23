@@ -16,7 +16,9 @@ for FILE in \
     "linux/gamepak-remove-helper.sh" \
     "linux/pc-gamepak@.service" \
     "linux/pc-gamepak-remove@.service" \
-    "linux/99-pc-gamepak.rules"
+    "linux/99-pc-gamepak.rules" \
+    "linux/pc-gamepak.desktop" \
+    "tauri-ui/src-tauri/icons/128x128.png"
 do
     if [ ! -f "$FILE" ]; then
         echo "Missing file: $FILE"
@@ -111,6 +113,27 @@ if [ -f "$LAUNCHER_BUILD" ]; then
 else
     LAUNCHER_STATE="not built yet"
 fi
+
+
+########################################
+# Desktop entry and icon
+#
+# Without these the window still runs — it just carries the desktop's
+# generic fallback icon everywhere it appears (taskbar, Alt+Tab, the dock),
+# because nothing tells the desktop which app_id is ours or what it looks
+# like. StartupWMClass=pc-gamepak here has to match the app_id the window
+# actually opens with, which is why it is taken from the wizard's own build
+# output (below) rather than guessed at.
+########################################
+
+echo "Installing desktop entry and icon..."
+
+install -m 644 linux/pc-gamepak.desktop /usr/share/applications/pc-gamepak.desktop
+install -m 644 tauri-ui/src-tauri/icons/128x128.png \
+    /usr/share/icons/hicolor/128x128/apps/pc-gamepak.png
+
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
 
 
 ########################################

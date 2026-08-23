@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PC GamePak
+Comment=Popup launcher for the PC GamePak
+Exec=pc-gamepak
+Icon=pc-gamepak
+Terminal=false
+StartupWMClass=pc-gamepak
+Categories=Game;

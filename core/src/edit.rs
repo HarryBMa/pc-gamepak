@@ -208,14 +208,39 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     };
 
     // ---- cartridge.conf --------------------------------------------------
+    //
+    // Neither the background nor the logo can be changed from here — this
+    // request has nowhere to carry a new source for either — so whatever the
+    // cartridge already had is carried forward unchanged rather than dropped.
+    // Bundle icon/background/logo have no round trip yet (`existing` never
+    // populates them for a bundle); that is a pre-existing gap, not something
+    // this edit introduces.
+    let existing_background = existing
+        .as_ref()
+        .map(|info| info.background_path.clone())
+        .filter(|path| !path.is_empty())
+        .and_then(|path| file_name_relative(root, &path));
+    let existing_logo = existing
+        .as_ref()
+        .map(|info| info.logo_path.clone())
+        .filter(|path| !path.is_empty())
+        .and_then(|path| file_name_relative(root, &path));
+
     let conf = if entries.len() > 1 {
         let tuples: Vec<(&str, &str, Option<&str>)> = entries
             .iter()
             .map(|(t, e, c)| (t.as_str(), e.as_str(), c.as_deref()))
             .collect();
-        create::render_bundle_conf(&title, cover_name.as_deref(), &tuples)
+        create::render_bundle_conf(&title, cover_name.as_deref(), None, None, None, &tuples)
     } else {
-        create::render_cartridge_conf(&title, &entries[0].1, cover_name.as_deref())
+        create::render_cartridge_conf(
+            &title,
+            &entries[0].1,
+            cover_name.as_deref(),
+            None,
+            existing_background.as_deref(),
+            existing_logo.as_deref(),
+        )
     };
 
     let conf_path = root.join("cartridge.conf");

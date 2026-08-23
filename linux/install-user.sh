@@ -69,6 +69,23 @@ install -m 644 "$UNIT_SOURCE" "$UNIT_DIR/pc-gamepak-watcher.service"
 systemctl --user daemon-reload
 systemctl --user enable --now pc-gamepak-watcher.service
 
+# Without this the window carries the desktop's generic fallback icon
+# everywhere it appears (taskbar, Alt+Tab), because nothing here tells the
+# desktop which app_id is ours or what it looks like.
+DESKTOP_SOURCE="$SCRIPT_DIR/linux/pc-gamepak.desktop"
+[ -f "$DESKTOP_SOURCE" ] || DESKTOP_SOURCE="$SCRIPT_DIR/pc-gamepak.desktop"
+ICON_SOURCE="$SCRIPT_DIR/tauri-ui/src-tauri/icons/128x128.png"
+[ -f "$ICON_SOURCE" ] || ICON_SOURCE="$SCRIPT_DIR/icons/128x128.png"
+if [ -f "$DESKTOP_SOURCE" ] && [ -f "$ICON_SOURCE" ]; then
+    APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/128x128/apps"
+    mkdir -p "$APPS_DIR" "$ICON_DIR"
+    install -m 644 "$DESKTOP_SOURCE" "$APPS_DIR/pc-gamepak.desktop"
+    install -m 644 "$ICON_SOURCE" "$ICON_DIR/pc-gamepak.png"
+    update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+    gtk-update-icon-cache "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" >/dev/null 2>&1 || true
+fi
+
 echo
 echo "Installed."
 echo "  launcher:  $BIN_DIR/pc-gamepak"

@@ -95,7 +95,7 @@ impl TrimOutcome {
         TrimOutcome::Failed(if message.is_empty() {
             "the drive refused, without saying why".to_string()
         } else {
-            message.to_string()
+            crate::format::friendly_pkexec_error(message)
         })
     }
 

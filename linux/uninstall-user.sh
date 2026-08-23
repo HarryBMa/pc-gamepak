@@ -21,5 +21,11 @@ systemctl --user daemon-reload 2>/dev/null || true
 
 rm -f "$BIN_DIR/pc-gamepak" "$BIN_DIR/pc-gamepak-watcher"
 
+APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/128x128/apps"
+rm -f "$APPS_DIR/pc-gamepak.desktop" "$ICON_DIR/pc-gamepak.png"
+update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+gtk-update-icon-cache "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" >/dev/null 2>&1 || true
+
 echo "Done. Settings and the artwork cache are left alone:"
 echo "  ${XDG_STATE_HOME:-$HOME/.local/state}/pc-gamepak"

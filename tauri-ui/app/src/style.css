@@ -15,12 +15,30 @@
   height: 100vh;
   overflow: hidden;
   border-radius: var(--radius);
-  background: var(--shell);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  background:
+    linear-gradient(
+      180deg,
+      oklch(0.168 0.006 65 / 0.9) 0%,
+      oklch(0.145 0.006 65 / 0.98) 18%,
+      var(--shell) 100%
+    );
   isolation: isolate;
   box-shadow:
-    inset 0 0 0 1px oklch(1 0 0 / 0.08),
-    0 20px 44px -14px oklch(0 0 0 / 0.7);
+    inset 0 1px 0 oklch(1 0 0 / 0.06),
+    0 22px 48px -18px oklch(0 0 0 / 0.72);
   animation: card-in 460ms var(--ease) both;
+}
+
+#card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top, oklch(1 0 0 / 0.12), transparent 32%),
+    linear-gradient(180deg, transparent 0%, oklch(0 0 0 / 0.1) 100%);
 }
 
 @keyframes card-in {
@@ -47,8 +65,12 @@
   }
 }
 
+/* `display` on an id selector beats the browser's [hidden] rule, so a cover
+   that failed to decode would otherwise paint a broken-image glyph over the
+   placeholder — the one case the hidden attribute is set for. */
 #cover-img:not([src]),
-#cover-img[src=""] {
+#cover-img[src=""],
+#cover-img[hidden] {
   display: none;
 }
 
@@ -73,7 +95,7 @@
 
 #cover-placeholder p {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -164,6 +186,12 @@
   justify-content: space-between;
   gap: 12px;
   padding: 15px 15px 15px 18px;
+  background: linear-gradient(
+    180deg,
+    oklch(0.12 0.004 65 / 0.58) 0%,
+    oklch(0.12 0.004 65 / 0.14) 70%,
+    transparent 100%
+  );
   animation: fade 420ms 260ms linear both;
 }
 
@@ -172,7 +200,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: 0.19em;
@@ -186,6 +214,7 @@
   height: 6px;
   border-radius: 1px;
   background: var(--accent);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.15);
   animation: pip 2.6s steps(1, end) infinite;
 }
 
@@ -220,6 +249,27 @@
   padding: 0 20px 20px;
 }
 
+#title-logo {
+  display: block;
+  max-width: min(88%, 360px);
+  max-height: 78px;
+  width: auto;
+  height: auto;
+  margin: 0 0 8px;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 2px 10px oklch(0 0 0 / 0.52));
+  animation: rise 520ms 300ms var(--ease) both;
+}
+
+#title-logo[hidden] {
+  display: none;
+}
+
+#stage.has-logo #game-title {
+  display: none;
+}
+
 #game-title {
   margin: 0;
   font-size: clamp(27px, 8.4vw, 37px);
@@ -244,10 +294,22 @@
 /* Shown only when something is stopping Play from working. */
 #notice {
   margin: 12px 0 0;
-  font-size: 11.5px;
+  font-size: var(--text);
   line-height: 1.5;
   color: color-mix(in oklch, var(--danger) 72%, var(--ink));
   animation: rise 460ms var(--ease) both;
+}
+
+#bundle-hint {
+  margin: 10px 0 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: var(--text-label);
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+#bundle-hint[hidden] {
+  display: none;
 }
 
 #button-row {
@@ -268,13 +330,15 @@
   flex: 1;
   border: 0;
   padding: 0 18px;
-  background: var(--accent);
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 100%, white 8%) 0%, var(--accent) 100%);
   color: var(--accent-ink);
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.26);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.26),
+    0 12px 18px -16px oklch(0 0 0 / 0.9);
 }
 
 .btn--play:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--accent) 88%, white);
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 100%, white 12%) 0%, color-mix(in oklch, var(--accent) 90%, white) 100%);
 }
 
 .btn--play .btn__key {
@@ -296,13 +360,14 @@
 .btn--eject {
   padding: 0 17px;
   border: 1px solid var(--hairline);
-  background: oklch(0.14 0.004 65 / 0.45);
+  background: linear-gradient(180deg, oklch(0.18 0.004 65 / 0.8) 0%, oklch(0.13 0.004 65 / 0.8) 100%);
   color: var(--ink);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05);
 }
 
 .btn--eject:hover:not(:disabled) {
-  border-color: oklch(1 0 0 / 0.32);
-  background: oklch(0.18 0.004 65 / 0.7);
+  border-color: oklch(1 0 0 / 0.28);
+  background: linear-gradient(180deg, oklch(0.19 0.005 65 / 0.9) 0%, oklch(0.15 0.005 65 / 0.9) 100%);
 }
 
 .btn--eject .btn__key {
@@ -340,9 +405,9 @@ body.is-gamepad :focus {
   margin: 0;
   padding: 9px 11px;
   border-radius: 5px;
-  border-left: 2px solid color-mix(in oklch, var(--accent) 70%, transparent);
+  border-left: 1px solid color-mix(in oklch, var(--accent) 55%, transparent);
   background: oklch(0.18 0.005 65 / 0.6);
-  font-size: 11.5px;
+  font-size: var(--text);
   line-height: 1.55;
   color: var(--ink-2);
 }
@@ -385,7 +450,7 @@ body.is-gamepad :focus {
 
 #sheet-head h2 {
   margin: 0;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.19em;
   text-transform: uppercase;
@@ -410,7 +475,7 @@ body.is-gamepad :focus {
 }
 
 #specs dt {
-  font-size: 8.5px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -421,7 +486,7 @@ body.is-gamepad :focus {
   margin: 5px 0 0;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: var(--text);
   line-height: 1.5;
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -429,6 +494,32 @@ body.is-gamepad :focus {
 
 #specs dd.is-muted {
   color: var(--ink-3);
+}
+
+#sheet-footer {
+  flex-shrink: 0;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid oklch(1 0 0 / 0.09);
+}
+
+.sheet-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.sheet-link:hover,
+.sheet-link:focus-visible {
+  color: var(--accent);
 }
 
 /* ==========================================================================
@@ -461,10 +552,32 @@ body.is-gamepad :focus {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: oklch(0.12 0.004 65 / 0.82);
-  border-radius: 5px;
+  background: linear-gradient(180deg, oklch(0.12 0.004 65 / 0.9) 0%, oklch(0.13 0.004 65 / 0.72) 100%);
+  border-radius: 6px;
   padding: 6px 8px 6px 6px;
   border: 1px solid oklch(1 0 0 / 0.08);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04);
+  transition: border-color 140ms linear, background-color 140ms linear, transform 140ms var(--ease);
+}
+
+.game-row__key {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid oklch(1 0 0 / 0.14);
+  border-radius: 3px;
+  background: oklch(1 0 0 / 0.06);
+  color: var(--ink-2);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: var(--text-label);
+  line-height: 1;
+}
+
+.game-row:hover {
+  border-color: oklch(1 0 0 / 0.14);
+  background: linear-gradient(180deg, oklch(0.14 0.005 65 / 0.9) 0%, oklch(0.14 0.005 65 / 0.8) 100%);
 }
 
 .game-row__cover {
@@ -474,6 +587,7 @@ body.is-gamepad :focus {
   border-radius: 3px;
   flex-shrink: 0;
   background: oklch(0.2 0.005 65);
+  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.08);
 }
 
 .game-row__cover:not([src]),
@@ -483,7 +597,7 @@ body.is-gamepad :focus {
 
 .game-row__title {
   flex: 1;
-  font-size: 12.5px;
+  font-size: var(--text-lg);
   font-weight: 600;
   font-stretch: 105%;
   overflow: hidden;
@@ -494,13 +608,13 @@ body.is-gamepad :focus {
 .game-row__play {
   appearance: none;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 700;
   font-stretch: 106%;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  height: 34px;
-  padding: 0 12px;
+  height: 38px;
+  padding: 0 13px;
   border: 0;
   border-radius: 4px;
   background: var(--accent);
@@ -569,7 +683,7 @@ body.is-gamepad :focus {
   inset: auto 20px 92px;
   z-index: 4;
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--text);
   font-weight: 600;
   text-align: center;
   padding: 9px 12px;
@@ -592,16 +706,26 @@ body.is-gamepad :focus {
   box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--danger) 34%, transparent);
 }
 
+/* A failed launch is the one message worth reading twice, so it waits for the
+   next action or a click instead of leaving on a timer. */
+#toast.is-sticky {
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: text;
+}
+
+#toast.is-sticky:hover {
+  background: oklch(0.14 0.004 65 / 0.97);
+}
+
 /* ==========================================================================
    Shared
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-delay: 0ms !important;
-    transition-duration: 1ms !important;
+  /* The read head is a single pass; with animation off, its gradient would
+     simply sit on the artwork forever. */
+  #read-line {
+    display: none;
   }
 }

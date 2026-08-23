@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "#cover-img",
+        "files": [
+          "tauri-ui/app/index.html"
+        ],
+        "createdAt": "2026-08-23T10:14:34.035Z",
+        "reason": "pre-existing: intentionally empty+hidden until a cartridge is parsed and JS sets .src at runtime, not something this change introduced"
+      },
+      {
+        "rule": "broken-image",
+        "value": "#title-logo",
+        "files": [
+          "tauri-ui/app/index.html"
+        ],
+        "createdAt": "2026-08-23T10:14:34.072Z",
+        "reason": "pre-existing: intentionally empty+hidden until a cartridge with a logo is parsed and JS sets .src at runtime, not something this change introduced"
+      }
+    ]
+  }
+}

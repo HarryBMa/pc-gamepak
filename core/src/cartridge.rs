@@ -32,6 +32,16 @@ pub struct CartridgeInfo {
     /// points are arbitrary, so a scope wide enough to serve them would be wide
     /// enough to serve anything on the machine.
     pub cover: String,
+    /// Optional hero/background as a `data:` URI.
+    pub background: String,
+    /// Absolute path to the background image, or empty string if none. Same
+    /// role as `cover_path`: editing needs the real path back, the launcher
+    /// only ever wants the `data:` URI above.
+    pub background_path: String,
+    /// Optional title logo as a `data:` URI.
+    pub logo: String,
+    /// Absolute path to the logo image, or empty string if none.
+    pub logo_path: String,
     /// The value from the `executable` / `open` key — either a URI or a
     /// relative path on the cartridge. For bundles this is the first game's
     /// executable so keyboard shortcuts (Enter = play) still work.
@@ -55,9 +65,9 @@ pub struct CartridgeInfo {
 
 /// Does this cartridge carry the game, or just point at it?
 pub fn holds_game(root: &Path) -> bool {
-    // Written by the wizard's "copy the game" step, and the same layout Steam
-    // uses for any library folder.
-    root.join("steamapps").join("common").is_dir()
+    // Written by the wizard's "copy the game" step: the Steam library layout
+    // for a Steam game, or the wizard's own Games/ folder for a portable one.
+    root.join("steamapps").join("common").is_dir() || root.join("Games").is_dir()
 }
 
 /// Largest cover we will base64 into the webview. A cartridge is not a trusted
@@ -176,6 +186,12 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 .cloned()
                 .unwrap_or_default();
             let cover_path = resolve_cover(root, &cover_rel);
+            let background_path = ini_get(&ini, "collection", "background")
+                .map(|rel| resolve_cover(root, rel))
+                .unwrap_or_default();
+            let logo_path = ini_get(&ini, "collection", "logo")
+                .map(|rel| resolve_cover(root, rel))
+                .unwrap_or_default();
 
             let games: Vec<GameEntry> = game_sections
                 .iter()
@@ -206,6 +222,10 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             return Ok(CartridgeInfo {
                 title,
                 cover: cover_as_data_uri(&cover_path),
+                background: cover_as_data_uri(&background_path),
+                background_path,
+                logo: cover_as_data_uri(&logo_path),
+                logo_path,
                 cover_path,
                 executable,
                 drive_path: drive_path.to_string(),
@@ -229,9 +249,25 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             .unwrap_or_default();
         let cover_path = resolve_cover(root, &cover_rel);
 
+        // Unlike `cover`, an absent background or logo must stay absent: both
+        // go through `resolve_cover`, but only when a key was actually given —
+        // otherwise it falls back to guessing at *some* image file on the
+        // drive, which is the right behaviour for the primary cover and the
+        // wrong one for these.
+        let background_path = ini_get(&ini, "general", "background")
+            .map(|rel| resolve_cover(root, rel))
+            .unwrap_or_default();
+        let logo_path = ini_get(&ini, "general", "logo")
+            .map(|rel| resolve_cover(root, rel))
+            .unwrap_or_default();
+
         return Ok(CartridgeInfo {
             title,
             cover: cover_as_data_uri(&cover_path),
+            background: cover_as_data_uri(&background_path),
+            background_path,
+            logo: cover_as_data_uri(&logo_path),
+            logo_path,
             cover_path,
             executable,
             drive_path: drive_path.to_string(),
@@ -266,6 +302,10 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
         return Ok(CartridgeInfo {
             title,
             cover: cover_as_data_uri(&cover_path),
+            background: String::new(),
+            background_path: String::new(),
+            logo: String::new(),
+            logo_path: String::new(),
             cover_path,
             // Empty: autorun.inf's open= and shellexecute= are not used as the
             // play target; Play is intentionally disabled for autorun-only drives.
@@ -452,6 +492,47 @@ mod tests {
     }
 
     #[test]
+    fn a_single_game_can_carry_a_background_and_logo_too() {
+        let scratch = crate::testutil::Scratch::new("art");
+        std::fs::write(scratch.join("cover.jpg"), b"cover").unwrap();
+        std::fs::write(scratch.join("background.jpg"), b"background").unwrap();
+        std::fs::write(scratch.join("logo.png"), b"logo").unwrap();
+        std::fs::write(
+            scratch.join("cartridge.conf"),
+            "title=Hollow Knight\nexecutable=steam://rungameid/367520\n\
+             cover=cover.jpg\nbackground=background.jpg\nlogo=logo.png\n",
+        )
+        .unwrap();
+
+        let info = read_cartridge_info(scratch.path().to_str().unwrap()).unwrap();
+        assert!(info.cover.starts_with("data:"));
+        assert!(info.background.starts_with("data:"));
+        assert!(info.background_path.ends_with("background.jpg"));
+        assert!(info.logo.starts_with("data:"));
+        assert!(info.logo_path.ends_with("logo.png"));
+    }
+
+    #[test]
+    fn a_single_game_with_no_background_or_logo_key_gets_neither() {
+        // Critically, this must not fall back to guessing at *some* image on
+        // the drive the way the bare cover does — an unset background/logo
+        // has to stay unset.
+        let scratch = crate::testutil::Scratch::new("no-art");
+        std::fs::write(scratch.join("cover.jpg"), b"cover").unwrap();
+        std::fs::write(
+            scratch.join("cartridge.conf"),
+            "title=Hollow Knight\nexecutable=steam://rungameid/367520\ncover=cover.jpg\n",
+        )
+        .unwrap();
+
+        let info = read_cartridge_info(scratch.path().to_str().unwrap()).unwrap();
+        assert!(info.background.is_empty());
+        assert!(info.background_path.is_empty());
+        assert!(info.logo.is_empty());
+        assert!(info.logo_path.is_empty());
+    }
+
+    #[test]
     fn reads_a_bundle_cartridge_conf() {
         let scratch = crate::testutil::Scratch::new("bundle");
         std::fs::write(
@@ -514,6 +595,28 @@ mod tests {
         );
 
         std::fs::create_dir_all(scratch.join("steamapps/common/X")).unwrap();
+        assert!(
+            read_cartridge_info(scratch.path().to_str().unwrap())
+                .unwrap()
+                .holds_game
+        );
+    }
+
+    #[test]
+    fn a_portable_copy_also_counts_as_carrying_the_game() {
+        let scratch = crate::testutil::Scratch::new("holds-portable");
+        std::fs::write(
+            scratch.join("cartridge.conf"),
+            "title=X\nexecutable=Games/X/X.exe\n",
+        )
+        .unwrap();
+        assert!(
+            !read_cartridge_info(scratch.path().to_str().unwrap())
+                .unwrap()
+                .holds_game
+        );
+
+        std::fs::create_dir_all(scratch.join("Games/X")).unwrap();
         assert!(
             read_cartridge_info(scratch.path().to_str().unwrap())
                 .unwrap()

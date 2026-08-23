@@ -16,20 +16,23 @@
 //   cartridge_health(drive_path)             -> Health
 //   read_cartridge_for_edit(drive_path)      -> Editable
 //   update_cartridge(request)                -> UpdateResult
+//   open_wizard_settings()                   -> ()  (opens/focuses the
+//                                               wizard, straight to Settings)
 //
 // Wizard commands:
-//   list_games()                             -> Vec<GameInfo>  (Playnite + Steam)
+//   list_games()                             -> GameList { games, problems } (Playnite + Steam)
 //   get_settings()                           -> Settings
 //   set_settings(settings)                   -> Settings
 //   suggest_collection_name(titles)          -> String
 //   pick_cover_image()                       -> PickedCover | null
+//   pick_game_folder()                       -> PickedGameFolder | null
 //   host_platform()                          -> "windows" | "linux" | …
 //   tuning_plan(drive_path, tweaks, applying) -> Vec<String>  (the commands)
 //   apply_tuning(drive_path, tweaks, applying) -> Vec<String>  (what was done)
 //   game_cover(library, id)                  -> String (data URI)
 //   list_target_drives()                     -> Vec<TargetDrive>
 //   format_plan(drive_path)                  -> FormatPlan
-//   executable_choices(playnite_id)          -> Vec<Candidate>
+//   executable_choices(playnite_id?, source_dir?, title?) -> Vec<Candidate>
 //   steam_registration(drive_path)           -> bool
 //   unregister_from_steam(drive_path)        -> bool
 //   create_cartridge(request)                -> CartridgeResult,
@@ -49,7 +52,10 @@ use gamepak_core::{create, drives, edit, format, health, settings, sgdb, tuning}
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::{Emitter, WebviewUrl, WebviewWindowBuilder};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::webview::PageLoadEvent;
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 // --------------------------------------------------------------------------
@@ -181,6 +187,7 @@ fn eject_drive(drive_path: String) -> Result<(), String> {
 fn eject_windows(drive_path: &str) -> Result<(), String> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
+    use std::time::Duration;
     use windows_sys::Win32::Foundation::{
         CloseHandle, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE,
     };
@@ -190,6 +197,14 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
     use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME};
     use windows_sys::Win32::System::IO::DeviceIoControl;
 
+    // A drive just plugged in, or a window just closed on it, often still has
+    // Explorer's thumbnail cache or Defender's on-arrival scan holding a
+    // handle for a moment — long enough for the first lock to fail and short
+    // enough that pressing Eject again immediately succeeds. Retried here
+    // instead of surfacing that as a real failure.
+    const ATTEMPTS: u32 = 6;
+    const RETRY_DELAY: Duration = Duration::from_millis(250);
+
     let letter = drive_path.trim_end_matches('\\').trim_end_matches('/');
     let volume_path = format!("\\\\.\\{letter}");
 
@@ -198,80 +213,99 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
         .chain(std::iter::once(0))
         .collect();
 
-    let handle = unsafe {
-        CreateFileW(
-            wide.as_ptr(),
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            std::ptr::null(),
-            OPEN_EXISTING,
-            0,
-            0,
-        )
-    };
+    for attempt in 0..ATTEMPTS {
+        if attempt > 0 {
+            std::thread::sleep(RETRY_DELAY);
+        }
 
-    if handle == INVALID_HANDLE_VALUE {
-        return eject_windows_mountvol(drive_path);
-    }
+        let handle = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                0,
+            )
+        };
 
-    let mut bytes_returned: u32 = 0;
+        if handle == INVALID_HANDLE_VALUE {
+            continue;
+        }
 
-    let locked = unsafe {
-        DeviceIoControl(
-            handle,
-            FSCTL_LOCK_VOLUME,
-            std::ptr::null(),
-            0,
-            std::ptr::null_mut(),
-            0,
-            &mut bytes_returned,
-            std::ptr::null_mut(),
-        )
-    };
+        let mut bytes_returned: u32 = 0;
 
-    if locked == 0 {
+        let locked = unsafe {
+            DeviceIoControl(
+                handle,
+                FSCTL_LOCK_VOLUME,
+                std::ptr::null(),
+                0,
+                std::ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+            )
+        };
+
+        if locked == 0 {
+            unsafe { CloseHandle(handle) };
+            continue;
+        }
+
+        let dismounted = unsafe {
+            DeviceIoControl(
+                handle,
+                FSCTL_DISMOUNT_VOLUME,
+                std::ptr::null(),
+                0,
+                std::ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+            )
+        };
+
         unsafe { CloseHandle(handle) };
-        return eject_windows_mountvol(drive_path);
+
+        if dismounted != 0 {
+            return Ok(());
+        }
     }
 
-    let dismounted = unsafe {
-        DeviceIoControl(
-            handle,
-            FSCTL_DISMOUNT_VOLUME,
-            std::ptr::null(),
-            0,
-            std::ptr::null_mut(),
-            0,
-            &mut bytes_returned,
-            std::ptr::null_mut(),
-        )
-    };
-
-    unsafe { CloseHandle(handle) };
-
-    if dismounted != 0 {
-        Ok(())
-    } else {
-        eject_windows_mountvol(drive_path)
-    }
+    eject_windows_mountvol(drive_path)
 }
 
 #[cfg(target_os = "windows")]
 fn eject_windows_mountvol(drive_path: &str) -> Result<(), String> {
-    let letter = drive_path.trim_end_matches('\\').trim_end_matches('/');
-    let status = Command::new("mountvol")
-        .args([letter, "/P"])
-        .status()
-        .map_err(|e| format!("mountvol failed: {e}"))?;
+    use std::time::Duration;
 
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "mountvol /P returned exit code {:?}",
-            status.code()
-        ))
+    const ATTEMPTS: u32 = 3;
+    const RETRY_DELAY: Duration = Duration::from_millis(300);
+
+    let letter = drive_path.trim_end_matches('\\').trim_end_matches('/');
+    let mut last_code = None;
+
+    for attempt in 0..ATTEMPTS {
+        if attempt > 0 {
+            std::thread::sleep(RETRY_DELAY);
+        }
+
+        let status = Command::new("mountvol")
+            .args([letter, "/P"])
+            .status()
+            .map_err(|e| format!("mountvol failed: {e}"))?;
+
+        if status.success() {
+            return Ok(());
+        }
+        last_code = status.code();
     }
+
+    Err(format!(
+        "mountvol /P returned exit code {last_code:?}"
+    ))
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -327,7 +361,7 @@ fn get_parent_device(partition: &str) -> String {
 /// `playnite_root` lets the wizard pass a user-supplied Playnite data directory
 /// when auto-discovery failed. If absent, the usual lookup is used.
 #[tauri::command]
-fn list_games(playnite_root: Option<String>) -> Result<Vec<create::GameInfo>, String> {
+fn list_games(playnite_root: Option<String>) -> Result<create::GameList, String> {
     create::list_games(playnite_root.as_deref())
 }
 
@@ -452,6 +486,55 @@ async fn pick_cover_image(window: tauri::WebviewWindow) -> Option<PickedCover> {
     })
 }
 
+/// What the picker came back with, and what is inside it.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedGameFolder {
+    path: String,
+    /// Folder name, offered as the title so it does not have to be typed.
+    name: String,
+    size_bytes: u64,
+    /// What Play could start, best guess first. Empty when nothing here looks
+    /// like a program, which is worth showing before the copy rather than after.
+    choices: Vec<gamepak_core::portable::Candidate>,
+}
+
+/// Ask for a game's folder through the desktop's own file dialog.
+///
+/// The counterpart to picking a game from the list: a game that no launcher
+/// knows about still lives in a folder, and a folder is all the copy needs. As
+/// with the cover picker, the window never names a path — it gets one back only
+/// after the user has pointed at it.
+#[tauri::command]
+async fn pick_game_folder(window: tauri::WebviewWindow) -> Result<Option<PickedGameFolder>, String> {
+    let Some(folder) = window
+        .dialog()
+        .file()
+        .set_title("Choose the game's folder")
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let path = folder
+        .into_path()
+        .map_err(|e| format!("That folder cannot be read: {e}"))?;
+
+    // Checked here, not merely in the picker: the same rules apply however the
+    // path arrived.
+    let dir = create::check_source_dir(&path.to_string_lossy())?;
+    let name = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    Ok(Some(PickedGameFolder {
+        size_bytes: gamepak_core::portable::tree_size_of(&dir),
+        choices: gamepak_core::portable::find_executables(&dir, &name, None),
+        path: dir.to_string_lossy().into_owned(),
+        name,
+    }))
+}
+
 /// A name for a cartridge carrying several games, worked out from what they are
 /// called. The wizard offers it; the user can always type their own.
 #[tauri::command]
@@ -477,12 +560,17 @@ fn sgdb_download_artwork(
     url: String,
     cache_key: String,
     game_key: Option<String>,
-) -> Result<String, String> {
+) -> Result<sgdb::CachedArtwork, String> {
     let path = sgdb::download_artwork(&url, &cache_key)?;
     if let Some(key) = game_key.filter(|k| !k.trim().is_empty()) {
         sgdb::remember_last_used(&key, &path)?;
     }
-    Ok(path.to_string_lossy().to_string())
+    sgdb::read_as_data_uri(&path)
+        .map(|data_uri| sgdb::CachedArtwork {
+            path: path.to_string_lossy().into_owned(),
+            data_uri,
+        })
+        .ok_or_else(|| "SteamGridDB saved the image, but it could not be previewed.".to_string())
 }
 
 #[tauri::command]
@@ -506,9 +594,18 @@ fn format_plan(drive_path: String) -> Result<format::FormatPlan, String> {
 /// Ranked best-first; the window offers the top one and lets the user change it.
 #[tauri::command]
 fn executable_choices(
-    playnite_id: String,
+    playnite_id: Option<String>,
+    source_dir: Option<String>,
+    title: Option<String>,
 ) -> Result<Vec<gamepak_core::portable::Candidate>, String> {
-    create::executable_choices(&playnite_id)
+    // A folder the user chose is the more specific answer, so it wins.
+    if let Some(dir) = source_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        return create::executable_choices_in(dir, title.as_deref().unwrap_or_default());
+    }
+    match playnite_id.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+        Some(id) => create::executable_choices(id),
+        None => Err("No game folder to look in.".to_string()),
+    }
 }
 
 /// Whether the drive is currently a registered Steam library folder.
@@ -545,6 +642,55 @@ async fn create_cartridge(
 // Entry point
 // --------------------------------------------------------------------------
 
+/// The launcher popup's own way into the wizard, alongside the tray menu's.
+///
+/// The popup is a cartridge's home, not a settings surface, so this jumps
+/// straight past cartridge creation to Settings — the same place the tray
+/// menu's "Open settings" lands.
+#[tauri::command]
+fn open_wizard_settings(app: tauri::AppHandle) -> Result<(), String> {
+    open_wizard(&app, true).map_err(|e| e.to_string())
+}
+
+fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window("create") {
+        window.show()?;
+        window.set_focus()?;
+        if open_settings {
+            window.emit("open-settings", ())?;
+        }
+        return Ok(());
+    }
+
+    let builder = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()));
+    let builder = if open_settings {
+        builder.on_page_load(|window, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                let _ = window.emit("open-settings", ());
+            }
+        })
+    } else {
+        builder
+    };
+    // Resizable, unlike the popup: 880x660 is logical pixels, so at 150% or
+    // 200% desktop scaling the wizard is taller than the screen it opens on and
+    // a fixed window leaves the title bar and the game list off the edge with
+    // no way back. The minimum keeps both columns usable.
+    let window = builder
+        .title("Create cartridge")
+        .inner_size(880.0, 660.0)
+        .min_inner_size(720.0, 520.0)
+        .resizable(true)
+        .decorations(false)
+        .transparent(true)
+        .center()
+        .visible(false)
+        .build()?;
+
+    let _ = window;
+    Ok(())
+}
+
 fn main() {
     // Both windows start hidden; the frontend shows itself once it has drawn,
     // so the user never sees an empty frame.
@@ -564,6 +710,7 @@ fn main() {
             set_settings,
             suggest_collection_name,
             pick_cover_image,
+            pick_game_folder,
             cartridge_health,
             read_cartridge_for_edit,
             update_cartridge,
@@ -580,8 +727,30 @@ fn main() {
             steam_registration,
             unregister_from_steam,
             create_cartridge,
+            open_wizard_settings,
         ])
         .setup(move |app| {
+            let wizard_item = MenuItem::with_id(app, "open-wizard", "Open wizard", true, None::<&str>)?;
+            let open_settings = MenuItem::with_id(app, "open-settings", "Open settings", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&wizard_item, &open_settings, &quit])?;
+
+            TrayIconBuilder::new()
+                .icon(tauri::include_image!("icons/32x32.png"))
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "open-wizard" => {
+                        let _ = open_wizard(app, false);
+                    }
+                    "open-settings" => {
+                        let _ = open_wizard(app, true);
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .build(app)?;
+
             if wizard {
                 WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
                     .title("Create cartridge")

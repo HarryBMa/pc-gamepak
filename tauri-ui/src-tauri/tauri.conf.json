@@ -9,7 +9,7 @@
     "withGlobalTauri": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'",
+      "csp": "default-src 'self'; img-src 'self' data: https://steamgriddb.com https://*.steamgriddb.com https://cdn.steamgriddb.com https://cdn2.steamgriddb.com; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'",
       "assetProtocol": {
         "enable": false
       }
