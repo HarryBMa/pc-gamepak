@@ -109,14 +109,17 @@ function Install-ExperimentalAutoplay {
 
     Write-Host "Registering experimental AutoPlay handler..."
     New-Item -Path $handlerKey -Force | Out-Null
+
+    $launcherCommand = '"{0}" --drive "%L"' -f $LauncherExe
+
     Set-ItemProperty -Path $handlerKey -Name "Action" -Type String -Value "Open with PC GamePak"
     Set-ItemProperty -Path $handlerKey -Name "Provider" -Type String -Value "PC GamePak"
     Set-ItemProperty -Path $handlerKey -Name "DefaultIcon" -Type String -Value "$LauncherExe,0"
-    Set-ItemProperty -Path $handlerKey -Name "InitCmdLine" -Type String -Value "\"$LauncherExe\" --drive \"%L\""
+    Set-ItemProperty -Path $handlerKey -Name "InitCmdLine" -Type String -Value $launcherCommand
     Set-ItemProperty -Path $handlerKey -Name "InvokeProgID" -Type String -Value "PCGamePak.Cartridge"
 
     New-Item -Path $eventKey -Force | Out-Null
-    Set-ItemProperty -Path $eventKey -Name "" -Type String -Value "PCGamePakCartridge"
+    New-ItemProperty -Path $eventKey -Name "(default)" -PropertyType String -Value "PCGamePakCartridge" -Force | Out-Null
 
     Write-Host "Experimental AutoPlay is installed in best-effort mode."
     Write-Host "Windows may suppress it under policy or OEM shell settings."

@@ -129,7 +129,7 @@
 #games-wrap,
 #drives-wrap {
   flex: 1;
-  min-height: 0;
+  min-height: 220px;
   border: 1px solid var(--hairline-soft);
   border-radius: 6px;
   background: oklch(0 0 0 / 0.22);
@@ -253,16 +253,18 @@ li:last-child .row {
 /* --- Preview ------------------------------------------------------------ */
 
 #preview {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 18px;
 }
 
 #preview-art {
   position: relative;
-  /* 2:3 — the shape Steam caches library art in. */
-  aspect-ratio: 2 / 3;
+  /* The launcher is a cover-shaped 3:4 preview, not a library thumbnail. */
+  aspect-ratio: 3 / 4;
+  width: min(100%, 220px);
+  align-self: center;
   border-radius: 4px;
   overflow: hidden;
   background: var(--sunk);
@@ -306,27 +308,114 @@ li:last-child .row {
   display: none;
 }
 
-#preview-meta {
-  min-width: 0;
-  align-self: center;
+#preview-chrome,
+#preview-stage {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 1;
+}
+
+#preview-chrome {
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 11px;
+  background: linear-gradient(to bottom, oklch(0.08 0.004 65 / 0.72), transparent);
+}
+
+.preview-chrome__brand {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--ink-2);
+}
+
+.preview-chrome__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+#preview-stage {
+  bottom: 0;
+  top: auto;
+  padding: 44px 11px 11px;
+  background: linear-gradient(to top, oklch(0.07 0.004 65 / 0.96), transparent);
+}
+
+#preview-stage .eyebrow {
+  font-size: 7px;
 }
 
 #preview-title {
-  margin: 7px 0 0;
-  font-size: var(--text-xl);
+  margin: 5px 0 0;
+  font-size: 17px;
   font-weight: 800;
-  font-stretch: 108%;
-  line-height: 1.05;
-  letter-spacing: -0.015em;
+  line-height: 0.98;
+  text-transform: uppercase;
   text-wrap: balance;
 }
 
 #preview-sub {
+  margin: 5px 0 0;
+  font-size: 8px;
+  color: var(--ink-2);
+}
+
+#preview-games {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   margin: 7px 0 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--ink-3);
-  overflow-wrap: anywhere;
+  padding: 0;
+  list-style: none;
+}
+
+#preview-games[hidden] {
+  display: none;
+}
+
+#preview-games li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 5px;
+  border: 1px solid oklch(1 0 0 / 0.16);
+  border-radius: 2px;
+  background: oklch(0 0 0 / 0.35);
+  font-size: 8px;
+}
+
+#preview-games kbd,
+#preview-actions kbd {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 7px;
+  color: var(--accent);
+}
+
+#preview-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+#preview-actions span {
+  flex: 1;
+  padding: 5px 4px;
+  border: 1px solid oklch(1 0 0 / 0.2);
+  border-radius: 3px;
+  font-size: 7px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+#preview-actions span:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 #preview-source {
@@ -929,6 +1018,23 @@ li:last-child .row {
   font-size: var(--text-sm);
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+.bundle-item__art {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.bundle-item__art:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .bundle-item__remove {

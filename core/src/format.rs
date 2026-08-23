@@ -180,12 +180,19 @@ pub fn plan(path: &str) -> Result<FormatPlan, FormatError> {
 /// `confirmation` must equal the drive's current label. That is the gate: it
 /// forces the user to look at which drive they picked, rather than clicking
 /// through a dialog.
+///
+/// Returns the path the drive can be found at afterward, when known. A fresh
+/// filesystem gets a fresh label, and on Linux the desktop automounts by
+/// label, so that is not necessarily `path` any more — `run_format` mounts it
+/// back itself rather than leave that to whatever else might be watching for
+/// it. `None` means formatting succeeded but the new mount point could not be
+/// determined; the caller should keep looking rather than trust `path`.
 pub fn format_drive(
     path: &str,
     filesystem: Filesystem,
     new_label: &str,
     confirmation: &str,
-) -> Result<(), FormatError> {
+) -> Result<Option<String>, FormatError> {
     let plan = plan(path)?;
     let label = check_label_for(filesystem, new_label)?;
 
@@ -266,7 +273,11 @@ fn backing_device(path: &Path) -> Option<String> {
 }
 
 #[cfg(windows)]
-fn run_format(plan: &FormatPlan, filesystem: Filesystem, label: &str) -> Result<(), FormatError> {
+fn run_format(
+    plan: &FormatPlan,
+    filesystem: Filesystem,
+    label: &str,
+) -> Result<Option<String>, FormatError> {
     let letter = plan
         .device
         .clone()
@@ -311,7 +322,9 @@ fn run_format(plan: &FormatPlan, filesystem: Filesystem, label: &str) -> Result<
         .map_err(|e| FormatError::ToolMissing(format!("powershell.exe ({e})")))?;
 
     if status.success() {
-        Ok(())
+        // The drive letter is the handle used throughout, and Format-Volume
+        // does not change it.
+        Ok(Some(plan.path.clone()))
     } else {
         Err(FormatError::Failed(format!(
             "Format-Volume exited with {:?}",
@@ -326,7 +339,11 @@ fn powershell_quote(s: &str) -> String {
 }
 
 #[cfg(not(windows))]
-fn run_format(plan: &FormatPlan, filesystem: Filesystem, label: &str) -> Result<(), FormatError> {
+fn run_format(
+    plan: &FormatPlan,
+    filesystem: Filesystem,
+    label: &str,
+) -> Result<Option<String>, FormatError> {
     let device = plan
         .device
         .clone()
@@ -347,18 +364,106 @@ fn run_format(plan: &FormatPlan, filesystem: Filesystem, label: &str) -> Result<
         .output()
         .map_err(|e| FormatError::ToolMissing(format!("{program} ({e})")))?;
 
-    if output.status.success() {
-        return Ok(());
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let message = [stderr.trim(), stdout.trim()]
+            .iter()
+            .find(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("exited with {:?}", output.status.code()));
+        return Err(FormatError::Failed(friendly_pkexec_error(&message)));
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let message = [stderr.trim(), stdout.trim()]
-        .iter()
-        .find(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("exited with {:?}", output.status.code()));
-    Err(FormatError::Failed(message))
+    // btrfs stores ownership as real, on-disk metadata — unlike exFAT, which
+    // has no owner of its own and takes whatever the mount's uid=/gid=
+    // options say. mkfs.btrfs, above, ran as root (via pkexec), so the root
+    // of the new filesystem is owned by root right now; without reclaiming
+    // it, the very next write anyone makes here fails with EACCES.
+    if filesystem == Filesystem::Btrfs {
+        reclaim_btrfs_ownership(&device);
+    }
+
+    // A fresh filesystem carries a fresh label, and udisks automounts by
+    // label — so relying on it to notice on its own can race, or (headless,
+    // no automount daemon watching this device) never resolve at all. Ask
+    // for the mount directly instead of hoping one arrives; if this doesn't
+    // land in time, the caller polls as a fallback.
+    let _ = Command::new("udisksctl")
+        .args(["mount", "-b", &device, "--no-user-interaction"])
+        .status();
+
+    Ok(mounted_path_for(&device))
+}
+
+/// Hand a freshly made btrfs filesystem's root back to whoever is running the
+/// wizard, rather than leave it owned by root.
+///
+/// This mounts and unmounts the device privately (a scratch mountpoint under
+/// `/run`, gone by the time this returns) rather than reusing the wizard's
+/// own `udisksctl mount` for it, so the volume is never exposed — even
+/// briefly — to its normal, unprivileged owner before ownership is fixed.
+/// Reuses the elevation `mkfs.btrfs` itself already needed, so this costs no
+/// extra prompt beyond the one formatting was always going to ask for.
+#[cfg(not(windows))]
+fn reclaim_btrfs_ownership(device: &str) {
+    let Ok(uid_out) = Command::new("id").arg("-u").output() else {
+        return;
+    };
+    let Ok(gid_out) = Command::new("id").arg("-g").output() else {
+        return;
+    };
+    let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
+    let gid = String::from_utf8_lossy(&gid_out.stdout).trim().to_string();
+    if uid.is_empty() || gid.is_empty() {
+        return;
+    }
+
+    // $1 is the device rather than an interpolated string, so nothing about
+    // the device path is ever parsed by the shell.
+    let script = "set -e; mnt=$(mktemp -d /run/gamepak-format.XXXXXX); \
+                  mount \"$1\" \"$mnt\"; chown \"$2:$3\" \"$mnt\"; \
+                  umount \"$mnt\"; rmdir \"$mnt\"";
+    let _ = Command::new("pkexec")
+        .args(["sh", "-c", script, "reclaim-ownership", device, &uid, &gid])
+        .status();
+}
+
+/// Turn one specific, common pkexec failure into something a user can
+/// actually act on.
+///
+/// When polkit cannot reach a graphical authentication agent for the calling
+/// session, it falls back to a text agent — which then fails outright,
+/// because a GUI app has no controlling terminal for it to prompt on. The
+/// result is `pkexec`'s own internal error text, which says nothing about
+/// what to do: "Error creating textual authentication agent: Error opening
+/// current controlling terminal for the process (`/dev/tty'): No such
+/// device or address". Anything else is passed through unchanged; this is
+/// not a general pkexec-error translator, just a fix for the one message
+/// that is actively misleading.
+#[cfg_attr(windows, allow(dead_code))]
+pub(crate) fn friendly_pkexec_error(raw: &str) -> String {
+    if raw.contains("textual authentication agent") || raw.contains("/dev/tty") {
+        format!(
+            "Could not ask for a password: no authentication dialog was available \
+             ({raw}). This usually clears up on its own — try again. If it keeps \
+             happening, your desktop session may be missing a polkit authentication \
+             agent (polkit-kde-authentication-agent-1, polkit-gnome-authentication-agent-1, \
+             or similar), or it isn't running."
+        )
+    } else {
+        raw.to_string()
+    }
+}
+
+/// Where `device` is mounted right now, if anywhere.
+#[cfg(not(windows))]
+fn mounted_path_for(device: &str) -> Option<String> {
+    let text = std::fs::read_to_string("/proc/mounts").ok()?;
+    drives::parse_proc_mounts(&text)
+        .into_iter()
+        .find(|entry| entry.device == device)
+        .map(|entry| entry.mount.to_string_lossy().into_owned())
 }
 
 /// Build the mkfs invocation. Split out so the argument order can be tested
@@ -372,14 +477,25 @@ pub fn mkfs_command(
     (
         "pkexec",
         match filesystem {
+            // -f: without it, mkfs.btrfs refuses to touch a device that
+            // already has a filesystem signature on it — which is exactly
+            // the case every time this runs, since the whole point of this
+            // call is overwriting whatever is there now. The label-typed
+            // confirmation above this in the call chain is the real safety
+            // gate; by the time mkfs runs, the user has already agreed to
+            // the wipe.
             Filesystem::Btrfs => vec![
                 "mkfs.btrfs".to_string(),
+                "-f".to_string(),
                 "-L".to_string(),
                 label.to_string(),
                 device.to_string(),
             ],
+            // -F is exfatprogs' equivalent of the above (-f there means
+            // "full format" instead).
             Filesystem::Exfat => vec![
                 "mkfs.exfat".to_string(),
+                "-F".to_string(),
                 "-c".to_string(),
                 EXFAT_CLUSTER_BYTES.to_string(),
                 "-n".to_string(),
@@ -393,6 +509,22 @@ pub fn mkfs_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_polkit_agent_gets_an_actual_explanation() {
+        let raw = "Error creating textual authentication agent: Error opening current \
+                    controlling terminal for the process (`/dev/tty'): No such device or address";
+        let friendly = friendly_pkexec_error(raw);
+        assert_ne!(friendly, raw);
+        assert!(friendly.contains("try again"), "{friendly}");
+        assert!(friendly.contains(raw), "the original detail should still be in there: {friendly}");
+    }
+
+    #[test]
+    fn any_other_pkexec_failure_passes_through_unchanged() {
+        let raw = "mkfs.btrfs: /dev/sdb1 appears to contain an existing filesystem";
+        assert_eq!(friendly_pkexec_error(raw), raw);
+    }
 
     #[test]
     fn accepts_sensible_labels_and_preserves_case() {
@@ -473,7 +605,7 @@ mod tests {
     fn mkfs_arguments_are_in_the_right_order() {
         let (program, args) = mkfs_command("/dev/sdb1", Filesystem::Btrfs, "Cinder");
         assert_eq!(program, "pkexec");
-        assert_eq!(args, vec!["mkfs.btrfs", "-L", "Cinder", "/dev/sdb1"]);
+        assert_eq!(args, vec!["mkfs.btrfs", "-f", "-L", "Cinder", "/dev/sdb1"]);
     }
 
     #[test]
@@ -484,7 +616,7 @@ mod tests {
         // volume size and lands lower than a cartridge wants.
         assert_eq!(
             args,
-            vec!["mkfs.exfat", "-c", "128K", "-n", "Cinder", "/dev/sdb1"]
+            vec!["mkfs.exfat", "-F", "-c", "128K", "-n", "Cinder", "/dev/sdb1"]
         );
     }
 

@@ -16,6 +16,8 @@
 //   cartridge_health(drive_path)             -> Health
 //   read_cartridge_for_edit(drive_path)      -> Editable
 //   update_cartridge(request)                -> UpdateResult
+//   open_wizard_settings()                   -> ()  (opens/focuses the
+//                                               wizard, straight to Settings)
 //
 // Wizard commands:
 //   list_games()                             -> GameList { games, problems } (Playnite + Steam)
@@ -558,12 +560,17 @@ fn sgdb_download_artwork(
     url: String,
     cache_key: String,
     game_key: Option<String>,
-) -> Result<String, String> {
+) -> Result<sgdb::CachedArtwork, String> {
     let path = sgdb::download_artwork(&url, &cache_key)?;
     if let Some(key) = game_key.filter(|k| !k.trim().is_empty()) {
         sgdb::remember_last_used(&key, &path)?;
     }
-    Ok(path.to_string_lossy().to_string())
+    sgdb::read_as_data_uri(&path)
+        .map(|data_uri| sgdb::CachedArtwork {
+            path: path.to_string_lossy().into_owned(),
+            data_uri,
+        })
+        .ok_or_else(|| "SteamGridDB saved the image, but it could not be previewed.".to_string())
 }
 
 #[tauri::command]
@@ -634,6 +641,16 @@ async fn create_cartridge(
 // --------------------------------------------------------------------------
 // Entry point
 // --------------------------------------------------------------------------
+
+/// The launcher popup's own way into the wizard, alongside the tray menu's.
+///
+/// The popup is a cartridge's home, not a settings surface, so this jumps
+/// straight past cartridge creation to Settings — the same place the tray
+/// menu's "Open settings" lands.
+#[tauri::command]
+fn open_wizard_settings(app: tauri::AppHandle) -> Result<(), String> {
+    open_wizard(&app, true).map_err(|e| e.to_string())
+}
 
 fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("create") {
@@ -710,6 +727,7 @@ fn main() {
             steam_registration,
             unregister_from_steam,
             create_cartridge,
+            open_wizard_settings,
         ])
         .setup(move |app| {
             let wizard_item = MenuItem::with_id(app, "open-wizard", "Open wizard", true, None::<&str>)?;

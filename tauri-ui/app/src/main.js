@@ -5,7 +5,7 @@
  * backend what is on the cartridge, and wires up Play and Eject.
  *
  * Backend contract (src-tauri/src/main.rs):
- *   parse_cartridge({ drivePath })            -> { title, cover, cover_path, executable, drive_path }
+ *   parse_cartridge({ drivePath })            -> { title, cover, cover_path, background, logo, executable, drive_path }
  *   launch_game({ executable, drivePath })    -> ()
  *   eject_drive({ drivePath })                -> ()
  *   can_eject({ drivePath })                  -> bool
@@ -28,13 +28,16 @@ const el = {
   cover: document.getElementById("cover-img"),
   placeholder: document.getElementById("cover-placeholder"),
   eyebrow: document.getElementById("eyebrow-text"),
+  titleLogo: document.getElementById("title-logo"),
   title: document.getElementById("game-title"),
+  stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
   bundleHint: document.getElementById("bundle-hint"),
   play: document.getElementById("btn-play"),
   eject: document.getElementById("btn-eject"),
   close: document.getElementById("btn-close"),
   details: document.getElementById("btn-details"),
+  openSettings: document.getElementById("btn-open-settings"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
   specs: document.getElementById("specs"),
@@ -82,28 +85,52 @@ function hslToRgb(h, s, l) {
   return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
 }
 
+/** The label contrast of an accent at lightness `l`, with the better ink. */
+function inkFor(h, s, l) {
+  const accentLum = luminance(...hslToRgb(h, s, l));
+  const dark = contrast(accentLum, luminance(...hslToRgb(h, 0.22, 0.11)));
+  const light = contrast(accentLum, luminance(...hslToRgb(h, 0.12, 0.97)));
+  return dark >= light
+    ? { ratio: dark, ink: `hsl(${h.toFixed(0)} 22% 11%)` }
+    : { ratio: light, ink: `hsl(${h.toFixed(0)} 12% 97%)` };
+}
+
 /**
  * Apply an accent and pick the ink that sits on it.
  *
  * Play is the only filled surface in the window, so its label has to stay
  * readable whatever colour the artwork happens to be: dark ink wins on ambers
  * and greens, near-white on deep blues and reds.
+ *
+ * Choosing the better of the two inks is not enough by itself. At the sampler's
+ * preferred lightness the best ink still measures about 4.0:1 on deep blues,
+ * purples and crimsons — under AA for a 12px uppercase label, and those are
+ * exactly the colours game covers are made of. Rather than give up the sampled
+ * colour and fall back to a stock amber, the hue and saturation stay as the
+ * artwork gave them and only the lightness moves, the smallest step first,
+ * until the measurement clears. The target carries a little headroom because
+ * the button paints a gradient over this colour.
  */
-function setAccent(h, s, l) {
+function setAccent(h, s, preferred) {
+  const TARGET = 4.6;
   const root = document.documentElement.style;
-  const accentLum = luminance(...hslToRgb(h, s, l));
-  const darkContrast = contrast(accentLum, luminance(...hslToRgb(h, 0.22, 0.11)));
-  const lightContrast = contrast(accentLum, luminance(...hslToRgb(h, 0.12, 0.97)));
-  const useDark = darkContrast >= lightContrast;
 
-  if (Math.max(darkContrast, lightContrast) < 4.5) {
-    root.setProperty("--accent", "oklch(0.76 0.15 85)");
-    root.setProperty("--accent-ink", "oklch(0.16 0.02 65)");
-    return;
+  let best = { lightness: preferred, ...inkFor(h, s, preferred) };
+
+  for (let step = 0.02; best.ratio < TARGET && step <= 0.34; step += 0.02) {
+    for (const l of [preferred - step, preferred + step]) {
+      if (l < 0.3 || l > 0.9) continue;
+      const candidate = inkFor(h, s, l);
+      if (candidate.ratio > best.ratio) best = { lightness: l, ...candidate };
+      if (best.ratio >= TARGET) break;
+    }
   }
 
-  root.setProperty("--accent", `hsl(${h.toFixed(0)} ${(s * 100).toFixed(0)}% ${(l * 100).toFixed(0)}%)`);
-  root.setProperty("--accent-ink", useDark ? `hsl(${h.toFixed(0)} 22% 11%)` : `hsl(${h.toFixed(0)} 12% 97%)`);
+  root.setProperty(
+    "--accent",
+    `hsl(${h.toFixed(0)} ${(s * 100).toFixed(0)}% ${(best.lightness * 100).toFixed(1)}%)`,
+  );
+  root.setProperty("--accent-ink", best.ink);
 }
 
 /**
@@ -118,7 +145,9 @@ function sampleAccent(img) {
   const canvas = document.createElement("canvas");
   canvas.width = SIZE;
   canvas.height = SIZE;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  // Read once, so the CPU-backed canvas that willReadFrequently asks for would
+  // cost the draw and buy nothing back.
+  const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   ctx.drawImage(img, 0, 0, SIZE, SIZE);
@@ -179,6 +208,9 @@ function specRow(label, value, muted = false) {
   dt.textContent = label;
   const dd = document.createElement("dd");
   dd.textContent = value;
+  // Mount points and launch targets are what people paste into a terminal or a
+  // bug report, so they opt out of the window-wide selection ban.
+  dd.classList.add("selectable");
   if (muted) dd.classList.add("is-muted");
   row.append(dt, dd);
   return row;
@@ -262,6 +294,15 @@ function toggleSheet(open) {
   el.sheet.classList.toggle("is-open", next);
   el.sheet.hidden = !next;
   el.details.setAttribute("aria-expanded", String(next));
+
+  // The sheet is opaque and covers the card, but Play and Eject stay in the tab
+  // order behind it unless they are made inert — and a Play button you cannot
+  // see is a game launched from what looks like a details screen. The toast is
+  // left reachable so a message that arrives underneath can still be read.
+  for (const node of el.card.children) {
+    if (node !== el.sheet && node !== el.toast) node.inert = next;
+  }
+
   // preventScroll matters here: #card has overflow:hidden, which makes it a
   // scroll container, and focusing the sheet while it is still translated
   // off-screen would scroll the whole card up to reveal it.
@@ -276,13 +317,31 @@ function toggleSheet(open) {
 
 let toastTimer;
 
+/**
+ * Say something, briefly.
+ *
+ * Confirmations leave on their own. An error does not: a failed launch is the
+ * one message in this window a person needs to read twice, and 3.4 seconds is
+ * gone before a slow reader reaches the end of it. It waits for a click, for
+ * Escape, or for whatever happens next.
+ */
 function toast(message, isError = false) {
   el.toast.textContent = message;
   el.toast.classList.toggle("is-error", isError);
+  el.toast.classList.toggle("is-sticky", isError);
   el.toast.classList.add("is-on");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.toast.classList.remove("is-on"), 3400);
+  if (!isError) {
+    toastTimer = setTimeout(() => el.toast.classList.remove("is-on"), 3400);
+  }
 }
+
+function dismissToast() {
+  clearTimeout(toastTimer);
+  el.toast.classList.remove("is-on", "is-sticky");
+}
+
+el.toast.addEventListener("click", dismissToast);
 
 /**
  * Whether this cartridge is on a drive at all.
@@ -332,6 +391,12 @@ async function resolveDrivePath() {
 }
 
 function fail(headline, detail) {
+  el.stage?.classList?.remove("has-logo");
+  if (el.titleLogo) {
+    el.titleLogo.hidden = true;
+    el.titleLogo.removeAttribute("src");
+    el.titleLogo.alt = "";
+  }
   el.title.textContent = headline;
   el.title.classList.toggle("is-long", headline.length > 15);
   el.eyebrow.textContent = "Cartridge";
@@ -340,6 +405,28 @@ function fail(headline, detail) {
   el.notice.textContent = `${detail} Close this window, reconnect the cartridge, and try again.`;
   el.play.disabled = true;
   el.eject.disabled = !cartridge || !ejectable;
+}
+
+function renderTitle(title, logo) {
+  const safeTitle = title || "Unknown game";
+  const hasLogo = Boolean(logo && String(logo).startsWith("data:image/"));
+
+  el.title.textContent = safeTitle;
+  el.title.classList.toggle("is-long", safeTitle.length > 15);
+
+  if (!el.titleLogo) return;
+  if (hasLogo) {
+    el.titleLogo.src = logo;
+    el.titleLogo.alt = `${safeTitle} logo`;
+    el.titleLogo.hidden = false;
+    el.stage?.classList.add("has-logo");
+    return;
+  }
+
+  el.titleLogo.hidden = true;
+  el.titleLogo.removeAttribute("src");
+  el.titleLogo.alt = "";
+  el.stage?.classList.remove("has-logo");
 }
 
 async function init() {
@@ -372,10 +459,7 @@ async function init() {
     if (el.bundleEjectRow) el.bundleEjectRow.hidden = true;
   }
 
-  el.title.textContent = cartridge.title || "Unknown game";
-  // Past ~15 characters a single line no longer fits at the display size, so
-  // the title narrows rather than shrinking away.
-  el.title.classList.toggle("is-long", (cartridge.title || "").length > 15);
+  renderTitle(cartridge.title, cartridge.logo);
   renderSpecs(cartridge);
 
   if (!cartridge.executable) {
@@ -385,12 +469,14 @@ async function init() {
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
   }
 
-  // No cover, an unreadable one or one over the size cap all arrive as "", and
-  // the placeholder simply stays.
-  if (cartridge.cover) await showCover(cartridge.cover);
+  // Collections may carry a wide Hero for the launcher background. A grid is
+  // still the fallback, so older cartridges and collections without a Hero
+  // keep the cover-first presentation.
+  const launcherArt = cartridge.background || cartridge.cover;
+  if (launcherArt) await showCover(launcherArt);
 
   // Bundle mode: replace the single Play button with a per-game list.
-  if (cartridge.isBundle && cartridge.games?.length > 0) {
+  if (cartridge.is_bundle && cartridge.games?.length > 0) {
     document.getElementById("button-row").hidden = true;
     el.gameList.hidden = false;
     el.bundleEjectRow.hidden = !ejectable;
@@ -566,7 +652,7 @@ el.bundleEject.addEventListener("click", async () => {
 // keyboard could not.
 const gamepad = connectGamepad({
   play: () => {
-    if (cartridge?.isBundle && cartridge.games?.length > 0) {
+    if (cartridge?.is_bundle && cartridge.games?.length > 0) {
       el.gameList.querySelector(".game-row__play")?.click();
     } else {
       el.play.click();
@@ -582,6 +668,13 @@ const gamepad = connectGamepad({
 el.close.addEventListener("click", closeWindow);
 el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
+el.openSettings.addEventListener("click", async () => {
+  try {
+    await invoke("open_wizard_settings");
+  } catch (error) {
+    console.error(error);
+  }
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -589,7 +682,7 @@ document.addEventListener("keydown", (event) => {
 
   // 1-9 start the nth game of a collection, so a cartridge you know can be
   // played without reaching for the mouse or arrowing down the list.
-  if (!sheetOpen && cartridge?.isBundle && /^[1-9]$/.test(event.key)) {
+  if (!sheetOpen && cartridge?.is_bundle && /^[1-9]$/.test(event.key)) {
     const button = el.gameList.querySelectorAll(".game-row__play")[Number(event.key) - 1];
     if (button) {
       event.preventDefault();
@@ -603,7 +696,7 @@ document.addEventListener("keydown", (event) => {
       if (sheetOpen) return;
       event.preventDefault();
       // For bundles, Enter plays the first game.
-      if (cartridge?.isBundle && cartridge.games?.length > 0) {
+      if (cartridge?.is_bundle && cartridge.games?.length > 0) {
         el.gameList.querySelector(".game-row__play")?.click();
       } else {
         el.play.click();
@@ -612,7 +705,7 @@ document.addEventListener("keydown", (event) => {
     case "e":
     case "E":
       event.preventDefault();
-      if (cartridge?.isBundle) el.bundleEject.click();
+      if (cartridge?.is_bundle) el.bundleEject.click();
       else el.eject.click();
       break;
     case "i":
@@ -622,8 +715,10 @@ document.addEventListener("keydown", (event) => {
       break;
     case "Escape":
       event.preventDefault();
-      // Escape backs out of the sheet before it dismisses the window.
-      if (sheetOpen) toggleSheet(false);
+      // Escape peels one layer at a time: a waiting error, then the sheet, then
+      // the window itself.
+      if (el.toast.classList.contains("is-sticky")) dismissToast();
+      else if (sheetOpen) toggleSheet(false);
       else closeWindow();
       break;
   }
@@ -651,20 +746,20 @@ async function demoInvoke(command, args) {
           cover_path: "D:\\collection.jpg",
           executable: "steam://rungameid/310970",
           drive_path: args.drivePath,
-          isBundle: true,
-          holdGame: false,
+          is_bundle: true,
+          holds_game: false,
           games: [
             {
               title: "God of War (2018)",
               executable: "steam://rungameid/310970",
               cover: "src/demo/gow-1.jpg",
-              coverPath: "",
+              cover_path: "",
             },
             {
               title: "God of War: Ragnarök",
               executable: "steam://rungameid/1476670",
               cover: "src/demo/gow-2.jpg",
-              coverPath: "",
+              cover_path: "",
             },
           ],
         };
@@ -677,7 +772,7 @@ async function demoInvoke(command, args) {
         cover_path: "D:\\cover.jpg",
         executable: state === "noexec" ? "" : "steam://rungameid/367520",
         drive_path: args.drivePath,
-        isBundle: false,
+        is_bundle: false,
         games: [],
       };
     case "can_eject":

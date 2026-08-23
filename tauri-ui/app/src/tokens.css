@@ -11,14 +11,16 @@
   src: url("fonts/archivo-latin-var.woff2") format("woff2-variations");
   font-weight: 400 800;
   font-stretch: 62% 125%;
-  font-display: block;
+  /* The launcher's whole promise is being on screen the moment a cartridge
+     lands, so the title is never worth withholding while a font loads. */
+  font-display: swap;
 }
 
 @font-face {
   font-family: "Spline Sans Mono";
   src: url("fonts/spline-sans-mono-latin.woff2") format("woff2");
   font-weight: 400 600;
-  font-display: block;
+  font-display: swap;
 }
 
 :root {
@@ -28,7 +30,9 @@
 
   --ink: oklch(0.97 0.006 75);
   --ink-2: oklch(0.75 0.008 75);
-  --ink-3: oklch(0.56 0.008 75);
+  /* 0.56 measured 4.0:1 on the panel — under AA for the option hints, which is
+     where the formatting warning and the Steam-close explanation live. */
+  --ink-3: oklch(0.635 0.008 75);
 
   --hairline: oklch(1 0 0 / 0.16);
   --hairline-soft: oklch(1 0 0 / 0.075);
@@ -40,6 +44,20 @@
 
   --radius: 16px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1); /* ease-out-quint */
+
+  /* Type scale. A cartridge is as often read from a couch as from a desk, so
+     11px is the floor: below it nothing is allowed to carry meaning. */
+  --text-label: 11px; /* uppercase labels, eyebrows, table headings */
+  --text-sm: 12px;    /* hints, metadata, notices */
+  --text: 12.5px;     /* the reading size for anything explanatory */
+  --text-md: 13px;    /* inputs and list rows */
+  --text-lg: 14px;
+  --text-xl: 19px;    /* the one heading a dialog gets */
+
+  /* Surfaces the browser would otherwise style for us. */
+  --select-bg: color-mix(in oklch, var(--accent) 34%, transparent);
+  --scroll-thumb: oklch(1 0 0 / 0.14);
+  --scroll-thumb-hover: oklch(1 0 0 / 0.24);
 }
 
 *,
@@ -62,13 +80,54 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   cursor: default;
+  /* Chrome and artwork are not documents; the diagnostic strings are, and they
+     opt back in with .selectable. */
   user-select: none;
+}
+
+/* Paths, mount points and launch targets: the strings someone pastes into a
+   terminal or a bug report. */
+.selectable {
+  user-select: text;
+  cursor: text;
+}
+
+::selection {
+  background: var(--select-bg);
+  color: var(--ink);
+}
+
+/* The scrollbars belong to the window, not to the platform. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: var(--scroll-thumb);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+  background-clip: content-box;
 }
 
 /* Small caps label, used for section headings and eyebrows. */
 .eyebrow {
   margin: 0;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: 0.19em;
@@ -82,13 +141,14 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Frameless-window chrome buttons. */
+/* Frameless-window chrome buttons. Sized for a thumb as well as a pointer:
+   the Steam Deck runs this on a touchscreen. */
 .icon-btn {
   appearance: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   border-radius: 5px;
@@ -113,7 +173,7 @@ body {
 .btn {
   appearance: none;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   font-stretch: 106%;
   letter-spacing: 0.09em;
@@ -141,11 +201,11 @@ body {
 
 .btn__key {
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1;
-  padding: 3px 4px 2px;
+  padding: 3px 5px 2px;
   border-radius: 2px;
   opacity: 0.72;
 }
@@ -208,12 +268,15 @@ body {
   }
 }
 
+/* Reduced motion takes the ornament away, not the feedback. Entrances and the
+   two looping indicators stop entirely; state changes keep a brief transition
+   so a press, a hover or a filling progress bar still reads as a change rather
+   than a jump cut. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 1ms !important;
-    animation-delay: 0ms !important;
-    transition-duration: 1ms !important;
+    animation: none !important;
+    transition-duration: 80ms !important;
   }
 }

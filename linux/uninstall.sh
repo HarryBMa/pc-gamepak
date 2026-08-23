@@ -65,6 +65,19 @@ rm -f /etc/udev/rules.d/99-steam-game-cartridge.rules
 rm -f /etc/udev/rules.d/99-game-cartridge.rules
 rm -f /etc/udev/rules.d/99-pc-gamepak.rules
 
+
+########################################
+# Remove desktop entry and icon
+########################################
+
+echo "Removing desktop entry and icon..."
+
+rm -f /usr/share/applications/pc-gamepak.desktop
+rm -f /usr/share/icons/hicolor/128x128/apps/pc-gamepak.png
+
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
+
 #######################################################################
 # Remove steam-games-cartridges config directory in User's HOME
 #######################################################################

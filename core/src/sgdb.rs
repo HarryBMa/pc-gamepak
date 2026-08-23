@@ -15,6 +15,8 @@ const USER_AGENT: &str = "pc-gamepak/0.1";
 #[serde(rename_all = "lowercase")]
 pub enum ArtworkType {
     Grid,
+    Hero,
+    Icon,
     Logo,
     Cover,
 }
@@ -301,6 +303,8 @@ const COVER_DIMENSIONS: &str = "600x900,342x482,660x930";
 fn endpoint_for(game_id: u32, art_type: ArtworkType) -> String {
     match art_type {
         ArtworkType::Grid => format!("{API_BASE}/grids/game/{game_id}?dimensions=600x900,460x215"),
+        ArtworkType::Hero => format!("{API_BASE}/heroes/game/{game_id}"),
+        ArtworkType::Icon => format!("{API_BASE}/icons/game/{game_id}"),
         ArtworkType::Logo => format!("{API_BASE}/logos/game/{game_id}"),
         // There is no /covers endpoint. The v2 API serves grids, heroes, logos
         // and icons, and a "cover" is a grid in one of the portrait sizes — so

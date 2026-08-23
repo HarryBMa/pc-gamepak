@@ -47,6 +47,14 @@ package() {
   install -Dm644 linux/99-pc-gamepak.rules \
     "$pkgdir/usr/lib/udev/rules.d/99-pc-gamepak.rules"
 
+  # Without these the window carries pacman's/the desktop's generic fallback
+  # icon everywhere it appears, because nothing tells the desktop which
+  # app_id is ours or what it looks like.
+  install -Dm644 linux/pc-gamepak.desktop \
+    "$pkgdir/usr/share/applications/pc-gamepak.desktop"
+  install -Dm644 tauri-ui/src-tauri/icons/128x128.png \
+    "$pkgdir/usr/share/icons/hicolor/128x128/apps/pc-gamepak.png"
+
   install -Dm644 cartridge.conf.example \
     "$pkgdir/usr/share/doc/$pkgname/cartridge.conf.example"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"

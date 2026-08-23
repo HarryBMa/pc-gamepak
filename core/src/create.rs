@@ -123,6 +123,15 @@ pub struct CartridgeRequest {
     /// Absolute path to a user-chosen cover image instead.
     #[serde(default)]
     pub cover_source: Option<String>,
+    /// Absolute path to a user-chosen Explorer icon for a single game.
+    #[serde(default)]
+    pub icon_source: Option<String>,
+    /// Absolute path to a user-chosen launcher background for a single game.
+    #[serde(default)]
+    pub background_source: Option<String>,
+    /// Absolute path to a user-chosen title logo for a single game.
+    #[serde(default)]
+    pub logo_source: Option<String>,
     /// Format the drive first. `format_confirmation` must match the drive's
     /// current label or nothing happens.
     #[serde(default)]
@@ -152,6 +161,15 @@ pub struct CartridgeRequest {
     /// Absolute path to the collection's cover image for a bundle.
     #[serde(default)]
     pub collection_cover_source: Option<String>,
+    /// Absolute path to the collection's Explorer icon.
+    #[serde(default)]
+    pub collection_icon_source: Option<String>,
+    /// Absolute path to the collection's launcher background.
+    #[serde(default)]
+    pub collection_background_source: Option<String>,
+    /// Absolute path to the collection's launcher title logo.
+    #[serde(default)]
+    pub collection_logo_source: Option<String>,
     /// Close Steam if it is in the way.
     ///
     /// Steam holds its library list in memory and writes it out when it exits,
@@ -438,8 +456,9 @@ pub fn create_cartridge(
     };
 
     // Never trust the window's idea of where to write. The allowed set is
-    // re-derived and an exact match required.
-    let root = resolve_target(&request.drive_path)?;
+    // re-derived and an exact match required. Mutable: formatting can move
+    // this (see the format step below).
+    let mut root = resolve_target(&request.drive_path)?;
 
     // Every file copied across, with the sum taken as it was written. Only
     // filled in when the build was asked to check its own work.
@@ -488,13 +507,25 @@ pub fn create_cartridge(
             total_bytes: 0,
         });
 
-        format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
+        // A fresh filesystem gets a fresh label, and on Linux the desktop
+        // automounts by label — so the drive very often does not come back at
+        // the path it was just at. Remember which device is actually behind
+        // `root` before formatting erases that mapping, so it can be found
+        // again afterward under whatever new name it gets, if format_drive's
+        // own attempt below did not already resolve it.
+        let device = current_device(&root);
+
+        let remounted = format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
             .map_err(|e| e.to_string())?;
         result.formatted = true;
         result.formatted_filesystem = Some(filesystem);
 
-        // The mount point may take a moment to come back after mkfs.
-        wait_for_mount(&root);
+        // format_drive already tries to mount the fresh filesystem itself;
+        // this only falls back to polling when that did not land in time.
+        root = match remounted {
+            Some(path) => PathBuf::from(path),
+            None => wait_for_remount(root, device.as_deref())?,
+        };
     }
 
     // ---- 2. Bundle mode: build every game, then bail early ---------------
@@ -615,6 +646,27 @@ pub fn create_cartridge(
             },
             None => None,
         };
+        let collection_icon = request
+            .collection_icon_source
+            .as_deref()
+            .map(Path::new)
+            .filter(|path| path.is_file())
+            .and_then(|source| copy_cover(source, &root, "icon").ok())
+            .map(|name| root.join(name));
+        let collection_background = request
+            .collection_background_source
+            .as_deref()
+            .map(Path::new)
+            .filter(|path| path.is_file())
+            .and_then(|source| copy_cover(source, &root, "background").ok())
+            .map(|name| root.join(name));
+        let collection_logo = request
+            .collection_logo_source
+            .as_deref()
+            .map(Path::new)
+            .filter(|path| path.is_file())
+            .and_then(|source| copy_cover(source, &root, "logo").ok())
+            .map(|name| root.join(name));
         result.cover_written = collection_cover.is_some();
 
         // ---- cartridge.conf -----------------------------------------------
@@ -625,6 +677,18 @@ pub fn create_cartridge(
         let conf = render_bundle_conf(
             &title,
             collection_cover
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            collection_icon
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            collection_background
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            collection_logo
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .and_then(|n| n.to_str()),
@@ -642,7 +706,11 @@ pub fn create_cartridge(
             done_bytes: 0,
             total_bytes: 0,
         });
-        match autorun::write_autorun(&root, &title, collection_cover.as_deref()) {
+        match autorun::write_autorun(
+            &root,
+            &title,
+            collection_icon.as_deref().or(collection_cover.as_deref()),
+        ) {
             Ok(icon) => {
                 result.autorun_written = true;
                 result.icon = icon;
@@ -719,14 +787,42 @@ pub fn create_cartridge(
     };
     result.cover_written = cover_destination.is_some();
 
+    // The launcher's title logo, background and Explorer icon — each optional,
+    // unrelated to the cover and to each other, and never guessed at: only
+    // copied when the wizard (or SteamGridDB through it) actually chose one.
+    let icon_destination = request
+        .icon_source
+        .as_deref()
+        .map(Path::new)
+        .filter(|path| path.is_file())
+        .and_then(|source| copy_cover(source, &root, "icon").ok())
+        .map(|name| root.join(name));
+    let background_destination = request
+        .background_source
+        .as_deref()
+        .map(Path::new)
+        .filter(|path| path.is_file())
+        .and_then(|source| copy_cover(source, &root, "background").ok())
+        .map(|name| root.join(name));
+    let logo_destination = request
+        .logo_source
+        .as_deref()
+        .map(Path::new)
+        .filter(|path| path.is_file())
+        .and_then(|source| copy_cover(source, &root, "logo").ok())
+        .map(|name| root.join(name));
+
     // ---- 5. cartridge.conf ----------------------------------------------
+    fn file_name(p: &Option<PathBuf>) -> Option<&str> {
+        p.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str())
+    }
     let conf = render_cartridge_conf(
         &title,
         &executable,
-        cover_destination
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str()),
+        file_name(&cover_destination),
+        file_name(&icon_destination),
+        file_name(&background_destination),
+        file_name(&logo_destination),
     );
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
@@ -741,11 +837,12 @@ pub fn create_cartridge(
         total_bytes: 0,
     });
 
-    match autorun::write_autorun(&root, &title, cover_destination.as_deref()) {
+    let autorun_source = icon_destination.as_deref().or(cover_destination.as_deref());
+    match autorun::write_autorun(&root, &title, autorun_source) {
         Ok(icon) => {
             result.autorun_written = true;
             result.icon = icon;
-            if result.cover_written && result.icon.is_none() {
+            if autorun_source.is_some() && result.icon.is_none() {
                 warnings.push(
                     "Explorer needs an .ico for a custom drive icon and the cover is a JPEG, \
                      so the drive keeps its default icon. Drop a cover.ico on the cartridge \
@@ -1306,7 +1403,7 @@ fn copy_steam_game(
             .ok_or_else(|| "the manifest has no filename".to_string())?,
     );
     std::fs::create_dir_all(root.join("steamapps"))
-        .and_then(|_| std::fs::copy(&game.manifest_path, &manifest_destination).map(|_| ()))
+        .and_then(|_| copy_small_file(&game.manifest_path, &manifest_destination))
         .map_err(|e| format!("could not copy the app manifest: {e}"))?;
 
     progress(Progress {
@@ -1332,13 +1429,53 @@ fn copy_steam_game(
 }
 
 /// After a format the mount point can briefly disappear.
-fn wait_for_mount(root: &Path) {
+/// The device node currently mounted at `path`, if any.
+///
+/// Only meaningful on Linux, where a device can be looked up in
+/// `/proc/mounts`; on Windows the drive letter is the handle used throughout
+/// a format, so there is nothing to remember ahead of time.
+#[cfg(not(windows))]
+fn current_device(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string("/proc/mounts").ok()?;
+    drives::parse_proc_mounts(&text)
+        .into_iter()
+        .find(|entry| entry.mount == path)
+        .map(|entry| entry.device)
+}
+
+#[cfg(windows)]
+fn current_device(_path: &Path) -> Option<String> {
+    None
+}
+
+/// Wait for the drive to come back after formatting.
+///
+/// On Windows the drive letter survives a format, so this just polls `path`
+/// itself. On Linux the desktop automounts by volume label, so a freshly
+/// labelled filesystem can land at an entirely new path; when the device that
+/// used to be at `path` is known, this looks for wherever *it* ended up
+/// instead of waiting on a path that may never reappear.
+fn wait_for_remount(path: PathBuf, device: Option<&str>) -> Result<PathBuf, String> {
     for _ in 0..40 {
-        if root.is_dir() {
-            return;
+        if path.is_dir() {
+            return Ok(path);
+        }
+        if let Some(device) = device {
+            if let Ok(text) = std::fs::read_to_string("/proc/mounts") {
+                if let Some(entry) = drives::parse_proc_mounts(&text)
+                    .into_iter()
+                    .find(|entry| entry.device == device)
+                {
+                    return Ok(entry.mount);
+                }
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
+    Err(format!(
+        "{} did not come back after formatting. Reconnect the drive and try again.",
+        path.display()
+    ))
 }
 
 /// A default volume name derived from the title, for the default filesystem.
@@ -1467,9 +1604,35 @@ pub(crate) fn copy_cover(source: &Path, root: &Path, stem: &str) -> Result<Strin
         .unwrap_or_else(|| "jpg".to_string());
     let relative = format!("{stem}.{extension}");
 
-    std::fs::copy(source, root.join(&relative))
+    copy_small_file(source, &root.join(&relative))
         .map_err(|e| format!("could not write {}: {e}", root.join(&relative).display()))?;
     Ok(relative)
+}
+
+/// Copy one small file without the OS fast path.
+///
+/// `std::fs::copy` (and `std::io::copy` between two `File`s) can try
+/// `copy_file_range`/`sendfile` on Linux, which some FUSE filesystems don't
+/// implement — an exFAT driver has been observed failing both calls above
+/// with ENOSYS even though the destination mount is otherwise writable. A
+/// manual buffer loop sidesteps that fast path entirely; both files here are
+/// small enough (a manifest, a cover under `MAX_COVER_BYTES`) that losing it
+/// costs nothing worth trading reliability for.
+fn copy_small_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::io::{Read, Write};
+
+    let mut source = std::fs::File::open(from)?;
+    let mut destination = std::fs::File::create(to)?;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = source.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        destination.write_all(&buffer[..read])?;
+    }
+    destination.sync_all()?;
+    Ok(())
 }
 
 /// Strip anything that would corrupt the `key=value` file.
@@ -1536,7 +1699,14 @@ pub fn validate_executable(executable: &str, root: &Path) -> Result<(), String> 
 }
 
 /// Render the conf file, with a header explaining where it came from.
-pub fn render_cartridge_conf(title: &str, executable: &str, cover: Option<&str>) -> String {
+pub fn render_cartridge_conf(
+    title: &str,
+    executable: &str,
+    cover: Option<&str>,
+    icon: Option<&str>,
+    background: Option<&str>,
+    logo: Option<&str>,
+) -> String {
     let mut out = String::new();
     out.push_str("# PC GamePak\n");
     out.push_str("# Written by the create-cartridge wizard. Safe to edit by hand.\n");
@@ -1546,6 +1716,15 @@ pub fn render_cartridge_conf(title: &str, executable: &str, cover: Option<&str>)
     if let Some(cover) = cover {
         out.push_str(&format!("cover={cover}\n"));
     }
+    if let Some(icon) = icon {
+        out.push_str(&format!("icon={icon}\n"));
+    }
+    if let Some(background) = background {
+        out.push_str(&format!("background={background}\n"));
+    }
+    if let Some(logo) = logo {
+        out.push_str(&format!("logo={logo}\n"));
+    }
     out
 }
 
@@ -1554,6 +1733,9 @@ pub fn render_cartridge_conf(title: &str, executable: &str, cover: Option<&str>)
 pub fn render_bundle_conf(
     collection_title: &str,
     collection_cover: Option<&str>,
+    collection_icon: Option<&str>,
+    collection_background: Option<&str>,
+    collection_logo: Option<&str>,
     games: &[(&str, &str, Option<&str>)],
 ) -> String {
     let mut out = String::new();
@@ -1564,6 +1746,15 @@ pub fn render_bundle_conf(
     out.push_str(&format!("title={collection_title}\n"));
     if let Some(cover) = collection_cover {
         out.push_str(&format!("cover={cover}\n"));
+    }
+    if let Some(icon) = collection_icon {
+        out.push_str(&format!("icon={icon}\n"));
+    }
+    if let Some(background) = collection_background {
+        out.push_str(&format!("background={background}\n"));
+    }
+    if let Some(logo) = collection_logo {
+        out.push_str(&format!("logo={logo}\n"));
     }
     out.push('\n');
     for (title, executable, cover) in games {
@@ -1686,11 +1877,22 @@ mod tests {
             "Hollow Knight",
             "steam://rungameid/367520",
             Some("cover.jpg"),
+            Some("icon.ico"),
+            Some("background.jpg"),
+            Some("logo.png"),
         );
         assert!(conf.contains("title=Hollow Knight\n"));
         assert!(conf.contains("executable=steam://rungameid/367520\n"));
         assert!(conf.contains("cover=cover.jpg\n"));
-        assert!(!render_cartridge_conf("X", "steam://rungameid/1", None).contains("cover="));
+        assert!(conf.contains("icon=icon.ico\n"));
+        assert!(conf.contains("background=background.jpg\n"));
+        assert!(conf.contains("logo=logo.png\n"));
+
+        let bare = render_cartridge_conf("X", "steam://rungameid/1", None, None, None, None);
+        assert!(!bare.contains("cover="));
+        assert!(!bare.contains("icon="));
+        assert!(!bare.contains("background="));
+        assert!(!bare.contains("logo="));
     }
 
     #[test]
@@ -1965,6 +2167,9 @@ mod tests {
         let conf = render_bundle_conf(
             "God of War Collection",
             Some("collection.jpg"),
+            None,
+            None,
+            None,
             &[
                 (
                     "God of War",

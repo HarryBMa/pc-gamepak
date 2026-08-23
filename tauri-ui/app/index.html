@@ -54,9 +54,11 @@
 
     <!-- The game, and the only two things to do with it -->
     <footer id="stage">
+      <img id="title-logo" alt="" hidden />
       <h1 id="game-title">Reading cartridge…</h1>
 
-      <p id="notice" hidden></p>
+      <!-- The only explanation of why Play is disabled, so it is announced. -->
+      <p id="notice" role="status" hidden></p>
 
       <!-- Single-game mode: one Play button -->
       <div id="button-row">
@@ -96,6 +98,11 @@
         <dl id="specs"></dl>
         <div id="health" hidden></div>
       </div>
+      <footer id="sheet-footer">
+        <button id="btn-open-settings" class="sheet-link" type="button">
+          Settings…
+        </button>
+      </footer>
     </aside>
 
     <p id="toast" role="status" aria-live="polite"></p>
