@@ -1,34 +1,25 @@
 /**
- * Create-cartridge wizard.
+ * PC GamePak — create.js
  *
- * Backend contract (src-tauri/src/create.rs):
- *   list_games()                     -> { games: [{ id, name, library, source,
- *                                          sizeOnDisk, hasCover, executable,
- *                                          canCopy }],
- *                                          problems: ["why a library is absent"] }
- *   game_cover({ library, id })      -> "data:image/…" | ""
- *   get_settings()                    -> { steamgriddbEnabled, steamgriddbApiKey }
- *   set_settings({ settings })        -> the settings as stored
- *   suggest_collection_name({ titles }) -> "God of War Collection"
- *   sgdb_search_games({ query })      -> [{ id, name }]
- *   sgdb_get_artwork({ gameId, artType }) -> [{ id, url, thumb, width, height }]
- *   sgdb_download_artwork({ url, cacheKey, gameKey? }) -> { path, dataUri }
- *   sgdb_last_used_artwork({ gameKey }) -> { path, dataUri } | null
- *   pick_cover_image()               -> { path, preview } | null
- *   pick_game_folder()               -> { path, name, sizeBytes, choices[] } | null
- *   host_platform()                  -> "windows" | "linux" | …
- *   read_cartridge_for_edit({ drivePath }) -> { title, cover, games[], … }
- *   update_cartridge({ request })    -> { confPath, coverWritten, warnings[] }
- *   tuning_plan({ drivePath, tweaks, applying })  -> [command, …]
- *   apply_tuning({ drivePath, tweaks, applying }) -> [what was done, …]
+ * The wizard. Selection is always multiple: ticking one game builds a
+ * cartridge, ticking three builds a multicartridge, and the rail on the right
+ * titles itself to match. There is no bundle mode to enter and no + to find.
+ *
+ * The left column moves through phases — the library, then a name and a face
+ * if there is more than one game, then what to put on it, then the write
+ * itself. The rail never changes place: it always says what is being built.
+ *
+ * Backend contract (src-tauri/src/main.rs):
+ *   list_games()                     -> { games, problems }
  *   list_target_drives()             -> [{ path, label, totalBytes, freeBytes, hasCartridge }]
- *   format_plan({ drivePath })       -> { path, currentLabel, device, totalBytes, warning }
- *   executable_choices({ playniteId } | { sourceDir, title })
- *                                    -> [{ relative, name, score }]  best first
- *   create_cartridge({ request })    -> { confPath, coverWritten, autorunWritten, icon,
- *                                          formatted, formattedFilesystem,
- *                                          gameCopied, bytesCopied,
- *                                          registeredWithSteam, gameFolder, warnings }
+ *   game_cover({ library, id })      -> data URI or ""
+ *   executable_choices({ ... })      -> [{ relative, name, score }]
+ *   format_plan({ drivePath })       -> { currentLabel, device, totalBytes, warning }
+ *   steam_registration({ drivePath })-> bool
+ *   suggest_collection_name({ titles }) -> string
+ *   pick_cover_image()               -> { path, preview } | null
+ *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
+ *   create_cartridge({ request })    -> { confPath, formatted, gameCopied, ... }
  *
  * The backend re-derives the list of writable drives and re-checks the format
  * confirmation itself, so nothing here can talk it into writing to the wrong
@@ -38,155 +29,205 @@
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke ?? demoInvoke;
 
+const $ = (id) => document.getElementById(id);
+
 const el = {
-  search: document.getElementById("search"),
-  games: document.getElementById("games"),
-  gamesEmpty: document.getElementById("games-empty"),
-  custom: document.getElementById("custom"),
-  customTitle: document.getElementById("custom-title"),
-  customExec: document.getElementById("custom-exec"),
-  btnCustom: document.getElementById("btn-custom"),
-  btnPickFolder: document.getElementById("btn-pick-folder"),
-  btnClearFolder: document.getElementById("btn-clear-folder"),
-  folderChosen: document.getElementById("folder-chosen"),
-  previewArt: document.getElementById("preview-art"),
-  previewImg: document.getElementById("preview-img"),
-  previewTitle: document.getElementById("preview-title"),
-  previewSub: document.getElementById("preview-sub"),
-  previewGames: document.getElementById("preview-games"),
-  previewSource: document.getElementById("preview-source"),
-  previewEyebrow: document.getElementById("preview-eyebrow"),
-  btnSgdb: document.getElementById("btn-sgdb"),
-  btnGameLogo: document.getElementById("btn-game-logo"),
-  btnGameBackground: document.getElementById("btn-game-background"),
-  btnGameIcon: document.getElementById("btn-game-icon"),
-  drives: document.getElementById("drives"),
-  drivesEmpty: document.getElementById("drives-empty"),
-  driveSpace: document.getElementById("drive-space"),
-  optCopy: document.getElementById("opt-copy"),
-  optCopyHint: document.getElementById("opt-copy-hint"),
-  exePick: document.getElementById("exe-pick"),
-  exeChoices: document.getElementById("exe-choices"),
-  exeHint: document.getElementById("exe-hint"),
-  optFormat: document.getElementById("opt-format"),
-  formatFields: document.getElementById("format-fields"),
-  formatFilesystem: document.getElementById("format-filesystem"),
-  filesystemHint: document.getElementById("filesystem-hint"),
-  labelHint: document.getElementById("label-hint"),
-  formatLabel: document.getElementById("format-label"),
-  formatConfirm: document.getElementById("format-confirm"),
-  formatWarning: document.getElementById("format-warning"),
-  confirmLabel: document.getElementById("confirm-label"),
-  create: document.getElementById("btn-create"),
-  rescan: document.getElementById("btn-rescan"),
-  unregister: document.getElementById("btn-unregister"),
-  close: document.getElementById("btn-close"),
-  progress: document.getElementById("progress"),
-  progressTrack: document.getElementById("progress-track"),
-  progressFill: document.getElementById("progress-fill"),
-  progressText: document.getElementById("progress-text"),
-  status: document.getElementById("status"),
-  readyMessage: document.getElementById("ready-message"),
-  optCopyLabel: document.getElementById("opt-copy-label"),
-  optCloseSteamRow: document.getElementById("opt-close-steam-row"),
-  optCloseSteam: document.getElementById("opt-close-steam"),
-  optVerifyRow: document.getElementById("opt-verify-row"),
-  optVerify: document.getElementById("opt-verify"),
-  optTrimRow: document.getElementById("opt-trim-row"),
-  optTrim: document.getElementById("opt-trim"),
-  optTuneRow: document.getElementById("opt-tune-row"),
-  optTune: document.getElementById("opt-tune"),
-  btnTuneCommands: document.getElementById("btn-tune-commands"),
-  btnTuneUndo: document.getElementById("btn-tune-undo"),
-  btnCollectionCover: document.getElementById("btn-collection-cover"),
-  btnCollectionGridSgdb: document.getElementById("btn-collection-grid-sgdb"),
-  btnCollectionLogo: document.getElementById("btn-collection-logo"),
-  btnCollectionIcon: document.getElementById("btn-collection-icon"),
-  btnCollectionBackground: document.getElementById("btn-collection-background"),
-  btnCollectionCoverClear: document.getElementById("btn-collection-cover-clear"),
-  btnEdit: document.getElementById("btn-edit"),
-  editDialog: document.getElementById("edit-dialog"),
-  editClose: document.getElementById("edit-close"),
-  editTitle: document.getElementById("edit-title"),
-  editGames: document.getElementById("edit-games"),
-  editGamesHint: document.getElementById("edit-games-hint"),
-  editSave: document.getElementById("edit-save"),
-  editStatus: document.getElementById("edit-status"),
-  btnEditCover: document.getElementById("btn-edit-cover"),
-  editCoverName: document.getElementById("edit-cover-name"),
-  btnSettings: document.getElementById("btn-settings"),
-  settingsDialog: document.getElementById("settings-dialog"),
-  settingsClose: document.getElementById("settings-close"),
-  settingsSave: document.getElementById("settings-save"),
-  settingsStatus: document.getElementById("settings-status"),
-  setSgdb: document.getElementById("set-sgdb"),
-  setSgdbKey: document.getElementById("set-sgdb-key"),
-  sgdbKeyField: document.getElementById("sgdb-key-field"),
-  sgdbDialog: document.getElementById("sgdb-dialog"),
-  sgdbSearch: document.getElementById("sgdb-search"),
-  sgdbType: document.getElementById("sgdb-type"),
-  sgdbStatus: document.getElementById("sgdb-status"),
-  sgdbResults: document.getElementById("sgdb-results"),
-  sgdbManualUrl: document.getElementById("sgdb-manual-url"),
-  sgdbUseManual: document.getElementById("sgdb-use-manual"),
-  // Bundle UI
-  bundlePanel: document.getElementById("bundle-panel"),
-  bundleList: document.getElementById("bundle-list"),
-  bundleSpace: document.getElementById("bundle-space"),
-  collectionMeta: document.getElementById("collection-meta"),
-  collectionTitle: document.getElementById("collection-title"),
+  shell: $("shell"),
+  barText: $("bar-text"),
+  settings: $("btn-settings"),
+  close: $("btn-close"),
+
+  phases: {
+    games: $("step-games"),
+    custom: $("step-custom"),
+    name: $("step-name"),
+    options: $("step-options"),
+    running: $("step-running"),
+  },
+
+  tickCount: $("tick-count"),
+  search: $("search"),
+  games: $("games"),
+  gamesEmpty: $("games-empty"),
+  btnCustom: $("btn-custom"),
+
+  // By hand
+  customCover: $("custom-cover"),
+  btnCustomCover: $("btn-custom-cover"),
+  btnPickFolder: $("btn-pick-folder"),
+  btnClearFolder: $("btn-clear-folder"),
+  folderChosen: $("folder-chosen"),
+  customTitle: $("custom-title"),
+  titleHint: $("title-hint"),
+  exeChoices: $("exe-choices"),
+  exeHint: $("exe-hint"),
+  customExec: $("custom-exec"),
+  btnCustomBack: $("btn-custom-back"),
+
+  // Name it
+  collectionCover: $("collection-cover"),
+  collectionCoverImg: $("collection-cover-img"),
+  btnCollectionCover: $("btn-collection-cover"),
+  btnInheritCover: $("btn-inherit-cover"),
+  collectionTitle: $("collection-title"),
+  collectionNameHint: $("collection-name-hint"),
+  orderList: $("order-list"),
+
+  // Options
+  optCopy: $("opt-copy"),
+  optCopyLabel: $("opt-copy-label"),
+  optCopyHint: $("opt-copy-hint"),
+  optCloseSteamRow: $("opt-close-steam-row"),
+  optCloseSteam: $("opt-close-steam"),
+  optCloseSteamHint: $("opt-close-steam-hint"),
+  optVerifyRow: $("opt-verify-row"),
+  optVerify: $("opt-verify"),
+  optVerifyHint: $("opt-verify-hint"),
+  optIcon: $("opt-icon"),
+  optTuneRow: $("opt-tune-row"),
+  optTune: $("opt-tune"),
+  btnTuneCommands: $("btn-tune-commands"),
+  btnTuneUndo: $("btn-tune-undo"),
+  optTrimRow: $("opt-trim-row"),
+  optTrim: $("opt-trim"),
+  optEject: $("opt-eject"),
+  optFormat: $("opt-format"),
+  optFormatHint: $("opt-format-hint"),
+  formatFields: $("format-fields"),
+  formatLabel: $("format-label"),
+  formatConfirm: $("format-confirm"),
+  confirmLabel: $("confirm-label"),
+  labelHintText: $("label-hint-text"),
+  formatWarning: $("format-warning"),
+  btnOptionsBack: $("btn-options-back"),
+
+  // Running
+  runningPhase: $("running-phase"),
+  runningTitle: $("running-title"),
+  writtenDone: $("written-done"),
+  writtenTotal: $("written-total"),
+  remaining: $("remaining"),
+  progressTrack: $("progress-track"),
+  progressFill: $("progress-fill"),
+  rate: $("rate"),
+  currentFile: $("current-file"),
+  log: $("log"),
+
+  // Rail
+  railEmpty: $("rail-empty"),
+  railBody: $("rail-body"),
+  railKindText: $("rail-kind-text"),
+  railKindCount: $("rail-kind-count"),
+  railCover: $("rail-cover"),
+  railCoverImg: $("rail-cover-img"),
+  railTitle: $("rail-title"),
+  railSub: $("rail-sub"),
+  btnRailArt: $("btn-rail-art"),
+  railGames: $("rail-games"),
+  railGameList: $("rail-game-list"),
+  railSpace: $("rail-space"),
+  railDriveLabel: $("rail-drive-label"),
+  railDriveFill: $("rail-drive-fill"),
+  railBar: $("rail-bar"),
+  railBarHint: $("rail-bar-hint"),
+  railDrives: $("rail-drives"),
+  drives: $("drives"),
+  drivesEmpty: $("drives-empty"),
+  btnEdit: $("btn-edit"),
+  btnUnregister: $("btn-unregister"),
+  railPlan: $("rail-plan"),
+  plan: $("plan"),
+  railForced: $("rail-forced"),
+  forced: $("forced"),
+  readyMessage: $("ready-message"),
+  btnOptions: $("btn-options"),
+  create: $("btn-create"),
+  createLabel: document.querySelector("#btn-create .btn__label"),
+  status: $("status"),
+
+  // Dialogs
+  editDialog: $("edit-dialog"),
+  editTitle: $("edit-title"),
+  btnEditCover: $("btn-edit-cover"),
+  editCoverName: $("edit-cover-name"),
+  editGames: $("edit-games"),
+  editGamesHint: $("edit-games-hint"),
+  editSave: $("edit-save"),
+  editStatus: $("edit-status"),
+
+  settingsDialog: $("settings-dialog"),
+  sources: $("sources"),
+  scanAge: $("scan-age"),
+  btnRescan: $("btn-rescan"),
+  setSgdb: $("set-sgdb"),
+  sgdbKeyField: $("sgdb-key-field"),
+  setSgdbKey: $("set-sgdb-key"),
+  setFilesystem: $("set-filesystem"),
+  setVerify: $("set-verify"),
+  setIcon: $("set-icon"),
+  setEject: $("set-eject"),
+  settingsSave: $("settings-save"),
+  settingsStatus: $("settings-status"),
+
+  sgdbDialog: $("sgdb-dialog"),
+  sgdbTabs: $("sgdb-tabs"),
+  sgdbSearch: $("sgdb-search"),
+  sgdbStatus: $("sgdb-status"),
+  sgdbResults: $("sgdb-results"),
+  icoReceipt: $("ico-receipt"),
+  sgdbManualUrl: $("sgdb-manual-url"),
+  sgdbUseManual: $("sgdb-use-manual"),
+  previewArt: $("preview-art"),
+  previewHero: $("preview-hero"),
+  previewGrid: $("preview-grid"),
+  previewStage: $("preview-stage"),
+  previewLogo: $("preview-logo"),
+  previewTitle: $("preview-title"),
+  previewIcon: $("preview-icon"),
 };
 
-let games = [];
+/* ==========================================================================
+   State
+   ========================================================================== */
+
+let library = [];
 let drives = [];
-let selectedGame = null;
+/** Ticked games, in the order they were ticked — which is the play order. */
+let picked = [];
 let selectedDrive = null;
-let manualMode = false;
-/**
- * The game folder the user pointed at, when they did.
- *
- * `{ path, name, sizeBytes, choices }`. This is what makes a cartridge of a
- * game no launcher knows about: the folder is copied and Play is pointed at
- * a file inside it, exactly as for a Playnite game with an install directory.
- */
-let chosenFolder = null;
-/** What the backend says formatting the chosen drive would destroy. */
 let formatPlan = null;
 let building = false;
-/** Candidates for what Play should start, when copying a non-Steam game. */
-let exeCandidates = [];
-let selectedCoverSource = null;
-/** True while the drive name is the one we derived, not one that was typed. */
-let labelIsOurs = true;
-/** Which OS this is, so the wizard offers only what exists here. */
 let platform = "";
-/** The Windows settings this wizard knows how to change, and put back. */
-const TWEAKS = ["defender", "indexing"];
-/** What the user has switched on. Offline until they say otherwise. */
-let settings = { steamgriddbEnabled: false, steamgriddbApiKey: "" };
-/** Artwork chosen for the collection: { path, preview }. */
-let collectionCover = null;
-let collectionLogo = null;
-let collectionIcon = null;
-let collectionBackground = null;
-/** Same three, for a single game rather than a collection. */
-let gameLogo = null;
-let gameIcon = null;
-let gameBackground = null;
-let artworkTarget = null;
-/** The cartridge being edited, once one has been read. */
-let editing = null;
-/** True when Steam already lists the selected drive as a library folder. */
 let driveIsSteamLibrary = false;
-let sgdbSearchTimer = null;
-let sgdbResultsFor = [];
-let sgdbSelectedGameId = null;
-let sgdbSearchNonce = 0;
-const sgdbThumbCache = new Map();
-/** Games added to the bundle (Map of game.id → game object). Order preserved. */
-let bundleGames = new Map();
+let labelIsOurs = true;
+let scannedAt = null;
 
-/* ========================================================================== */
+/** Artwork chosen by hand, per role. */
+const art = { cover: null, logo: null, icon: null, background: null };
+
+/** The by-hand game, when one is being entered. */
+let manual = null;
+
+/** Set once the user has had an opinion about copying, so we stop guessing. */
+let copyTouched = false;
+
+let settings = {
+  steamgriddbEnabled: false,
+  steamgriddbApiKey: "",
+  defaultFilesystem: "exfat",
+  defaultVerify: false,
+  defaultIcon: true,
+  defaultEject: true,
+};
+
+let editing = null;
+
+/** Which phase the left column is showing. */
+let phase = "games";
+
+/* ==========================================================================
+   Small helpers
+   ========================================================================== */
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "—";
@@ -200,615 +241,462 @@ function formatBytes(bytes) {
   return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+/** "about 11 minutes" — never a false precision, and never a bare number. */
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  if (seconds < 90) return `about ${Math.max(10, Math.round(seconds / 10) * 10)} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `about ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `about ${hours} h ${rest} min` : `about ${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+/** mm:ss, for a countdown that is being watched. */
+function clock(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function status(message, kind = "") {
   el.status.textContent = message;
-  el.status.className = kind ? `is-${kind}` : "";
+  el.status.className = kind ? `selectable is-${kind}` : "selectable";
 }
 
-/* ------------------------------------------------------------------ games */
-
-function renderGames() {
-  const query = el.search.value.trim().toLowerCase();
-  const matches = query
-    ? games.filter(
-        (g) =>
-          g.name.toLowerCase().includes(query) ||
-          g.source.toLowerCase().includes(query),
-      )
-    : games;
-
-  el.games.replaceChildren();
-
-  for (const game of matches) {
-    const li = document.createElement("li");
-    // An option has to be owned by the listbox; a plain listitem in between
-    // orphans it and aria-selected is dropped on the floor.
-    li.setAttribute("role", "presentation");
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "row";
-    row.setAttribute("role", "option");
-    const inBundle = bundleGames.has(game.id);
-    row.setAttribute(
-      "aria-selected",
-      String(!manualMode && (selectedGame?.id === game.id || inBundle)),
-    );
-    if (inBundle) row.classList.add("in-bundle");
-
-    const name = document.createElement("span");
-    name.className = "row__name";
-    name.textContent = game.name;
-
-    const meta = document.createElement("span");
-    meta.className = "row__meta";
-    // The source is the useful column when the list spans several launchers.
-    const bits = [game.source || "", game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : ""];
-    meta.textContent = bits.filter(Boolean).join(" · ");
-
-    // Bundle toggle: "+" to add, "✓ Added" to remove.
-    const bundleBtn = document.createElement("button");
-    bundleBtn.type = "button";
-    bundleBtn.className = `row__bundle-btn${inBundle ? " is-added" : ""}`;
-    bundleBtn.title = inBundle ? "Remove from bundle" : "Add to bundle";
-    bundleBtn.setAttribute("aria-label", inBundle ? `Remove ${game.name} from bundle` : `Add ${game.name} to bundle`);
-    bundleBtn.textContent = inBundle ? "✓" : "+";
-    bundleBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleBundleGame(game);
-    });
-
-    row.append(name, meta);
-    row.addEventListener("click", () => selectGame(game));
-    li.append(row, bundleBtn);
-    el.games.append(li);
-  }
-
-  const nothing = matches.length === 0;
-  el.gamesEmpty.hidden = !nothing;
-  if (nothing && query) {
-    el.gamesEmpty.textContent = `Nothing matches “${el.search.value.trim()}”.`;
-  }
-}
-
-async function selectGame(game) {
-  manualMode = false;
-  el.custom.hidden = true;
-  selectedGame = game;
-  selectedCoverSource = null;
-  gameLogo = null;
-  gameIcon = null;
-  gameBackground = null;
-  resetGameArtButtonLabels();
-  // The folder belonged to the by-hand entry that is being left behind.
-  chosenFolder = null;
-  renderChosenFolder();
-
-  el.previewTitle.textContent = game.name;
-  el.previewSub.textContent = game.executable;
-  el.previewGames.hidden = true;
-  el.previewGames.replaceChildren();
-  setPreviewArt("", "");
-  renderGames();
-  refreshOptions();
-  refreshCreateButton();
-
-  const gameKey = `${game.library}:${game.id}:game`;
-  try {
-    const cached = await invoke("sgdb_last_used_artwork", { gameKey });
-    if (cached?.dataUri && selectedGame?.id === game.id) {
-      selectedCoverSource = cached.path;
-      setPreviewArt(cached.dataUri, "From SteamGridDB");
-      return;
-    }
-  } catch {
-    // Cache miss or unavailable cache index.
-  }
-
-  if (game.hasCover) {
-    try {
-      const uri = await invoke("game_cover", { library: game.library, id: game.id });
-      if (uri && selectedGame?.id === game.id) setPreviewArt(uri, "");
-    } catch {
-      // No art is not an error.
-    }
-  }
-}
-
-function safePreviewSrc(src) {
-  const value = String(src || "").trim();
-  if (!value) return "";
+function safeSrc(src) {
+  const value = String(src ?? "");
+  // A cover arrives as a data: URI from Rust, or a relative path in the browser
+  // preview. Nothing else may reach an img src.
   if (value.startsWith("data:image/")) return value;
-  try {
-    const parsed = new URL(value, window.location.href);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
-    if (parsed.protocol === "file:") return parsed.href;
-  } catch {
-    return "";
-  }
+  if (/^[\w./-]+$/.test(value) && !value.startsWith("//")) return value;
   return "";
 }
 
-function setPreviewArt(src, source = "") {
-  const safeSrc = safePreviewSrc(src);
-  if (safeSrc) {
-    el.previewImg.hidden = false;
-    el.previewImg.src = safeSrc;
-    el.previewArt.classList.add("has-art");
+/** Put art into a .plate, or take it away. */
+function setPlate(plate, img, src) {
+  const safe = safeSrc(src);
+  if (safe) {
+    img.src = safe;
+    img.hidden = false;
+    plate.classList.add("has-art");
   } else {
-    el.previewImg.hidden = true;
-    el.previewImg.removeAttribute("src");
-    el.previewArt.classList.remove("has-art");
+    img.hidden = true;
+    img.removeAttribute("src");
+    plate.classList.remove("has-art");
   }
-  el.previewSource.hidden = !source;
-  el.previewSource.textContent = source || "";
 }
 
-function enterManualMode() {
-  manualMode = true;
-  selectedGame = null;
-  selectedCoverSource = null;
-  gameLogo = null;
-  gameIcon = null;
-  gameBackground = null;
-  resetGameArtButtonLabels();
-  el.custom.hidden = false;
-  setPreviewArt("", "");
-  el.previewTitle.textContent = "By hand";
-  el.previewSub.textContent = "No cover art will be copied.";
-  el.previewGames.hidden = true;
-  el.previewGames.replaceChildren();
-  renderChosenFolder();
+/* ==========================================================================
+   Phases
+   ========================================================================== */
+
+function showPhase(next) {
+  phase = next;
+  for (const [name, node] of Object.entries(el.phases)) {
+    node.hidden = name !== next;
+  }
+  el.shell.classList.toggle("is-running", next === "running");
+  refreshRail();
+}
+
+/**
+ * Whether this is one game or several.
+ *
+ * The whole selection model is this predicate: a cartridge takes its name and
+ * art from the game itself, a multicartridge has neither and has to be given
+ * both, which is what step 2 exists for.
+ */
+function isCollection() {
+  return picked.length > 1;
+}
+
+function totalBytes() {
+  return picked.reduce((sum, g) => sum + (g.sizeOnDisk || 0), 0);
+}
+
+/* ==========================================================================
+   Step 1 — the library
+   ========================================================================== */
+
+function matches(game, query) {
+  if (!query) return true;
+  return game.name.toLowerCase().includes(query) ||
+    String(game.source ?? "").toLowerCase().includes(query);
+}
+
+function renderGames() {
+  const query = el.search.value.trim().toLowerCase();
+  const shown = library.filter((g) => matches(g, query));
+
+  el.games.replaceChildren();
+  for (const game of shown) {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    label.className = "game";
+    label.classList.toggle("is-on", picked.some((p) => p.id === game.id));
+
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = picked.some((p) => p.id === game.id);
+    box.addEventListener("change", () => toggle(game, box.checked));
+
+    const name = document.createElement("span");
+    name.className = "game__name";
+    name.textContent = game.name;
+
+    const meta = document.createElement("span");
+    meta.className = "game__meta";
+    const size = document.createElement("span");
+    if (game.sizeOnDisk) {
+      size.textContent = formatBytes(game.sizeOnDisk);
+    } else {
+      // Not installed locally, so there is no size to report and nothing to
+      // copy — the cartridge would be a key to an installed copy.
+      size.textContent = "—";
+      size.className = "is-unknown";
+    }
+    const divider = document.createElement("span");
+    divider.className = "game__divider";
+    const source = document.createElement("span");
+    source.textContent = game.source || game.library || "";
+    meta.append(size, divider, source);
+
+    label.append(box, name, meta);
+    li.append(label);
+    el.games.append(li);
+  }
+
+  el.gamesEmpty.hidden = shown.length > 0;
+  if (shown.length === 0) {
+    el.gamesEmpty.textContent = query
+      ? "Nothing in your library matches that."
+      : "No games found. Steam manifests and a Playnite export are what the wizard reads.";
+  }
+}
+
+function toggle(game, on) {
+  if (on) {
+    if (!picked.some((p) => p.id === game.id)) picked.push(game);
+  } else {
+    picked = picked.filter((p) => p.id !== game.id);
+  }
+  // Ticking a real game supersedes a half-finished by-hand entry.
+  if (picked.length > 0) manual = null;
+  onSelectionChanged();
+}
+
+async function onSelectionChanged() {
   renderGames();
+  renderTickCount();
+
+  // A single game brings its own art; a collection starts with none, which is
+  // the reason step 2 exists at all.
+  if (picked.length === 1 && !art.cover) {
+    const game = picked[0];
+    try {
+      const cover = await invoke("game_cover", { library: game.library, id: game.id });
+      if (picked.length === 1 && picked[0].id === game.id) game.cover = cover;
+    } catch {
+      // no art is a state, not a failure
+    }
+  }
+
+  if (isCollection() && !el.collectionTitle.value.trim()) {
+    suggestName();
+  }
+
+  // Offloading a game off the internal disk is the practical half of the
+  // appeal, so copying is on whenever there is anything to copy. Untouched
+  // once the user has had an opinion about it.
+  if (!copyTouched) el.optCopy.checked = copyable().length > 0;
+
   refreshOptions();
-  refreshCreateButton();
-  el.customTitle.focus();
+  refreshRail();
 }
 
-/** Show, or stop showing, the folder the user chose. */
-function renderChosenFolder() {
-  el.btnClearFolder.hidden = !chosenFolder;
-  el.folderChosen.hidden = !chosenFolder;
-  const label = el.btnPickFolder.querySelector(".btn__label") ?? el.btnPickFolder;
-  if (!chosenFolder) {
-    label.textContent = "Choose folder…";
+function renderTickCount() {
+  if (manual) {
+    el.tickCount.textContent = "by hand";
     return;
   }
-  label.textContent = "Change folder…";
-  const size = chosenFolder.sizeBytes ? ` · ${formatBytes(chosenFolder.sizeBytes)}` : "";
-  el.folderChosen.textContent = `${chosenFolder.path}${size}`;
+  if (picked.length === 0) {
+    el.tickCount.textContent = "none ticked";
+    return;
+  }
+  const size = totalBytes();
+  el.tickCount.textContent = size
+    ? `${picked.length} ticked · ${formatBytes(size)}`
+    : `${picked.length} ticked`;
 }
 
-async function pickGameFolder() {
-  el.btnPickFolder.disabled = true;
+async function suggestName() {
   try {
-    const picked = await invoke("pick_game_folder");
-    // Cancelled. Whatever was chosen before stays chosen.
-    if (!picked) return;
+    const name = await invoke("suggest_collection_name", {
+      titles: picked.map((g) => g.name),
+    });
+    el.collectionTitle.placeholder = name || "Game Collection";
+  } catch {
+    el.collectionTitle.placeholder = `${picked[0]?.name ?? "Games"} and ${picked.length - 1} more`;
+  }
+  refreshRail();
+}
 
-    chosenFolder = picked;
-    // The folder name is nearly always the title, so offer it rather than
-    // making it be typed. Anything already typed is left alone.
-    if (!el.customTitle.value.trim()) el.customTitle.value = picked.name;
-    el.previewTitle.textContent = el.customTitle.value.trim() || picked.name;
-    el.previewSub.textContent = picked.path;
-    renderChosenFolder();
-    refreshOptions();
-    await refreshExePicker();
+/* ==========================================================================
+   Step 2 — name it and give it a face
+   ========================================================================== */
+
+function collectionName() {
+  return el.collectionTitle.value.trim() || el.collectionTitle.placeholder || "Game Collection";
+}
+
+/** exFAT caps a drive label at 11 characters, so the name is squeezed to fit. */
+function driveLabelFor(title, filesystem = "exfat") {
+  const limit = filesystem === "btrfs" ? 64 : 11;
+  const cleaned = String(title).toUpperCase().replace(/[^A-Z0-9]+/g, "");
+  return cleaned.slice(0, limit) || "GAMEPAK";
+}
+
+function renderOrder() {
+  el.orderList.replaceChildren();
+  picked.forEach((game, index) => {
+    const li = document.createElement("li");
+    li.className = "order-row";
+    li.draggable = true;
+    li.dataset.index = String(index);
+
+    const n = document.createElement("span");
+    n.className = "order-row__n";
+    n.textContent = String(index + 1);
+    const name = document.createElement("span");
+    name.className = "order-row__name";
+    name.textContent = game.name;
+    const size = document.createElement("span");
+    size.className = "order-row__size";
+    size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "—";
+
+    li.append(n, name, size);
+    el.orderList.append(li);
+  });
+}
+
+/* Drag to reorder — this is the order the games appear in on the launcher. */
+let dragFrom = null;
+
+el.orderList.addEventListener("dragstart", (event) => {
+  const row = event.target.closest(".order-row");
+  if (!row) return;
+  dragFrom = Number(row.dataset.index);
+  row.classList.add("is-dragging");
+  event.dataTransfer.effectAllowed = "move";
+});
+
+el.orderList.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  const row = event.target.closest(".order-row");
+  for (const other of el.orderList.children) other.classList.remove("is-over");
+  if (row) row.classList.add("is-over");
+});
+
+el.orderList.addEventListener("drop", (event) => {
+  event.preventDefault();
+  const row = event.target.closest(".order-row");
+  if (row && dragFrom !== null) {
+    const to = Number(row.dataset.index);
+    const [moved] = picked.splice(dragFrom, 1);
+    picked.splice(to, 0, moved);
+    renderOrder();
+    refreshRail();
+  }
+  dragFrom = null;
+});
+
+el.orderList.addEventListener("dragend", () => {
+  for (const other of el.orderList.children) {
+    other.classList.remove("is-over", "is-dragging");
+  }
+  dragFrom = null;
+});
+
+el.collectionTitle.addEventListener("input", () => {
+  if (labelIsOurs) el.formatLabel.value = driveLabelFor(collectionName(), filesystem());
+  renderCollectionHint();
+  refreshRail();
+  refreshCreateButton();
+});
+
+function renderCollectionHint() {
+  const label = driveLabelFor(collectionName(), filesystem());
+  el.collectionNameHint.innerHTML = "";
+  el.collectionNameHint.append("Shown on the launcher above the game list. The drive itself will be named ");
+  const code = document.createElement("span");
+  code.className = "mono";
+  code.textContent = label;
+  el.collectionNameHint.append(code, ` — ${filesystemLabel(filesystem())} allows ${filesystem() === "btrfs" ? 64 : 11} characters.`);
+}
+
+/* ==========================================================================
+   Step 1b — a game nothing scanned
+   ========================================================================== */
+
+function enterManual() {
+  manual = manual ?? { title: "", executable: "", folder: null, choices: [], cover: null };
+  picked = [];
+  showPhase("custom");
+  renderGames();
+  renderTickCount();
+  refreshOptions();
+  refreshRail();
+}
+
+async function pickFolder() {
+  try {
+    const chosen = await invoke("pick_game_folder");
+    if (!chosen) return;
+    manual = manual ?? { title: "", executable: "", folder: null, choices: [], cover: null };
+    manual.folder = chosen;
+    // The folder's own name is the best guess at the title, tidied.
+    if (!el.customTitle.value.trim()) {
+      el.customTitle.value = tidyFolderName(chosen.name || "");
+      el.titleHint.hidden = false;
+      el.titleHint.textContent = "Taken from the folder name — change it if it is wrong.";
+    }
+    manual.choices = chosen.choices ?? [];
+    renderFolder();
+    renderExeChoices();
+    refreshRail();
     refreshCreateButton();
   } catch (error) {
     status(String(error), "error");
-  } finally {
-    el.btnPickFolder.disabled = false;
   }
 }
 
-async function clearGameFolder() {
-  chosenFolder = null;
-  renderChosenFolder();
-  refreshOptions();
-  await refreshExePicker();
-  refreshCreateButton();
+/**
+ * "Split_Fiction v1.2" → "Split Fiction".
+ *
+ * Version tags go before separators are normalised, or "v1.2" turns into
+ * "v1 2" and stops looking like a version at all. A guess either way, which is
+ * why it is offered as a filled-in field rather than applied silently.
+ */
+function tidyFolderName(name) {
+  return String(name)
+    .replace(/\s*[[(].*?[\])]\s*/g, " ")
+    .replace(/[_v]?\d+(\.\d+)+\s*$/i, " ")
+    .replace(/\bv\d+(\.\d+)*\b/gi, " ")
+    .replace(/[._]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
-/* ----------------------------------------------------------------- bundle */
-
-function toggleBundleGame(game) {
-  if (bundleGames.has(game.id)) {
-    bundleGames.delete(game.id);
-  } else {
-    bundleGames.set(game.id, game);
+function renderFolder() {
+  const chosen = manual?.folder;
+  el.folderChosen.hidden = !chosen;
+  el.btnClearFolder.hidden = !chosen;
+  el.btnPickFolder.textContent = chosen ? "Change folder…" : "Choose folder…";
+  if (chosen) {
+    el.folderChosen.textContent = chosen.sizeBytes
+      ? `${chosen.path} · ${formatBytes(chosen.sizeBytes)}`
+      : chosen.path;
   }
+}
 
-  // One game is not a collection, so bundle mode does not start until the
-  // second. Until it does, the single added game has to be the chosen one:
-  // otherwise adding one game leaves the panel showing it, the row marked as
-  // selected, and Write disabled with nothing on screen saying why. Two games
-  // then hand over to the collection UI, which has its own title and cover.
-  const sole = bundleGames.size === 1 ? [...bundleGames.values()][0] : null;
-  if (sole && selectedGame?.id !== sole.id) {
-    // Fires the art lookup and refreshes everything below; the panel is drawn
-    // here first so the two do not race.
-    renderBundlePanel();
-    refreshCollectionPreview();
-    void selectGame(sole);
+/**
+ * The executables in the folder, best guess first.
+ *
+ * The backend scores them; helper runtimes, crash handlers and uninstallers
+ * come back negative and are shown last, saying why rather than being hidden —
+ * sometimes the odd-looking one really is the game.
+ */
+function renderExeChoices() {
+  const choices = [...(manual?.choices ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  el.exeChoices.replaceChildren();
+
+  if (choices.length === 0) {
+    el.exeHint.textContent = manual?.folder
+      ? "Nothing in that folder looks like a program. Type the launch target below."
+      : "Pick a folder and the programs inside it are listed here.";
     return;
   }
-  renderGames();
-  renderBundlePanel();
-  refreshOptions();
-  refreshCreateButton();
-  refreshCollectionPreview();
-}
 
-function renderBundlePanel() {
-  const list = [...bundleGames.values()];
-  el.bundlePanel.hidden = list.length === 0;
-  el.collectionMeta.hidden = list.length < 2;
-
-  el.bundleList.replaceChildren();
-  for (const game of list) {
+  for (const choice of choices) {
     const li = document.createElement("li");
-    li.className = "bundle-item";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "exe";
+    btn.classList.toggle("is-demoted", (choice.score ?? 0) < 0);
+    btn.setAttribute("aria-pressed", String(manual?.executable === choice.relative));
 
     const name = document.createElement("span");
-    name.className = "bundle-item__name";
-    name.textContent = game.name;
+    name.className = "exe__name";
+    name.textContent = choice.relative;
+    btn.append(name);
 
-    const size = document.createElement("span");
-    size.className = "bundle-item__size";
-    size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "";
-
-    const artBtn = document.createElement("button");
-    artBtn.type = "button";
-    artBtn.className = "bundle-item__art";
-    artBtn.textContent = game.coverSource ? "Grid ✓" : "Choose grid";
-    artBtn.setAttribute("aria-label", `Choose grid art for ${game.name}`);
-    artBtn.addEventListener("click", () => openSgdbDialog({ kind: "game", game }));
-
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "bundle-item__remove";
-    removeBtn.setAttribute("aria-label", `Remove ${game.name}`);
-    removeBtn.textContent = "✕";
-    removeBtn.addEventListener("click", () => toggleBundleGame(game));
-
-    li.append(name, size, artBtn, removeBtn);
-    el.bundleList.append(li);
-  }
-
-  // Space summary.
-  const drive = drives.find((d) => d.path === selectedDrive);
-  if (list.length > 0) {
-    const totalSize = list.reduce((sum, g) => sum + (g.sizeOnDisk || 0), 0);
-    const freeBytes = drive?.freeBytes ?? null;
-    let msg = `Total: ${formatBytes(totalSize)}`;
-    if (freeBytes !== null) {
-      msg += ` · ${formatBytes(freeBytes)} available`;
-      if (totalSize > freeBytes) {
-        msg += " — ⚠ Not enough space";
-        el.bundleSpace.classList.add("is-error");
-      } else {
-        el.bundleSpace.classList.remove("is-error");
-      }
+    const why = whyDemoted(choice);
+    if (why) {
+      const tag = document.createElement("span");
+      tag.className = "exe__why";
+      tag.textContent = why;
+      btn.append(tag);
     }
-    el.bundleSpace.textContent = msg;
-    el.bundleSpace.hidden = false;
-  } else {
-    el.bundleSpace.hidden = true;
-    el.bundleSpace.classList.remove("is-error");
-  }
 
-  // Offer a name, as a placeholder so it never overwrites what was typed.
-  if (list.length >= 2) suggestCollectionName(list.map((g) => g.name));
-}
-
-/**
- * Offer a name for the collection.
- *
- * The backend works it out from what the titles share — *God of War* and *God
- * of War Ragnarök* give *God of War Collection* — so the wizard and anything
- * else that needs a name agree on one answer.
- */
-async function suggestCollectionName(titles) {
-  try {
-    const suggested = await invoke("suggest_collection_name", { titles });
-    if (suggested) {
-      el.collectionTitle.placeholder = suggested;
-      // The preview shows the name that will be written, which until something
-      // is typed is this one.
-      refreshCollectionPreview();
-    }
-  } catch {
-    // A placeholder is a nicety; the field still works without one.
-  }
-}
-
-/**
- * Show the collection in the preview, rather than whichever game happened to be
- * clicked last: from two games on, the cartridge *is* the collection.
- */
-async function refreshCollectionPreview() {
-  const list = [...bundleGames.values()];
-  if (list.length < 2) {
-    el.previewEyebrow.textContent = "Selected";
-    return;
-  }
-
-  el.previewEyebrow.textContent = "Collection";
-  el.previewTitle.textContent =
-    el.collectionTitle.value.trim() || el.collectionTitle.placeholder || "Collection";
-  el.previewSub.textContent = `${list.length} games`;
-  el.previewGames.replaceChildren(
-    ...list.map((game, index) => {
-      const item = document.createElement("li");
-      const key = document.createElement("kbd");
-      key.textContent = index < 9 ? String(index + 1) : "";
-      const title = document.createElement("span");
-      title.textContent = game.name;
-      item.append(key, title);
-      return item;
-    }),
-  );
-  el.previewGames.hidden = false;
-
-  // Chosen artwork wins, so the preview shows what will be written; failing
-  // that the first game's, which is what the backend falls back to anyway.
-  if (collectionCover?.preview) {
-    setPreviewArt(collectionCover.preview, "Chosen file");
-    return;
-  }
-  const first = list[0];
-  if (first.coverPreview) {
-    setPreviewArt(first.coverPreview, `Grid from ${first.name}`);
-    return;
-  }
-  if (!first.hasCover) {
-    setPreviewArt("", "");
-    return;
-  }
-  try {
-    const uri = await invoke("game_cover", { library: first.library, id: first.id });
-    // The selection can move while the art is being fetched.
-    if (uri && isBundleMode() && [...bundleGames.values()][0]?.id === first.id) {
-      setPreviewArt(uri, `From ${first.name}`);
-    }
-  } catch {
-    // No art is not an error.
-  }
-}
-
-/** Whether we are in bundle mode (2+ games selected). */
-function isBundleMode() {
-  return bundleGames.size >= 2;
-}
-
-/* ------------------------------------------------------------------- edit */
-
-/**
- * Open the editor on the cartridge already on the chosen drive.
- *
- * Only the metadata is in play here: the name, the artwork and which games are
- * listed. Nothing this dialog does copies or deletes a game.
- */
-async function openEditor() {
-  if (!selectedDrive) return;
-  el.editStatus.textContent = "";
-
-  try {
-    editing = await invoke("read_cartridge_for_edit", { drivePath: selectedDrive });
-  } catch (error) {
-    status(String(error), "error");
-    return;
-  }
-
-  el.editTitle.value = editing.title ?? "";
-  el.editCoverName.textContent = editing.coverPath ? "" : "no artwork on this cartridge";
-  el.btnEditCover.querySelector(".btn__label").textContent = "Change artwork…";
-  // A picture chosen in a previous session of the dialog should not linger.
-  editing.newCover = null;
-  renderEditGames();
-
-  if (typeof el.editDialog.showModal === "function") el.editDialog.showModal();
-  else el.editDialog.setAttribute("open", "");
-}
-
-/** One row per game: its name, where it sits in the order, and a way out. */
-function renderEditGames() {
-  el.editGames.replaceChildren(
-    ...editing.games.map((game, index) => {
-      const li = document.createElement("li");
-      li.className = "edit-row";
-
-      const n = document.createElement("span");
-      n.className = "edit-row__n";
-      n.textContent = String(index + 1);
-
-      const name = document.createElement("input");
-      name.type = "text";
-      name.className = "edit-row__name";
-      name.value = game.title;
-      name.setAttribute("aria-label", `Name of game ${index + 1}`);
-      name.addEventListener("input", () => {
-        game.title = name.value;
-      });
-
-      const up = document.createElement("button");
-      up.type = "button";
-      up.className = "edit-row__move";
-      up.textContent = "↑";
-      up.disabled = index === 0;
-      up.setAttribute("aria-label", `Move ${game.title} up`);
-      up.addEventListener("click", () => moveGame(index, -1));
-
-      const down = document.createElement("button");
-      down.type = "button";
-      down.className = "edit-row__move";
-      down.textContent = "↓";
-      down.disabled = index === editing.games.length - 1;
-      down.setAttribute("aria-label", `Move ${game.title} down`);
-      down.addEventListener("click", () => moveGame(index, 1));
-
-      const drop = document.createElement("button");
-      drop.type = "button";
-      drop.className = "edit-row__drop";
-      drop.textContent = "×";
-      drop.disabled = editing.games.length === 1;
-      drop.setAttribute("aria-label", `Remove ${game.title} from the list`);
-      drop.addEventListener("click", () => {
-        editing.games.splice(index, 1);
-        renderEditGames();
-      });
-
-      li.append(n, name, up, down, drop);
-      return li;
-    }),
-  );
-
-  // Said plainly, because "remove" reads like "delete" and here it is not.
-  el.editGamesHint.textContent = editing.holdsGame
-    ? "Removing a game only takes it off the list. Its files stay on the cartridge."
-    : "Removing a game only takes it off the list.";
-}
-
-function moveGame(index, direction) {
-  const target = index + direction;
-  if (target < 0 || target >= editing.games.length) return;
-  const [game] = editing.games.splice(index, 1);
-  editing.games.splice(target, 0, game);
-  renderEditGames();
-}
-
-async function saveEdits() {
-  el.editSave.disabled = true;
-  el.editStatus.textContent = "Saving…";
-
-  try {
-    const result = await invoke("update_cartridge", {
-      request: {
-        drivePath: selectedDrive,
-        title: el.editTitle.value.trim(),
-        coverSource: editing.newCover?.path ?? null,
-        games: editing.games.map((game) => ({
-          title: game.title,
-          executable: game.executable,
-          coverSource: game.newCover?.path ?? null,
-        })),
-      },
+    btn.addEventListener("click", () => {
+      manual.executable = choice.relative;
+      el.customExec.value = "";
+      renderExeChoices();
+      refreshCreateButton();
     });
 
-    const said = ["Cartridge updated."];
-    if (result.coverWritten) said.push("New artwork copied.");
-    if (result.icon) said.push("Drive icon set.");
-    said.push(...(result.warnings ?? []));
-    status(said.join(" "), result.warnings?.length ? "" : "good");
-
-    el.editDialog.close("saved");
-    await loadDrives({ keepSelection: true, quiet: true });
-  } catch (error) {
-    el.editStatus.textContent = String(error);
-  } finally {
-    el.editSave.disabled = false;
+    li.append(btn);
+    el.exeChoices.append(li);
   }
+
+  el.exeHint.textContent = "Pick the one that starts the game.";
 }
 
-/* --------------------------------------------------------------- settings */
-
-/** Apply the settings to everything whose visibility depends on them. */
-function applySettings() {
-  el.setSgdb.checked = Boolean(settings.steamgriddbEnabled);
-  el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
-  el.sgdbKeyField.hidden = !el.setSgdb.checked;
-  el.btnSgdb.hidden = !settings.steamgriddbEnabled;
-  el.btnGameLogo.hidden = !settings.steamgriddbEnabled;
-  el.btnGameBackground.hidden = !settings.steamgriddbEnabled;
-  el.btnGameIcon.hidden = !settings.steamgriddbEnabled;
+function whyDemoted(choice) {
+  const name = String(choice.relative ?? "").toLowerCase();
+  if (/unins|uninstall/.test(name)) return "uninstaller";
+  if (/(^|\/)(ue4prereqsetup|vcredist|dxsetup|directx|dotnet)/.test(name)) return "runtime";
+  if (/crashp|crashre|handler/.test(name)) return "crash handler";
+  if ((choice.score ?? 0) < 0) return "probably not the game";
+  return "";
 }
 
-/** Put the three per-game art buttons' labels back to their "nothing chosen
- * yet" state — called whenever the game they'd apply to changes. */
-function resetGameArtButtonLabels() {
-  el.btnGameLogo.querySelector(".btn__label").textContent = "Find title logo…";
-  el.btnGameBackground.querySelector(".btn__label").textContent = "Find launcher hero…";
-  el.btnGameIcon.querySelector(".btn__label").textContent = "Find cartridge icon…";
-}
-
-async function loadSettings() {
-  try {
-    settings = await invoke("get_settings");
-  } catch {
-    // The defaults are the offline ones, which is the safe way to be wrong.
-  }
-  applySettings();
-}
-
-function openSettings() {
-  applySettings();
-  el.settingsStatus.textContent = "";
-  if (typeof el.settingsDialog.showModal === "function") el.settingsDialog.showModal();
-  else el.settingsDialog.setAttribute("open", "");
-}
-
-async function saveSettings() {
-  el.settingsSave.disabled = true;
-  try {
-    settings = await invoke("set_settings", {
-      settings: {
-        steamgriddbEnabled: el.setSgdb.checked,
-        steamgriddbApiKey: el.setSgdbKey.value.trim(),
-      },
-    });
-    applySettings();
-    refreshOptions();
-    el.settingsStatus.textContent = settings.steamgriddbEnabled
-      ? "Saved. Artwork lookup is on."
-      : "Saved. The wizard stays offline.";
-  } catch (error) {
-    el.settingsStatus.textContent = String(error);
-  } finally {
-    el.settingsSave.disabled = false;
-  }
-}
-
-/* ----------------------------------------------------------------- drives */
+/* ==========================================================================
+   Drives
+   ========================================================================== */
 
 function renderDrives() {
   el.drives.replaceChildren();
-
   for (const drive of drives) {
     const li = document.createElement("li");
-    // An option has to be owned by the listbox; a plain listitem in between
-    // orphans it and aria-selected is dropped on the floor.
-    li.setAttribute("role", "presentation");
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "row";
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(selectedDrive === drive.path));
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "drive";
+    btn.setAttribute("aria-selected", String(drive.path === selectedDrive));
 
     const name = document.createElement("span");
-    name.className = "row__name";
-    name.textContent = drive.label;
+    name.className = "drive__name";
+    name.textContent = drive.label || drive.path;
 
     const meta = document.createElement("span");
-    meta.className = "row__meta";
-    if (drive.hasCartridge) {
-      meta.classList.add("row__warn");
-      meta.textContent = `${formatBytes(drive.freeBytes)} free · has a cartridge`;
-    } else {
-      meta.textContent = `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
-    }
+    meta.className = "drive__meta";
+    meta.textContent = drive.hasCartridge
+      ? `${formatBytes(drive.freeBytes)} free · has a cartridge`
+      : `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
+    if (drive.hasCartridge) meta.classList.add("drive__warn");
 
-    row.append(name, meta);
-    row.addEventListener("click", () => selectDrive(drive));
-    li.append(row);
+    btn.append(name, meta);
+    btn.addEventListener("click", () => selectDrive(drive));
+    li.append(btn);
     el.drives.append(li);
   }
 
-  const nothing = drives.length === 0;
-  el.drivesEmpty.hidden = !nothing;
-  if (nothing) {
+  el.drivesEmpty.hidden = drives.length > 0;
+  if (drives.length === 0) {
     el.drivesEmpty.textContent =
-      "No removable drives found. Plug the cartridge in, wait for it to mount, then Rescan.";
+      "No removable drive found. Plug a cartridge in, then press Rescan.";
   }
 }
 
@@ -816,199 +704,90 @@ async function selectDrive(drive) {
   selectedDrive = drive.path;
   renderDrives();
 
-  // Show the available space for the chosen cartridge.
-  if (drive.freeBytes > 0) {
-    el.driveSpace.textContent = `${formatBytes(drive.freeBytes)} available on ${drive.label}`;
-    el.driveSpace.hidden = false;
-  } else {
-    el.driveSpace.hidden = true;
-  }
-
-  // Update the bundle space display now we know the drive.
-  if (bundleGames.size > 0) renderBundlePanel();
-
-  // Ask the backend what erasing this drive would mean; the confirmation the
-  // user types is checked against its answer, not against anything held here.
   formatPlan = null;
   try {
     formatPlan = await invoke("format_plan", { drivePath: drive.path });
   } catch {
-    // Not formattable: the option stays available but will refuse on Write.
+    formatPlan = null;
   }
-  refreshFormatFields();
-  refreshOptions();
-  refreshCreateButton();
 
-  // Offered only for a drive Steam currently knows about, since that is the only
-  // case where there is anything to remove.
   try {
-    driveIsSteamLibrary = await invoke("steam_registration", { drivePath: drive.path });
+    driveIsSteamLibrary = Boolean(
+      await invoke("steam_registration", { drivePath: drive.path }),
+    );
   } catch {
     driveIsSteamLibrary = false;
   }
-  el.unregister.hidden = !driveIsSteamLibrary;
-  refreshOptions();
 
-  // Editing is only on offer when there is something there to edit.
+  await readLinkRate(drive.path);
+
   el.btnEdit.hidden = !drive.hasCartridge;
+  el.btnUnregister.hidden = !driveIsSteamLibrary;
 
-  status(
-    drive.hasCartridge
-      ? `${drive.label} already holds a cartridge. Writing will replace it — or edit it instead.`
-      : "",
-  );
+  if (labelIsOurs) el.formatLabel.value = driveLabelFor(cartridgeTitle(), filesystem());
+  refreshFormatFields();
+  refreshOptions();
+  refreshRail();
 }
 
-/* ---------------------------------------------------------------- options */
+/* ==========================================================================
+   Step 3 — options
+   ========================================================================== */
+
+function filesystem() {
+  const checked = document.querySelector('#format-filesystem input:checked');
+  return checked?.value ?? "exfat";
+}
+
+function filesystemLabel(fs) {
+  return fs === "btrfs" ? "btrfs" : "exFAT";
+}
+
+/** Every game that would actually have its files copied. */
+function copyable() {
+  if (manual) return manual.folder ? [manual] : [];
+  return picked.filter((g) => g.sizeOnDisk > 0);
+}
 
 function refreshOptions() {
-  const bundle = isBundleMode();
-  const list = [...bundleGames.values()];
+  const count = picked.length;
+  const steamCount = picked.filter((g) => g.library === "steam").length;
+  const size = totalBytes();
 
-  // Hidden entirely until the lookup is switched on: an always-visible button
-  // that only ever explains why it cannot work is worse than no button.
-  el.btnSgdb.hidden = !settings.steamgriddbEnabled;
-  const gameChosen = (selectedGame && !manualMode) || el.customTitle.value.trim();
-  el.btnSgdb.disabled = !gameChosen;
-  // Logo/background/icon are per-game art with nowhere to go in a bundle —
-  // that art lives at the collection level, chosen further up in the panel
-  // bundle mode shows instead.
-  el.btnGameLogo.hidden = !settings.steamgriddbEnabled || bundle;
-  el.btnGameLogo.disabled = !gameChosen;
-  el.btnGameBackground.hidden = !settings.steamgriddbEnabled || bundle;
-  el.btnGameBackground.disabled = !gameChosen;
-  el.btnGameIcon.hidden = !settings.steamgriddbEnabled || bundle;
-  el.btnGameIcon.disabled = !gameChosen;
+  el.optCopyLabel.textContent =
+    count > 1
+      ? `Copy all ${count} games onto the cartridge`
+      : "Copy the game onto the cartridge";
+  el.optCopyHint.textContent =
+    count > 1
+      ? "Each into its own folder, with the launcher pointing at all of them."
+      : "Also registers the drive as a Steam library, so Steam plays from the cartridge instead of your internal copy.";
 
-  // Every chosen game has to be copyable, since the option copies all of them.
-  const copyable = bundle
-    ? list.length > 0 && list.every((g) => g.canCopy)
-    : manualMode
-      // By hand, a folder is the whole of what makes a game copyable: there is
-      // no library entry to ask where it is installed.
-      ? Boolean(chosenFolder)
-      : Boolean(selectedGame?.canCopy);
-  el.optCopy.disabled = !copyable;
-  if (!copyable) el.optCopy.checked = false;
+  // Closing Steam is only relevant when Steam is involved at all.
+  const steamInvolved = steamCount > 0 || driveIsSteamLibrary;
+  el.optCloseSteamRow.hidden = !(el.optCopy.checked && steamInvolved);
+  el.optCloseSteamHint.textContent = steamCount
+    ? `${steamCount} of ${count} ${count === 1 ? "is a Steam game" : "are Steam games"}. Steam writes its library list out on exit, so a cartridge it knows about cannot be rewritten while it runs.`
+    : "This drive is already registered as a Steam library, so Steam has to close before it can be rewritten.";
 
-  el.optCopyLabel.textContent = bundle
-    ? `Copy all ${list.length} games onto the cartridge`
-    : "Copy the game onto the cartridge";
-
-  // The two routes differ enough to be worth saying which one applies.
-  const chosen = bundle ? list : selectedGame ? [selectedGame] : [];
-  const allSteam = chosen.length > 0 && chosen.every((g) => g.library === "steam");
-  let hint;
-  if (copyable && bundle) {
-    hint = allSteam
-      ? `Copies all ${list.length} games and registers the drive as a Steam library, so Steam plays from the cartridge.`
-      : `Copies all ${list.length} games onto the cartridge and points each Play button at a file inside it.`;
-  } else if (copyable) {
-    hint = allSteam
-      ? "Also registers the drive as a Steam library, so Steam plays from the cartridge instead of your internal copy."
-      : "Copies the game's folder onto the cartridge and points Play at a file inside it. No launcher needed.";
-  } else if (manualMode) {
-    hint = "Choose the game's folder above and it can be copied across.";
-  } else if (chosen.length === 0) {
-    hint = "Pick a game first.";
-  } else {
-    hint = "Playnite does not record where one of these is installed, so there is nothing to copy.";
-  }
-
-  // Space is only a problem when the files are actually going across.
-  if (el.optCopy.checked && chosen.length > 0 && selectedDrive) {
-    const drive = drives.find((d) => d.path === selectedDrive);
-    const needed = chosen.reduce((sum, g) => sum + (g.sizeOnDisk || 0), 0);
-    if (drive && needed > 0) {
-      const capacity = el.optFormat.checked ? drive.totalBytes : drive.freeBytes;
-      if (needed > capacity) {
-        hint = `Not enough space: needs ${formatBytes(needed)}, has ${formatBytes(capacity)}.`;
-      }
-    }
-  }
-  el.optCopyHint.textContent = hint;
-
-  // Only shown when Steam's library list is in play: this drive is already in
-  // it, or a Steam copy is about to add it.
-  const steamInvolved =
-    driveIsSteamLibrary || (el.optCopy.checked && chosen.some((g) => g.library === "steam"));
-  el.optCloseSteamRow.hidden = !steamInvolved;
-
-  // Only meaningful when files are actually going across.
   el.optVerifyRow.hidden = !el.optCopy.checked;
-  if (!el.optCopy.checked) el.optVerify.checked = false;
+  const verifySeconds = size > 0 ? size / readRate() : 0;
+  el.optVerifyHint.textContent = verifySeconds
+    ? `Sums every file as it is written, then reads the cartridge back and compares. Adds ${formatDuration(verifySeconds)} over ${formatBytes(size)}.`
+    : "Sums every file as it is written, then reads the cartridge back and compares.";
 
-  // A format discards the whole volume on its way past, so a TRIM afterwards
-  // would be a permission prompt to do nothing.
-  el.optTrimRow.hidden = el.optFormat.checked;
-  if (el.optFormat.checked) el.optTrim.checked = false;
-
+  // Windows-only options say nothing at all on Linux.
   el.optTuneRow.hidden = platform !== "windows";
-  if (platform !== "windows") el.optTune.checked = false;
+  el.optTrimRow.hidden = el.optFormat.checked || platform === "windows";
 
-  refreshExePicker();
-}
+  el.optFormatHint.textContent = formatPlan?.warning
+    ? formatPlan.warning
+    : selectedDrive
+      ? "This drive cannot be formatted by the wizard."
+      : "Erases everything on the drive. Choose a cartridge first.";
 
-/**
- * A non-Steam copy needs to know which file to run, so the choice is made here
- * rather than guessed at silently. Steam copies do not need it: the app id
- * already identifies the game wherever the library lives.
- */
-async function refreshExePicker() {
-  // Only for a single non-Steam game. A collection would need one dropdown per
-  // game, so each game's program is picked by the ranking in portable.rs.
-  const needed =
-    el.optCopy.checked &&
-    !isBundleMode() &&
-    (manualMode
-      ? Boolean(chosenFolder)
-      : Boolean(selectedGame) && selectedGame.library !== "steam");
-
-  el.exePick.hidden = !needed;
-  if (!needed) {
-    exeCandidates = [];
-    return;
-  }
-
-  el.exeChoices.replaceChildren();
-  el.exeHint.textContent = "Looking for the game's program…";
-
-  try {
-    // A folder the user chose is looked in directly; otherwise Playnite is
-    // asked where the game lives.
-    exeCandidates = chosenFolder
-      ? await invoke("executable_choices", {
-          sourceDir: chosenFolder.path,
-          title: el.customTitle.value.trim() || chosenFolder.name,
-        })
-      : await invoke("executable_choices", { playniteId: selectedGame.id });
-  } catch (error) {
-    exeCandidates = [];
-    el.exeHint.textContent = String(error);
-    refreshCreateButton();
-    return;
-  }
-
-  if (exeCandidates.length === 0) {
-    el.exeHint.textContent =
-      "Nothing runnable found in the game's folder, so it cannot be copied.";
-    refreshCreateButton();
-    return;
-  }
-
-  for (const candidate of exeCandidates) {
-    const option = document.createElement("option");
-    option.value = candidate.relative;
-    option.textContent = candidate.relative;
-    el.exeChoices.append(option);
-  }
-  // The list arrives best-first, so the default is already the best guess.
-  el.exeChoices.value = exeCandidates[0].relative;
-  el.exeHint.textContent =
-    exeCandidates.length === 1
-      ? "One program found."
-      : `Best guess of ${exeCandidates.length} found. Change it if that is the wrong one.`;
-
+  refreshFormatFields();
+  refreshPlan();
   refreshCreateButton();
 }
 
@@ -1018,7 +797,7 @@ function refreshFormatFields() {
   if (!on) return;
 
   if (formatPlan) {
-    el.confirmLabel.textContent = `Type “${formatPlan.currentLabel}” to confirm`;
+    el.confirmLabel.textContent = `Type ${formatPlan.currentLabel} to confirm`;
     el.formatConfirm.placeholder = formatPlan.currentLabel;
     el.formatWarning.textContent = formatPlan.warning;
   } else {
@@ -1029,573 +808,605 @@ function refreshFormatFields() {
       : "Choose a drive first.";
   }
 
-  const filesystem = el.formatFilesystem.value;
-  el.filesystemHint.textContent =
-    filesystem === "btrfs"
-      ? "Windows cannot read btrfs without WinBtrfs installed, so this cartridge will only open on machines that have it. Choose exFAT if it is going anywhere."
-      : "Readable on Windows, Linux and macOS with nothing to install. This is what a cartridge you hand to someone should be.";
-
-  // The name field follows the filesystem: exFAT allows 11 characters, btrfs
-  // has room for the whole title.
-  const limit = filesystem === "btrfs" ? 64 : 11;
+  const fs = filesystem();
+  const limit = fs === "btrfs" ? 64 : 11;
   el.formatLabel.maxLength = limit;
-  el.labelHint.textContent = `Up to ${limit} characters on ${formatFilesystemLabel(filesystem)}.`;
+  el.labelHintText.textContent =
+    fs === "btrfs"
+      ? "btrfs has room for the whole title, but Windows cannot read it without WinBtrfs installed."
+      : "exFAT allows an 11-character name, and reads anywhere with nothing to install.";
 
   if (!el.formatLabel.value || labelIsOurs) {
-    el.formatLabel.value = defaultLabel(intent()?.title ?? "", filesystem);
-    labelIsOurs = true;
-  } else if (el.formatLabel.value.length > limit) {
-    // Switching to the stricter filesystem must not leave a name it will
-    // refuse in a field the user can no longer see the end of.
-    el.formatLabel.value = el.formatLabel.value.slice(0, limit).trim();
+    el.formatLabel.value = driveLabelFor(cartridgeTitle(), fs);
   }
 }
 
-function formatFilesystemLabel(filesystem) {
-  return filesystem === "exfat" ? "exFAT" : "btrfs";
-}
+/* ==========================================================================
+   Rate and time
+   --------------------------------------------------------------------------
+   An estimate has to come from somewhere real or it should not be shown. The
+   write rate starts as a conservative figure for a USB-attached NVMe, and is
+   replaced by the measured rate the moment the copy is actually running — so
+   the number on the button before the write is an estimate, and the number
+   during it is an observation.
+   ========================================================================== */
 
-/** Mirrors create.rs's default_label_for so the field starts where it would. */
-function defaultLabel(title, filesystem) {
-  const limit = filesystem === "btrfs" ? 64 : 11;
-  const cleaned = title
-    .replace(/[^A-Za-z0-9]+/g, " ")
-    .trim()
-    .slice(0, limit)
-    .trim();
-  return cleaned || "Cartridge";
-}
-
-/* -------------------------------------------------------------- SteamGridDB */
-
-function sgdbGameKey() {
-  const effectiveKind = sgdbEffectiveTargetKind();
-  const game = sgdbTargetGame();
-  if (game && !manualMode) return `${game.library}:${game.id}:${effectiveKind || "game"}`;
-  const title = el.customTitle.value.trim();
-  // Bundle mode: this art belongs to the collection. Otherwise (typed title,
-  // no library entry): it belongs to whatever single game is being built.
-  const prefix = isBundleMode() ? "collection" : "manual";
-  const seed = isBundleMode()
-    ? el.collectionTitle.value.trim() || el.collectionTitle.placeholder
-    : title;
-  if (effectiveKind === "collection-grid") return `${prefix}:grid:${seed}`;
-  if (effectiveKind === "logo") return `${prefix}:logo:${seed}`;
-  if (effectiveKind === "background") return `${prefix}:hero:${seed}`;
-  if (effectiveKind === "icon") return `${prefix}:icon:${seed}`;
-  return title ? `manual:${title}` : "";
-}
-
-function sgdbEffectiveTargetKind() {
-  if (artworkTarget?.kind === "game") return "game";
-  const type = String(el.sgdbType?.value || "grid").toLowerCase();
-  if (type === "hero") return "background";
-  if (type === "icon") return "icon";
-  if (type === "logo") return "logo";
-  return "collection-grid";
-}
-
-function sgdbTargetGame() {
-  return artworkTarget?.kind === "game" ? artworkTarget.game : selectedGame;
-}
-
-function sgdbTargetSeed(target) {
-  if (target?.kind === "game") return target.game?.name || "";
-  if (!isBundleMode()) {
-    // Logo/icon/background for a single game: search on that game's own
-    // name, same as the cover would, rather than the collection title input
-    // a single-game build never shows.
-    return (selectedGame && !manualMode ? selectedGame.name : "") || el.customTitle.value.trim();
-  }
-  return (
-    el.collectionTitle.value.trim() ||
-    el.collectionTitle.placeholder ||
-    [...bundleGames.values()][0]?.name ||
-    ""
-  );
-}
-
-function normalizeArtworkTarget(target) {
-  if (target && typeof target === "object" && "kind" in target) {
-    return target;
-  }
-  if (selectedGame) {
-    return { kind: "game", game: selectedGame };
-  }
-  return { kind: "collection-grid" };
-}
-
-function openSgdbDialog(target = null) {
-  const resolvedTarget = normalizeArtworkTarget(target);
-  artworkTarget = resolvedTarget;
-  const seed = sgdbTargetSeed(resolvedTarget);
-  if (!seed) {
-    status("Pick a game or type a title first.", "error");
-    return;
-  }
-  // Invalidate in-flight SGDB requests from previous dialog sessions.
-  sgdbSearchNonce += 1;
-  clearTimeout(sgdbSearchTimer);
-  el.sgdbSearch.value = seed;
-  el.sgdbStatus.textContent = "Searching…";
-  el.sgdbResults.replaceChildren();
-  sgdbSelectedGameId = null;
-  el.sgdbType.value =
-    resolvedTarget.kind === "logo"
-      ? "logo"
-      : resolvedTarget.kind === "background"
-      ? "hero"
-      : resolvedTarget.kind === "icon"
-        ? "icon"
-        : "grid";
-  if (typeof el.sgdbDialog.showModal === "function") {
-    el.sgdbDialog.showModal();
-  }
-  queueSgdbSearch();
-}
-
-function queueSgdbSearch() {
-  clearTimeout(sgdbSearchTimer);
-  sgdbSearchTimer = setTimeout(loadSgdbGamesAndArtwork, 220);
-}
-
-async function loadSgdbGamesAndArtwork() {
-  const nonce = ++sgdbSearchNonce;
-  const query = el.sgdbSearch.value.trim();
-  if (!query) {
-    el.sgdbStatus.textContent = "Type a game title.";
-    el.sgdbResults.replaceChildren();
-    return;
-  }
-  el.sgdbStatus.textContent = "Searching…";
-  try {
-    const gamesFound = await invoke("sgdb_search_games", { query });
-    if (nonce !== sgdbSearchNonce) return;
-    if (!Array.isArray(gamesFound) || gamesFound.length === 0) {
-      sgdbResultsFor = [];
-      el.sgdbResults.replaceChildren();
-      el.sgdbStatus.textContent = "No SteamGridDB matches yet.";
-      return;
-    }
-    const chosen =
-      gamesFound.find((g) => g.name?.toLowerCase() === query.toLowerCase()) ||
-      gamesFound[0];
-    sgdbSelectedGameId = chosen.id;
-    await loadSgdbArtwork(chosen.name || query, chosen.id, nonce);
-  } catch (error) {
-    if (nonce !== sgdbSearchNonce) return;
-    el.sgdbStatus.textContent = `SteamGridDB unavailable. You can still paste a URL. (${String(error)})`;
-  }
-}
-
-async function loadSgdbArtwork(matchName, gameId = sgdbSelectedGameId, nonce = sgdbSearchNonce) {
-  if (!gameId) return;
-  el.sgdbStatus.textContent = "Loading artwork…";
-  try {
-    const artType = el.sgdbType.value;
-    const list = await invoke("sgdb_get_artwork", { gameId, artType });
-    if (nonce !== sgdbSearchNonce) return;
-    sgdbResultsFor = Array.isArray(list) ? list : [];
-    renderSgdbResults(matchName);
-    el.sgdbStatus.textContent = sgdbResultsFor.length
-      ? `Showing ${sgdbResultsFor.length} ${artType} image${sgdbResultsFor.length === 1 ? "" : "s"} for ${matchName}.`
-      : "No artwork found for that type.";
-  } catch (error) {
-    if (nonce !== sgdbSearchNonce) return;
-    el.sgdbStatus.textContent = `Artwork lookup failed: ${String(error)}`;
-    sgdbResultsFor = [];
-    renderSgdbResults(matchName);
-  }
-}
-
-function renderSgdbResults(matchName) {
-  el.sgdbResults.replaceChildren();
-  for (const art of sgdbResultsFor) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "sgdb-card";
-
-    const img = document.createElement("img");
-    const thumbCacheKey = `${art.id}:${el.sgdbType.value}`;
-    const cachedThumb = sgdbThumbCache.get(thumbCacheKey);
-    img.src = cachedThumb || safePreviewSrc(art.thumb || art.url);
-    img.loading = "lazy";
-    img.alt = `${matchName} artwork`;
-    img.addEventListener("error", () => hydrateSgdbThumb(img, art, thumbCacheKey), {
-      once: true,
-    });
-
-    const meta = document.createElement("span");
-    meta.textContent = art.width && art.height ? `${art.width}×${art.height}` : "SteamGridDB";
-
-    card.append(img, meta);
-    card.addEventListener("click", () => chooseSgdbArtwork(art));
-    el.sgdbResults.append(card);
-  }
-}
-
-async function hydrateSgdbThumb(img, art, cacheKey) {
-  if (!art?.thumb && !art?.url) return;
-  try {
-    const cached = await invoke("sgdb_download_artwork", {
-      url: art.thumb || art.url,
-      cacheKey: `thumb-${cacheKey}`,
-      gameKey: null,
-    });
-    if (!cached?.dataUri) return;
-    sgdbThumbCache.set(cacheKey, cached.dataUri);
-    img.src = cached.dataUri;
-  } catch {
-    // Keep the broken-image placeholder; selection can still use the full art URL.
-  }
-}
-
-async function chooseSgdbArtwork(art) {
-  const targetGame = sgdbTargetGame();
-  const effectiveKind = sgdbEffectiveTargetKind();
-  const keyBase = (targetGame?.name || el.collectionTitle.value.trim() || el.customTitle.value.trim() || "manual").toLowerCase();
-  const cacheKeyBase = `${keyBase}-${el.sgdbType.value}-${art.id}`;
-  const gameKey = sgdbGameKey();
-  const candidates = [art?.url, art?.thumb]
-    .map((u) => String(u || "").trim())
-    .filter((u, i, all) => u.length > 0 && all.indexOf(u) === i);
-  if (candidates.length === 0) {
-    el.sgdbStatus.textContent = "That artwork has no downloadable URL.";
-    status("That artwork has no downloadable URL.", "error");
-    return;
-  }
-  el.sgdbStatus.textContent = "Applying artwork…";
-
-  let cached = null;
-  let lastError = null;
-  for (let i = 0; i < candidates.length; i += 1) {
-    const url = candidates[i];
-    const cacheKey = `${cacheKeyBase}-${i}`;
-    try {
-      cached = await invoke("sgdb_download_artwork", {
-        url,
-        cacheKey,
-        gameKey: gameKey || null,
-      });
-      if (cached?.dataUri && cached?.path) break;
-      cached = null;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (!cached) {
-    const message = `Could not download artwork: ${String(lastError || "no usable image URL")}`;
-    el.sgdbStatus.textContent = message;
-    status(message, "error");
-    return;
-  }
-
-  try {
-    applyDownloadedArtwork(effectiveKind, cached);
-    el.sgdbStatus.textContent = "Artwork applied.";
-    status("Selected artwork from SteamGridDB.", "good");
-    if (el.sgdbDialog.open) el.sgdbDialog.close("selected");
-  } catch (error) {
-    const message = `Could not apply artwork: ${String(error)}`;
-    el.sgdbStatus.textContent = message;
-    status(message, "error");
-  }
-}
-
-/** Route downloaded artwork to the right slot for what it was fetched for.
+/**
+ * What to assume before anything has been measured.
  *
- * "game" is always a single game's own cover, in or out of a bundle. The
- * other three are per-cartridge art: in a bundle that means the collection
- * (logo/icon/background live at that level only); outside one, the single
- * game being built takes their place instead.
+ * A cartridge is only as quick as the link it is on, and the launcher already
+ * asks the drive what that is. A negotiated link gives a ceiling; the fraction
+ * of it a real copy reaches is well under the theoretical figure, because a
+ * game is thousands of files rather than one long stream. When the link cannot
+ * be read at all, this is the fallback — deliberately pessimistic, so an
+ * estimate comes in early rather than late.
  */
-function applyDownloadedArtwork(effectiveKind, cached) {
-  if (effectiveKind === "game") {
-    artworkTarget.game.coverSource = cached.path;
-    artworkTarget.game.coverPreview = cached.dataUri;
-    selectedCoverSource = cached.path;
-    if (isBundleMode()) renderBundlePanel();
-  } else if (effectiveKind === "collection-grid") {
-    collectionCover = { path: cached.path, preview: cached.dataUri };
-    el.btnCollectionCover.querySelector(".btn__label").textContent = "Change collection grid…";
-    el.btnCollectionCoverClear.hidden = false;
-  } else if (effectiveKind === "logo") {
-    if (isBundleMode()) {
-      collectionLogo = cached;
-      el.btnCollectionLogo.querySelector(".btn__label").textContent = "Change title logo…";
-    } else {
-      gameLogo = cached;
-      el.btnGameLogo.querySelector(".btn__label").textContent = "Change title logo…";
-    }
-  } else if (effectiveKind === "icon") {
-    if (isBundleMode()) {
-      collectionIcon = cached;
-      el.btnCollectionIcon.querySelector(".btn__label").textContent = "Change cartridge icon…";
-    } else {
-      gameIcon = cached;
-      el.btnGameIcon.querySelector(".btn__label").textContent = "Change cartridge icon…";
-    }
-  } else if (effectiveKind === "background") {
-    if (isBundleMode()) {
-      collectionBackground = cached;
-      el.btnCollectionBackground.querySelector(".btn__label").textContent = "Change launcher hero…";
-    } else {
-      gameBackground = cached;
-      el.btnGameBackground.querySelector(".btn__label").textContent = "Change launcher hero…";
-    }
-  }
-  // The poster in the preview card is the cover, and only the cover — a logo,
-  // hero or icon download must not overwrite it, or picking one throws away
-  // whatever cover was already chosen with no way to see that happened.
-  if (effectiveKind === "game" || effectiveKind === "collection-grid") {
-    setPreviewArt(cached.dataUri, `From SteamGridDB · ${el.sgdbType.value}`);
-  }
-  refreshCollectionPreview();
+const FALLBACK_WRITE_BYTES_PER_S = 120_000_000;
+
+/** Sustained many-file throughput as a share of the negotiated link. */
+const LINK_EFFICIENCY = 0.45;
+
+let measuredRate = null;
+let linkRate = null;
+
+function writeRate() {
+  return measuredRate ?? linkRate ?? FALLBACK_WRITE_BYTES_PER_S;
 }
 
-async function useManualSgdbUrl() {
-  const url = el.sgdbManualUrl.value.trim();
-  if (!url) return;
-  const targetGame = sgdbTargetGame();
-  const effectiveKind = sgdbEffectiveTargetKind();
-  const keyBase = (targetGame?.name || el.collectionTitle.value.trim() || el.customTitle.value.trim() || "manual").toLowerCase();
-  const gameKey = sgdbGameKey();
+/** Ask the drive what it is connected at, so the estimate has a basis. */
+async function readLinkRate(drivePath) {
+  linkRate = null;
   try {
-    const cached = await invoke("sgdb_download_artwork", {
-      url,
-      cacheKey: `${keyBase}-manual-url`,
-      gameKey: gameKey || null,
-    });
-    applyDownloadedArtwork(effectiveKind, cached);
-    status("Selected artwork URL.", "good");
-    if (el.sgdbDialog.open) el.sgdbDialog.close("selected");
-  } catch (error) {
-    status(`Could not fetch that URL: ${String(error)}`, "error");
+    const health = await invoke("cartridge_health", { drivePath });
+    if (typeof health?.linkMbps === "number" && health.linkMbps > 0) {
+      linkRate = (health.linkMbps * 1_000_000 / 8) * LINK_EFFICIENCY;
+    }
+  } catch {
+    // an estimate without it is still an estimate
   }
 }
 
-/* ----------------------------------------------------------------- create */
+/** Reading back to verify is faster than writing, but not free. */
+function readRate() {
+  return writeRate() * 1.6;
+}
 
-function intent() {
-  // Bundle mode: the "intent" is the collection.
-  if (isBundleMode()) {
-    const title = el.collectionTitle.value.trim() || el.collectionTitle.placeholder || "Game Collection";
-    return {
-      title,
-      executable: "",
-      appId: null,
-      playniteId: null,
-      isBundle: true,
-    };
+/** Seconds the whole build is expected to take, from what is ticked. */
+function estimateSeconds() {
+  let seconds = 0;
+  if (el.optFormat.checked) seconds += 20;
+  if (el.optCloseSteam.checked && !el.optCloseSteamRow.hidden) seconds += 5;
+  const size = el.optCopy.checked ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0) : 0;
+  if (size) seconds += size / writeRate();
+  if (el.optVerify.checked && size) seconds += size / readRate();
+  seconds += 2; // conf, launcher, manifest
+  return seconds;
+}
+
+/* ==========================================================================
+   The plan: what is ticked, in the order it will happen
+   ========================================================================== */
+
+function planSteps() {
+  const steps = [];
+  const size = el.optCopy.checked
+    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
+    : 0;
+
+  if (el.optFormat.checked && formatPlan) {
+    steps.push({
+      what: `Format ${formatPlan.currentLabel} as ${filesystemLabel(filesystem())}`,
+      detail: `renamed ${el.formatLabel.value.trim()} · ~20 s`,
+      danger: true,
+    });
   }
-  if (manualMode) {
-    return {
-      title: el.customTitle.value.trim(),
-      executable: el.customExec.value.trim(),
-      appId: null,
-      playniteId: null,
-      sourceDir: chosenFolder?.path ?? null,
-    };
+  if (el.optCopy.checked && !el.optCloseSteamRow.hidden && el.optCloseSteam.checked) {
+    const steamCount = picked.filter((g) => g.library === "steam").length;
+    steps.push({
+      what: "Close Steam",
+      detail: steamCount ? `${steamCount} of ${picked.length} are Steam games` : "the drive is a Steam library",
+    });
   }
-  if (selectedGame) {
-    return {
-      title: selectedGame.name,
-      executable: selectedGame.executable,
-      appId: selectedGame.library === "steam" ? selectedGame.id : null,
-      playniteId: selectedGame.library === "playnite" ? selectedGame.id : null,
-    };
+  if (size) {
+    const folders = copyable().length;
+    steps.push({
+      what: `Copy ${formatBytes(size)}`,
+      detail: `${folders} folder${folders === 1 ? "" : "s"} · ${formatDuration(size / writeRate())}`,
+    });
   }
-  return null;
+  if (el.optVerify.checked && size) {
+    steps.push({ what: "Verify the copy", detail: formatDuration(size / readRate()) });
+  }
+  steps.push({
+    what: el.optIcon.checked
+      ? "Write launcher, icon and manifest"
+      : "Write the launcher and manifest",
+    detail: el.optIcon.checked ? "autorun.ico · ~2 s" : "~2 s",
+  });
+  if (el.optTune.checked && !el.optTuneRow.hidden) {
+    steps.push({ what: "Tune Windows for this cartridge", detail: "Defender and Search" });
+  }
+  if (el.optTrim.checked && !el.optTrimRow.hidden) {
+    steps.push({ what: "Release freed space", detail: "needs the format permission" });
+  }
+  if (el.optEject.checked) {
+    // Only a formatted drive answers to the new name; otherwise it keeps its own.
+    const name = el.optFormat.checked
+      ? el.formatLabel.value.trim() || driveLabel()
+      : driveLabel();
+    steps.push({ what: `Eject ${name}` });
+  }
+  return steps;
+}
+
+function driveLabel() {
+  return drives.find((d) => d.path === selectedDrive)?.label ?? "the cartridge";
+}
+
+function refreshPlan() {
+  // The plan is only worth showing once there is a drive for it to happen to.
+  const show = phase === "options" && selectedDrive && (picked.length > 0 || manual);
+  el.railPlan.hidden = !show;
+  if (!show) return;
+
+  el.plan.replaceChildren();
+  planSteps().forEach((step, index) => {
+    const li = document.createElement("li");
+    li.className = "plan-row";
+    if (step.danger) li.classList.add("plan-row--danger");
+
+    const n = document.createElement("span");
+    n.className = "plan-row__n";
+    n.textContent = String(index + 1);
+
+    const body = document.createElement("span");
+    const what = document.createElement("span");
+    what.className = "plan-row__what";
+    what.textContent = step.what;
+    body.append(what);
+    if (step.detail) {
+      const detail = document.createElement("span");
+      detail.className = "plan-row__detail";
+      detail.textContent = step.detail;
+      body.append(detail);
+    }
+
+    li.append(n, body);
+    el.plan.append(li);
+  });
+}
+
+/* ==========================================================================
+   The rail
+   ========================================================================== */
+
+function cartridgeTitle() {
+  if (manual) return el.customTitle.value.trim() || "Untitled";
+  if (isCollection()) return collectionName();
+  return picked[0]?.name ?? "";
+}
+
+function refreshRail() {
+  const has = picked.length > 0 || Boolean(manual);
+  el.railEmpty.hidden = has;
+  el.railBody.hidden = !has;
+  el.railDrives.hidden = phase === "running";
+
+  if (!has) {
+    refreshCreateButton();
+    return;
+  }
+
+  // Cartridge or Multicartridge — the panel titles itself to the tick count.
+  const collection = isCollection();
+  el.railKindText.textContent = collection ? "Multicartridge" : "Cartridge";
+  el.railKindCount.hidden = !collection;
+  el.railKindCount.textContent = `${picked.length} games`;
+  el.barText.textContent = building
+    ? `Writing ${el.optFormat.checked ? el.formatLabel.value.trim() || driveLabel() : driveLabel()}`
+    : collection
+      ? "Create multicartridge"
+      : "Create cartridge";
+
+  el.railTitle.textContent = cartridgeTitle() || "Nothing yet";
+
+  // A collection has no art of its own until it is given some.
+  const coverSrc = art.cover?.preview ?? (collection ? null : picked[0]?.cover);
+  setPlate(el.railCover, el.railCoverImg, coverSrc);
+
+  const bits = [];
+  if (!collection && picked[0]) {
+    if (picked[0].sizeOnDisk) bits.push(formatBytes(picked[0].sizeOnDisk));
+    if (picked[0].source) bits.push(picked[0].source);
+  } else if (collection) {
+    // Only name a drive once one has been chosen — before that the collection
+    // has a name and nothing else, and saying otherwise is an invention.
+    if (selectedDrive) {
+      const label = el.optFormat.checked ? el.formatLabel.value.trim() : driveLabel();
+      if (label) bits.push(label);
+      bits.push(filesystemLabel(filesystem()));
+    } else {
+      bits.push(`${picked.length} games`);
+    }
+  } else if (manual?.folder) {
+    bits.push(formatBytes(manual.folder.sizeBytes));
+  }
+  el.railSub.textContent = bits.join(" · ");
+  el.btnRailArt.hidden = collection || !picked[0];
+  el.btnRailArt.textContent = art.cover ? "Change artwork" : "Replace artwork";
+
+  // "Use Hollow Knight's" — the link has to name what it would borrow from.
+  const first = picked[0];
+  el.btnInheritCover.textContent = first ? `Use ${first.name}'s` : "Use the first game's";
+  el.btnInheritCover.hidden = !first;
+
+  // The games in it, while the library is open.
+  const showGames = collection && phase === "games";
+  el.railGames.hidden = !showGames;
+  if (showGames) renderRailGames();
+
+  refreshSpace();
+  refreshPlan();
+  refreshCreateButton();
+}
+
+function renderRailGames() {
+  el.railGameList.replaceChildren();
+  for (const game of picked) {
+    const li = document.createElement("li");
+    li.className = "rail-game";
+
+    const cover = document.createElement("img");
+    cover.className = "rail-game__cover";
+    cover.alt = "";
+    if (game.cover) cover.src = safeSrc(game.cover);
+
+    const name = document.createElement("span");
+    name.className = "rail-game__name";
+    name.textContent = game.name;
+
+    const size = document.createElement("span");
+    size.className = "rail-game__size";
+    size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "—";
+
+    li.append(cover, name, size);
+    el.railGameList.append(li);
+  }
+}
+
+/**
+ * What it costs on the drive — one band per game.
+ *
+ * A stack of bands rather than one bar, so it is visible which game is taking
+ * the room before anything is written.
+ */
+function refreshSpace() {
+  const drive = drives.find((d) => d.path === selectedDrive);
+  const list = copyable();
+  const size = list.reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0);
+
+  el.railSpace.hidden = !drive || size === 0;
+  if (el.railSpace.hidden) return;
+
+  const capacity = el.optFormat.checked ? drive.totalBytes : drive.freeBytes;
+  el.railDriveLabel.textContent = drive.label || drive.path;
+  el.railDriveFill.textContent = `${formatBytes(size)} of ${formatBytes(drive.totalBytes)}`;
+
+  el.railBar.replaceChildren();
+  el.railBar.classList.toggle("is-over", size > capacity);
+  list.forEach((game, index) => {
+    const bytes = game.sizeOnDisk || game.folder?.sizeBytes || 0;
+    const band = document.createElement("div");
+    band.style.width = `${Math.max(1, (bytes / drive.totalBytes) * 100)}%`;
+    // Each band a step further round the accent's hue, so they read as one
+    // family rather than a chart.
+    band.style.background = `color-mix(in oklch, var(--accent) ${100 - index * 12}%, oklch(0.5 0.12 20))`;
+    el.railBar.append(band);
+  });
+
+  el.railBarHint.hidden = list.length < 2;
+}
+
+/* ==========================================================================
+   The button, and what it is waiting for
+   ========================================================================== */
+
+function blockingReason() {
+  if (picked.length === 0 && !manual) return "tick a game";
+  if (manual && !manual.executable && !el.customExec.value.trim() && !manual.folder) {
+    return "say what Play should start";
+  }
+  if (manual && !el.customTitle.value.trim()) return "give it a title";
+  if (!selectedDrive) return "choose a cartridge";
+
+  const drive = drives.find((d) => d.path === selectedDrive);
+  const size = el.optCopy.checked
+    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
+    : 0;
+  const capacity = el.optFormat.checked ? drive?.totalBytes : drive?.freeBytes;
+  if (size > 0 && drive && size > capacity) return "free enough space";
+
+  if (el.optFormat.checked) {
+    if (!formatPlan) return "load the drive format details";
+    if (el.formatConfirm.value.trim() !== formatPlan.currentLabel) {
+      return `type ${formatPlan.currentLabel} to confirm`;
+    }
+    if (!el.formatLabel.value.trim()) return "name the drive";
+  }
+  return "";
 }
 
 function refreshCreateButton() {
   if (building) {
     el.create.disabled = true;
-    el.readyMessage.textContent = "Writing the cartridge…";
+    el.btnOptions.hidden = true;
     return;
   }
 
-  el.create.querySelector(".btn__label").textContent = el.optFormat.checked
-    ? "Format and write cartridge"
-    : "Write cartridge";
+  const collection = isCollection();
+  const reason = blockingReason();
+  const ready = reason === "";
 
-  const setReady = (message) => {
-    el.readyMessage.textContent = message ? `Ready when: ${message}` : "Ready to write.";
-  };
+  // In the library phase a collection is named before it is written. That
+  // needs no drive and no options, so the button leads there as soon as there
+  // is more than one game — the cartridge is chosen on the way.
+  const needsNaming = collection && phase === "games";
 
-  // Bundle: need 2+ games and a drive. Check for space overflow.
-  if (isBundleMode()) {
-    const hasTitle = Boolean(
-      el.collectionTitle.value.trim() || el.collectionTitle.placeholder,
-    );
-    const drive = drives.find((d) => d.path === selectedDrive);
-    const totalSize = [...bundleGames.values()].reduce(
-      (sum, g) => sum + (g.sizeOnDisk || 0),
-      0,
-    );
-    // A collection that only points at installed games is a few kilobytes;
-    // space is only a question once the files are going across too.
-    const capacity = el.optFormat.checked ? drive?.totalBytes : drive?.freeBytes;
-    const noSpace =
-      el.optCopy.checked && drive && totalSize > 0 && totalSize > capacity;
-    let ok = hasTitle && Boolean(selectedDrive) && !noSpace;
-    if (ok && el.optFormat.checked) {
-      const typed = el.formatConfirm.value.trim();
-      ok = Boolean(formatPlan) && typed === formatPlan.currentLabel && Boolean(el.formatLabel.value.trim());
-    }
-    el.create.disabled = !ok;
-    setReady(
-      ok ? "" : !hasTitle ? "name the collection" : !selectedDrive ? "choose a cartridge" : noSpace ? "free enough space" : el.optFormat.checked && !formatPlan ? "load the drive format details" : el.optFormat.checked ? "type the current drive name to confirm" : "finish the cartridge choices",
-    );
+  if (needsNaming) {
+    el.btnOptions.hidden = true;
+    el.create.disabled = false;
+    el.createLabel.textContent = "Name the collection";
+    el.readyMessage.textContent = `Name it, or write it as "${picked.length} games".`;
+    el.readyMessage.className = "";
     return;
   }
 
-  const want = intent();
-  // A folder being copied supplies the launch target itself: the wizard picks
-  // the program inside it, so there is nothing for the user to type.
-  const copyingFolder = manualMode && Boolean(chosenFolder) && el.optCopy.checked;
-  let ok = Boolean(
-    want && want.title && (want.executable || copyingFolder) && selectedDrive,
-  );
+  el.btnOptions.hidden = !ready || phase === "options";
+  el.create.disabled = !ready;
 
-  // A non-Steam copy has nothing to point Play at until a program is chosen.
-  if (ok && !el.exePick.hidden && exeCandidates.length === 0) {
-    ok = false;
+  el.createLabel.textContent = el.optFormat.checked
+    ? "Format and write"
+    : collection
+      ? "Write multicartridge"
+      : "Write cartridge";
+
+  if (!ready) {
+    el.readyMessage.textContent =
+      picked.length === 0 && !manual ? "Nothing to write yet" : `Ready when: ${reason}`;
+    el.readyMessage.className = "";
+    return;
   }
 
-  if (ok && el.optCopy.checked && selectedGame && selectedDrive) {
-    const drive = drives.find((d) => d.path === selectedDrive);
-    if (drive) {
-      const capacity = el.optFormat.checked ? drive.totalBytes : drive.freeBytes;
-      if (selectedGame.sizeOnDisk > 0 && selectedGame.sizeOnDisk > capacity) {
-        ok = false;
-      }
+  const seconds = estimateSeconds();
+  const size = el.optCopy.checked
+    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
+    : 0;
+
+  if (el.optFormat.checked && formatPlan) {
+    el.readyMessage.textContent = `Erases ${formatPlan.currentLabel} · ${formatDuration(seconds)}`;
+    el.readyMessage.className = "is-destructive";
+  } else {
+    el.readyMessage.textContent = size
+      ? `Ready — ${formatBytes(size)}, ${formatDuration(seconds)}`
+      : `Ready — ${formatDuration(seconds)}`;
+    el.readyMessage.className = "is-ready";
+  }
+}
+
+/* ==========================================================================
+   Writing
+   ========================================================================== */
+
+/** One row per step of the plan, ticked off as the build reports them. */
+function renderLog(steps, doneCount) {
+  el.log.replaceChildren();
+  steps.forEach((step, index) => {
+    const li = document.createElement("li");
+    li.className = "log-row";
+    if (index < doneCount) li.classList.add("is-done");
+    else if (index === doneCount) li.classList.add("is-now");
+
+    const mark = document.createElement("span");
+    mark.className = "log-row__mark";
+    if (index < doneCount) {
+      mark.innerHTML =
+        '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="8" height="8" aria-hidden="true"><path d="M2.4 6.2l2.2 2.2 5-5.4" /></svg>';
     }
-  }
 
-  // Formatting must be confirmed before Write is even offered.
-  if (ok && el.optFormat.checked) {
-    const typed = el.formatConfirm.value.trim();
-    ok = Boolean(formatPlan) && typed === formatPlan.currentLabel && Boolean(el.formatLabel.value.trim());
-  }
-  el.create.disabled = !ok;
-  setReady(
-    ok ? "" : !want?.title ? "choose a game or enter a title" : !selectedDrive ? "choose a cartridge" : !want.executable && !copyingFolder ? "choose what Play should start" : !el.exePick.hidden && exeCandidates.length === 0 ? "choose a runnable program" : el.optCopy.checked && selectedGame && selectedDrive && selectedGame.sizeOnDisk > 0 && selectedGame.sizeOnDisk > (el.optFormat.checked ? drives.find((d) => d.path === selectedDrive)?.totalBytes : drives.find((d) => d.path === selectedDrive)?.freeBytes) ? "free enough space" : el.optFormat.checked && !formatPlan ? "load the drive format details" : el.optFormat.checked ? "type the current drive name to confirm" : "finish the cartridge choices",
-  );
+    const text = document.createElement("span");
+    text.textContent = step.what;
+
+    li.append(mark, text);
+    el.log.append(li);
+  });
 }
 
-function showProgress(on) {
-  el.progress.hidden = !on;
-  if (!on) {
-    el.progressFill.style.setProperty("--progress-pct", "0");
-    el.progressFill.classList.remove("is-indeterminate");
-    el.progressText.textContent = "";
-    el.progressTrack.removeAttribute("aria-valuenow");
-    el.progressTrack.removeAttribute("aria-valuetext");
+/** The options that are in force, so the running window still says what it is doing. */
+function renderForced() {
+  const rows = [
+    [el.optFormat.checked, `Formatted as ${filesystemLabel(filesystem())}`, "Not formatted"],
+    [el.optCopy.checked, "Games copied onto the cartridge", "Nothing copied — a key only"],
+    [el.optVerify.checked && el.optCopy.checked, "Verify after copying", "Copy not verified"],
+    [el.optIcon.checked, "Drive icon from artwork", "No drive icon"],
+    [el.optTune.checked && !el.optTuneRow.hidden, "Windows tuned", "Windows tuning skipped"],
+    [el.optEject.checked, "Eject when done", "Left mounted"],
+  ];
+
+  el.forced.replaceChildren();
+  for (const [on, yes, no] of rows) {
+    const li = document.createElement("li");
+    li.className = on ? "forced-row" : "forced-row is-off";
+    const mark = document.createElement("span");
+    mark.className = "forced-row__mark";
+    mark.textContent = on ? "✓" : "—";
+    const text = document.createElement("span");
+    text.textContent = on ? yes : no;
+    li.append(mark, text);
+    el.forced.append(li);
   }
 }
+
+let runStartedAt = 0;
+let planForRun = [];
+let doneSteps = 0;
 
 function onProgress(p) {
-  el.progress.hidden = false;
+  // The step name the backend reports moves the log on.
+  const stepIndex = planForRun.findIndex((s) => s.step === p.step);
+  if (stepIndex >= 0 && stepIndex > doneSteps) doneSteps = stepIndex;
+
+  el.runningPhase.textContent = p.message || "";
+  if (p.title) el.runningTitle.textContent = p.title;
+
   if (p.totalBytes > 0) {
     el.progressFill.classList.remove("is-indeterminate");
     const pct = Math.min(100, (p.doneBytes / p.totalBytes) * 100);
-    el.progressFill.style.setProperty("--progress-pct", `${(pct / 100).toFixed(3)}`);
-    el.progressText.textContent =
-      `${p.message} ${formatBytes(p.doneBytes)} of ${formatBytes(p.totalBytes)}`;
-    // The bar is the only thing moving for minutes at a time, so it carries
-    // real progressbar semantics rather than leaving a screen reader in
-    // silence between the first click and the final status line.
+    el.progressFill.style.width = `${pct}%`;
     el.progressTrack.setAttribute("aria-valuenow", pct.toFixed(0));
     el.progressTrack.setAttribute(
       "aria-valuetext",
       `${p.message} ${formatBytes(p.doneBytes)} of ${formatBytes(p.totalBytes)}, ${pct.toFixed(0)}%`,
     );
+
+    el.writtenDone.textContent = formatBytes(p.doneBytes).replace(/\s\w+$/, "");
+    el.writtenTotal.textContent = ` / ${formatBytes(p.totalBytes)}`;
+
+    // Measured, not assumed, the moment there is anything to measure.
+    const elapsed = (performance.now() - runStartedAt) / 1000;
+    if (elapsed > 2 && p.doneBytes > 0) {
+      measuredRate = p.doneBytes / elapsed;
+      el.rate.textContent = `${formatBytes(measuredRate)}/s`;
+      const left = (p.totalBytes - p.doneBytes) / measuredRate;
+      el.remaining.textContent = clock(left);
+    }
   } else {
-    // Steps without a byte count (format, autorun) still need to look alive.
+    // Steps without a byte count still need to look alive.
     el.progressFill.classList.add("is-indeterminate");
-    el.progressText.textContent = p.message;
     el.progressTrack.removeAttribute("aria-valuenow");
     el.progressTrack.setAttribute("aria-valuetext", p.message);
   }
+
+  if (p.file) el.currentFile.textContent = p.file;
+  renderLog(planForRun, doneSteps);
 }
 
-async function writeCartridge() {
-  const want = intent();
-  if (!want || !selectedDrive) return;
+function buildRequest() {
+  const shared = {
+    drivePath: selectedDrive,
+    formatDrive: el.optFormat.checked,
+    formatFilesystem: filesystem(),
+    formatLabel: el.formatLabel.value.trim() || null,
+    formatConfirmation: el.formatConfirm.value.trim() || null,
+    copyGame: el.optCopy.checked,
+    closeSteam: el.optCloseSteam.checked,
+    verifyCopy: el.optVerify.checked,
+    trimAfterWrite: el.optTrim.checked && !el.optTrimRow.hidden,
+    writeIcon: el.optIcon.checked,
+  };
+
+  if (isCollection()) {
+    return {
+      ...shared,
+      title: collectionName(),
+      executable: "",
+      collectionCoverSource: art.cover?.path ?? null,
+      collectionLogoSource: art.logo?.path ?? null,
+      collectionIconSource: art.icon?.path ?? null,
+      collectionBackgroundSource: art.background?.path ?? null,
+      games: picked.map((g) => ({
+        title: g.name,
+        executable: g.executable,
+        appId: g.library === "steam" ? g.id : null,
+        playniteId: g.library === "playnite" ? g.id : null,
+        coverSource: g.coverSource ?? null,
+      })),
+    };
+  }
+
+  if (manual) {
+    return {
+      ...shared,
+      title: el.customTitle.value.trim(),
+      executable: el.customExec.value.trim() || manual.executable || "",
+      appId: null,
+      playniteId: null,
+      sourceDir: manual.folder?.path ?? null,
+      copyExecutable: manual.executable || null,
+      coverSource: art.cover?.path ?? null,
+      iconSource: art.icon?.path ?? null,
+      backgroundSource: art.background?.path ?? null,
+      logoSource: art.logo?.path ?? null,
+    };
+  }
+
+  const game = picked[0];
+  return {
+    ...shared,
+    title: game.name,
+    executable: game.executable,
+    appId: game.library === "steam" ? game.id : null,
+    playniteId: game.library === "playnite" ? game.id : null,
+    coverSource: art.cover?.path ?? null,
+    iconSource: art.icon?.path ?? null,
+    backgroundSource: art.background?.path ?? null,
+    logoSource: art.logo?.path ?? null,
+  };
+}
+
+async function write() {
+  if (building || el.create.disabled) return;
+
+  // From the library, a collection goes to be named rather than written.
+  if (isCollection() && phase === "games") {
+    renderOrder();
+    renderCollectionHint();
+    showPhase("name");
+    refreshCreateButton();
+    return;
+  }
 
   building = true;
-  el.create.disabled = true;
-  el.rescan.disabled = true;
-  showProgress(true);
+  measuredRate = null;
+  runStartedAt = performance.now();
+  doneSteps = 0;
+
+  // The plan the log ticks through, tagged with the step names the backend
+  // reports so the two stay in step.
+  planForRun = planSteps().map((step) => ({
+    ...step,
+    step: stepKeyFor(step.what),
+  }));
+
+  renderForced();
+  el.railForced.hidden = false;
+  el.railPlan.hidden = true;
+  el.runningTitle.textContent = cartridgeTitle();
+  el.runningPhase.textContent = "Starting…";
+  el.writtenDone.textContent = "—";
+  el.writtenTotal.textContent = "";
+  el.remaining.textContent = "—";
+  el.rate.textContent = "";
+  el.currentFile.textContent = "";
   el.progressFill.classList.add("is-indeterminate");
-  el.progressText.textContent = "Starting…";
+  renderLog(planForRun, 0);
+  showPhase("running");
+  refreshCreateButton();
   status("");
+  el.close.disabled = true;
 
   try {
-    let request;
-    if (isBundleMode()) {
-      // Build a bundle request.
-      const bundleList = [...bundleGames.values()];
-      request = {
-        drivePath: selectedDrive,
-        title: want.title,
-        executable: "",
-        formatDrive: el.optFormat.checked,
-        formatFilesystem: el.formatFilesystem.value,
-        formatLabel: el.formatLabel.value.trim() || null,
-        formatConfirmation: el.formatConfirm.value.trim() || null,
-        copyGame: el.optCopy.checked,
-        closeSteam: el.optCloseSteam.checked,
-        verifyCopy: el.optVerify.checked,
-        trimAfterWrite: el.optTrim.checked,
-        collectionCoverSource: collectionCover?.path ?? null,
-        collectionLogoSource: collectionLogo?.path ?? null,
-        games: bundleList.map((g) => ({
-          title: g.name,
-          executable: g.executable,
-          appId: g.library === "steam" ? g.id : null,
-          playniteId: g.library === "playnite" ? g.id : null,
-          // Left for the backend to work out from the ids, the same way a
-          // single game's art is found.
-          coverSource: g.coverSource ?? null,
-        })),
-        collectionIconSource: collectionIcon?.path ?? null,
-        collectionBackgroundSource: collectionBackground?.path ?? null,
-      };
-    } else {
-      request = {
-        drivePath: selectedDrive,
-        title: want.title,
-        executable: want.executable,
-        appId: want.appId,
-        playniteId: want.playniteId,
-        sourceDir: want.sourceDir ?? null,
-        coverSource: selectedCoverSource,
-        iconSource: gameIcon?.path ?? null,
-        backgroundSource: gameBackground?.path ?? null,
-        logoSource: gameLogo?.path ?? null,
-        formatDrive: el.optFormat.checked,
-        formatFilesystem: el.formatFilesystem.value,
-        formatLabel: el.formatLabel.value.trim() || null,
-        formatConfirmation: el.formatConfirm.value.trim() || null,
-        copyGame: el.optCopy.checked,
-        copyExecutable: el.exePick.hidden ? null : el.exeChoices.value || null,
-        closeSteam: el.optCloseSteam.checked,
-        verifyCopy: el.optVerify.checked,
-        trimAfterWrite: el.optTrim.checked,
-      };
-    }
-
+    const request = buildRequest();
     const result = await invoke("create_cartridge", { request });
+
+    doneSteps = planForRun.length;
+    renderLog(planForRun, doneSteps);
+    el.progressFill.classList.remove("is-indeterminate");
+    el.progressFill.style.width = "100%";
 
     const drive = drives.find((d) => d.path === selectedDrive);
     const parts = [`Cartridge written to ${drive ? drive.label : selectedDrive}.`];
     if (result.formatted) {
-      parts.push(
-        `Formatted to ${formatFilesystemLabel(result.formattedFilesystem || request.formatFilesystem)}.`,
-      );
+      parts.push(`Formatted to ${filesystemLabel(result.formattedFilesystem || request.formatFilesystem)}.`);
     }
     if (result.gameCopied) {
       parts.push(
@@ -1604,291 +1415,598 @@ async function writeCartridge() {
           : `Copied ${formatBytes(result.bytesCopied)}.`,
       );
     }
-    if (result.steamClosed) parts.push("Steam was closed.");
-    if (result.steamEntryRemoved) {
-      parts.push("The old entry for this drive was taken out of Steam's library list.");
-    }
-    if (result.registeredWithSteam) parts.push("Registered with Steam.");
-    if (result.verified) parts.push(result.verified);
-    if (result.trim) parts.push(result.trim);
-    if (result.coverWritten) parts.push("Cover art copied.");
-    if (result.icon) parts.push("Drive icon set.");
-    parts.push(...(result.warnings ?? []));
+    if (result.registeredWithSteam) parts.push("Registered as a Steam library.");
+    for (const warning of result.warnings ?? []) parts.push(warning);
 
-    if (el.optTune.checked && platform === "windows") {
-      parts.push(...(await runTuning(true)));
+    // Ejecting is a step of the plan, not an afterthought, so it reports into
+    // the same status line.
+    if (el.optEject.checked) {
+      try {
+        await invoke("eject_drive", { drivePath: selectedDrive });
+        parts.push("Safe to remove.");
+      } catch (error) {
+        parts.push(`Written, but the drive would not eject: ${error}`);
+      }
     }
 
-    status(parts.join(" "), result.warnings?.length ? "" : "good");
-    showProgress(false);
-    el.optFormat.checked = false;
-    el.formatConfirm.value = "";
-    refreshFormatFields();
-    await loadDrives({ keepSelection: true, quiet: true });
+    status(parts.join(" "), (result.warnings ?? []).length ? "" : "good");
+    el.runningPhase.textContent = "Done";
   } catch (error) {
     status(String(error), "error");
-    showProgress(false);
+    el.runningPhase.textContent = "Stopped";
+    showPhase("options");
   } finally {
     building = false;
-    el.rescan.disabled = false;
+    el.close.disabled = false;
+    el.railForced.hidden = true;
+    await refreshDrives();
     refreshCreateButton();
   }
 }
 
-/* ----------------------------------------------------------------- tuning */
+/** Match a plan step to the step name the backend reports for it. */
+function stepKeyFor(what) {
+  const text = what.toLowerCase();
+  if (text.startsWith("format")) return "format";
+  if (text.startsWith("close steam")) return "steam";
+  if (text.startsWith("copy")) return "copy";
+  if (text.startsWith("verify")) return "verify";
+  if (text.startsWith("write")) return "autorun";
+  if (text.startsWith("tune")) return "tune";
+  if (text.startsWith("release")) return "trim";
+  if (text.startsWith("eject")) return "eject";
+  return "";
+}
 
-/**
- * Apply or undo the Windows settings for the chosen drive.
- *
- * Returns sentences to add to the status line. A failure here never fails the
- * cartridge — it is already written by this point.
- */
-async function runTuning(applying) {
-  try {
-    const done = await invoke("apply_tuning", {
-      drivePath: selectedDrive,
-      tweaks: TWEAKS,
-      applying,
-    });
-    if (applying) el.btnTuneUndo.hidden = false;
-    return done;
-  } catch (error) {
-    return [String(error)];
+/* ==========================================================================
+   Artwork
+   ========================================================================== */
+
+let artTarget = "cover";
+let sgdbTimer = null;
+
+function openArtwork(target) {
+  artTarget = target;
+  for (const tab of el.sgdbTabs.children) {
+    tab.setAttribute("aria-selected", String(tab.dataset.type === kindFor(target)));
+  }
+  el.sgdbSearch.value = cartridgeTitle();
+  el.icoReceipt.hidden = true;
+  refreshPreview();
+  el.sgdbDialog.showModal();
+  if (settings.steamgriddbEnabled) searchArtwork();
+  else {
+    el.sgdbStatus.textContent =
+      "SteamGridDB lookup is off. Turn it on in Settings, or paste a URL below.";
+    el.sgdbResults.replaceChildren();
   }
 }
 
-/** Show exactly what would run, before anything is elevated. */
-async function showTuningCommands() {
-  if (!selectedDrive) {
-    status("Choose the cartridge first, so the commands name the right drive.");
+function kindFor(target) {
+  return { cover: "grid", background: "hero", logo: "logo", icon: "icon" }[target] ?? "grid";
+}
+
+function targetFor(kind) {
+  return { grid: "cover", hero: "background", logo: "logo", icon: "icon" }[kind] ?? "cover";
+}
+
+el.sgdbTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest(".tab");
+  if (!tab) return;
+  artTarget = targetFor(tab.dataset.type);
+  for (const other of el.sgdbTabs.children) {
+    other.setAttribute("aria-selected", String(other === tab));
+  }
+  el.icoReceipt.hidden = true;
+  if (settings.steamgriddbEnabled) searchArtwork();
+});
+
+async function searchArtwork() {
+  const query = el.sgdbSearch.value.trim();
+  if (!query) {
+    el.sgdbStatus.textContent = "Type a game title.";
     return;
   }
+  el.sgdbStatus.textContent = "Searching…";
+  el.sgdbResults.replaceChildren();
+
   try {
-    const commands = await invoke("tuning_plan", {
-      drivePath: selectedDrive,
-      tweaks: TWEAKS,
-      applying: true,
+    const found = await invoke("sgdb_search_games", { query });
+    if (!found?.length) {
+      el.sgdbStatus.textContent = "No SteamGridDB matches.";
+      return;
+    }
+    const artwork = await invoke("sgdb_get_artwork", {
+      gameId: found[0].id,
+      kind: kindFor(artTarget),
     });
-    status(`These run as administrator, one prompt each: ${commands.join("  ·  ")}`);
+    renderArtwork(artwork ?? []);
+  } catch (error) {
+    el.sgdbStatus.textContent = String(error);
+  }
+}
+
+function renderArtwork(list) {
+  el.sgdbStatus.textContent = list.length ? "" : "No artwork of that kind.";
+  el.sgdbResults.replaceChildren();
+
+  for (const item of list) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "art-card";
+    btn.setAttribute("aria-pressed", "false");
+
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = safeSrc(item.thumb) || safeSrc(item.url);
+    const meta = document.createElement("span");
+    meta.className = "art-card__meta";
+    meta.textContent = item.width && item.height ? `${item.width}×${item.height}` : "SteamGridDB";
+
+    btn.append(img, meta);
+    btn.addEventListener("click", () => chooseArtwork(item, btn));
+    el.sgdbResults.append(btn);
+  }
+}
+
+async function chooseArtwork(item, btn) {
+  for (const other of el.sgdbResults.children) other.setAttribute("aria-pressed", "false");
+  btn.setAttribute("aria-pressed", "true");
+  el.sgdbStatus.textContent = "Fetching…";
+
+  try {
+    const got = await invoke("sgdb_download_artwork", { url: item.url, kind: kindFor(artTarget) });
+    art[artTarget] = { path: got.path, preview: got.dataUri };
+    el.sgdbStatus.textContent = "";
+
+    // The icon is the only kind that becomes a different file on disk, so it
+    // is the only one that reports back — a line of type, not a wizard page.
+    if (artTarget === "icon") {
+      const name = String(got.path).split(/[/\\]/).pop();
+      el.icoReceipt.hidden = false;
+      el.icoReceipt.textContent =
+        `${name} — 16, 32, 48 and 256 px, written to the cartridge root as autorun.ico.`;
+    }
+
+    refreshPreview();
+    refreshRail();
+  } catch (error) {
+    el.sgdbStatus.textContent = String(error);
+  }
+}
+
+/** Where the chosen artwork lands: the launcher, exactly as it will look. */
+function refreshPreview() {
+  const hero = art.background?.preview;
+  const grid = art.cover?.preview ?? (isCollection() ? null : picked[0]?.cover);
+
+  el.previewHero.hidden = !safeSrc(hero);
+  if (safeSrc(hero)) el.previewHero.src = safeSrc(hero);
+  el.previewGrid.hidden = !safeSrc(grid);
+  if (safeSrc(grid)) el.previewGrid.src = safeSrc(grid);
+  // A hero is the launcher background when there is one; the grid is behind it.
+  el.previewGrid.style.opacity = safeSrc(hero) ? "0" : "1";
+  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(hero) || safeSrc(grid)));
+
+  const logo = art.logo?.preview;
+  el.previewLogo.hidden = !safeSrc(logo);
+  if (safeSrc(logo)) el.previewLogo.src = safeSrc(logo);
+  el.previewStage.classList.toggle("has-logo", Boolean(safeSrc(logo)));
+  el.previewTitle.textContent = cartridgeTitle() || "Nothing yet";
+
+  const icon = art.icon?.preview ?? grid;
+  el.previewIcon.style.backgroundImage = safeSrc(icon) ? `url("${safeSrc(icon)}")` : "";
+}
+
+el.sgdbSearch.addEventListener("input", () => {
+  clearTimeout(sgdbTimer);
+  if (settings.steamgriddbEnabled) sgdbTimer = setTimeout(searchArtwork, 320);
+});
+
+el.sgdbUseManual.addEventListener("click", async () => {
+  const url = el.sgdbManualUrl.value.trim();
+  if (!url) return;
+  el.sgdbStatus.textContent = "Fetching…";
+  try {
+    const got = await invoke("sgdb_download_artwork", { url, kind: kindFor(artTarget) });
+    art[artTarget] = { path: got.path, preview: got.dataUri };
+    el.sgdbStatus.textContent = "";
+    refreshPreview();
+    refreshRail();
+  } catch (error) {
+    el.sgdbStatus.textContent = String(error);
+  }
+});
+
+/** A file on this machine, rather than anything fetched. */
+async function pickCoverFile(target) {
+  try {
+    const chosen = await invoke("pick_cover_image");
+    if (!chosen) return;
+    art[target] = { path: chosen.path, preview: chosen.preview };
+    setPlate(el.collectionCover, el.collectionCoverImg, chosen.preview);
+    refreshPreview();
+    refreshRail();
   } catch (error) {
     status(String(error), "error");
   }
 }
 
-/* ------------------------------------------------------------------- load */
+/* ==========================================================================
+   Settings
+   ========================================================================== */
 
-async function loadGames() {
+function applySettings() {
+  el.setSgdb.checked = Boolean(settings.steamgriddbEnabled);
+  el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
+  el.sgdbKeyField.hidden = !el.setSgdb.checked;
+  el.setFilesystem.value = settings.defaultFilesystem ?? "exfat";
+  el.setVerify.checked = Boolean(settings.defaultVerify);
+  el.setIcon.checked = settings.defaultIcon !== false;
+  el.setEject.checked = settings.defaultEject !== false;
+}
+
+function applyDefaults() {
+  el.optVerify.checked = Boolean(settings.defaultVerify);
+  el.optIcon.checked = settings.defaultIcon !== false;
+  el.optEject.checked = settings.defaultEject !== false;
+  const fs = settings.defaultFilesystem ?? "exfat";
+  const radio = document.querySelector(`#format-filesystem input[value="${fs}"]`);
+  if (radio) radio.checked = true;
+}
+
+function openSettings() {
+  applySettings();
+  renderSources();
+  el.settingsStatus.textContent = "";
+  el.settingsDialog.showModal();
+}
+
+/**
+ * What the library was built from.
+ *
+ * The backend reports problems it hit while scanning rather than a list of
+ * enabled sources, so this says what was actually read and what was not — not
+ * a set of switches the wizard cannot honour.
+ */
+function renderSources() {
+  const counts = new Map();
+  for (const game of library) {
+    const key = game.source || game.library || "Unknown";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, n]) => `${name}: ${n}`);
+  el.sources.textContent = parts.length
+    ? `${library.length} games — ${parts.join(", ")}.`
+    : "No games found yet.";
+
+  el.scanAge.textContent = scannedAt
+    ? `Last scanned ${Math.max(1, Math.round((Date.now() - scannedAt) / 60000))} minutes ago.`
+    : "Not scanned yet.";
+}
+
+async function saveSettings() {
+  el.settingsStatus.textContent = "Saving…";
   try {
-    const result = await invoke("list_games");
-    games = result.games ?? [];
-    const problems = result.problems ?? [];
-    renderGames();
-
-    // A library that could not be read is worth saying out loud even when the
-    // list is not empty. Steam almost always answers, so without this the
-    // wizard silently shows Steam alone and looks like it supports nothing
-    // else.
-    if (problems.length) {
-      status(problems.join(" "), "error");
-    }
+    settings = await invoke("set_settings", {
+      settings: {
+        steamgriddbEnabled: el.setSgdb.checked,
+        steamgriddbApiKey: el.setSgdbKey.value.trim(),
+        defaultFilesystem: el.setFilesystem.value,
+        defaultVerify: el.setVerify.checked,
+        defaultIcon: el.setIcon.checked,
+        defaultEject: el.setEject.checked,
+      },
+    });
+    applyDefaults();
+    refreshOptions();
+    el.settingsDialog.close();
   } catch (error) {
-    games = [];
-    renderGames();
-    el.gamesEmpty.hidden = false;
-    el.gamesEmpty.textContent = `${error} You can still enter a game by hand.`;
+    el.settingsStatus.textContent = String(error);
   }
 }
 
-async function loadDrives({ keepSelection = false, quiet = false } = {}) {
+/* ==========================================================================
+   Editing a cartridge that is already there
+   ========================================================================== */
+
+async function openEditor() {
+  if (!selectedDrive) return;
   try {
-    drives = await invoke("list_target_drives");
+    editing = await invoke("read_cartridge_for_edit", { drivePath: selectedDrive });
   } catch (error) {
-    drives = [];
-    if (!quiet) status(String(error), "error");
+    status(String(error), "error");
+    return;
   }
-  if (!keepSelection || !drives.some((d) => d.path === selectedDrive)) {
-    selectedDrive = null;
-    formatPlan = null;
-    if (drives.length === 1) await selectDrive(drives[0]);
-  }
-  renderDrives();
-  refreshCreateButton();
+  el.editTitle.value = editing.title ?? "";
+  el.editCoverName.textContent = editing.coverPath ? "" : "no artwork on this cartridge";
+  el.editStatus.textContent = "";
+  renderEditGames();
+  el.editDialog.showModal();
 }
 
-/* ---------------------------------------------------------------- wiring */
+function renderEditGames() {
+  el.editGames.replaceChildren();
+  const list = editing?.games ?? [];
+  list.forEach((game, index) => {
+    const li = document.createElement("li");
+    li.className = "rail-game";
 
-el.search.addEventListener("input", renderGames);
-el.btnCustom.addEventListener("click", enterManualMode);
-el.btnPickFolder.addEventListener("click", pickGameFolder);
-el.btnClearFolder.addEventListener("click", clearGameFolder);
-el.btnSgdb.addEventListener("click", () => openSgdbDialog());
-el.btnGameLogo.addEventListener("click", () => openSgdbDialog({ kind: "logo" }));
-el.btnGameBackground.addEventListener("click", () => openSgdbDialog({ kind: "background" }));
-el.btnGameIcon.addEventListener("click", () => openSgdbDialog({ kind: "icon" }));
-el.sgdbSearch.addEventListener("input", queueSgdbSearch);
-el.sgdbType.addEventListener("change", () => {
-  if (sgdbSelectedGameId) loadSgdbArtwork(el.sgdbSearch.value.trim());
-});
-el.sgdbUseManual.addEventListener("click", useManualSgdbUrl);
-el.customTitle.addEventListener("input", () => {
-  refreshCreateButton();
-  refreshOptions();
-  if (el.optFormat.checked && !el.formatLabel.value) refreshFormatFields();
-});
-el.customExec.addEventListener("input", refreshCreateButton);
-el.collectionTitle.addEventListener("input", () => {
-  refreshCreateButton();
-  refreshCollectionPreview();
-});
-el.btnTuneCommands.addEventListener("click", showTuningCommands);
-el.btnTuneUndo.addEventListener("click", async () => {
-  el.btnTuneUndo.disabled = true;
-  const said = await runTuning(false);
-  status(said.join(" "));
-  el.btnTuneUndo.hidden = true;
-  el.btnTuneUndo.disabled = false;
-});
-el.btnEdit.addEventListener("click", openEditor);
-el.editSave.addEventListener("click", saveEdits);
-el.btnEditCover.addEventListener("click", async () => {
-  el.btnEditCover.disabled = true;
+    const name = document.createElement("span");
+    name.className = "rail-game__name";
+    name.textContent = game.title;
+
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "link";
+    up.textContent = "↑";
+    up.disabled = index === 0;
+    up.addEventListener("click", () => moveGame(index, -1));
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "link";
+    down.textContent = "↓";
+    down.disabled = index === list.length - 1;
+    down.addEventListener("click", () => moveGame(index, 1));
+
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "link";
+    drop.textContent = "×";
+    drop.addEventListener("click", () => {
+      editing.games.splice(index, 1);
+      renderEditGames();
+    });
+
+    li.append(name, up, down, drop);
+    el.editGames.append(li);
+  });
+
+  el.editGamesHint.textContent = list.length
+    ? "Reordering changes the order on the launcher. Nothing is copied or deleted."
+    : "This cartridge lists no games.";
+}
+
+function moveGame(index, direction) {
+  const to = index + direction;
+  if (to < 0 || to >= editing.games.length) return;
+  const [moved] = editing.games.splice(index, 1);
+  editing.games.splice(to, 0, moved);
+  renderEditGames();
+}
+
+async function saveEdits() {
+  el.editStatus.textContent = "Saving…";
   try {
-    const picked = await invoke("pick_cover_image");
-    if (picked) {
-      editing.newCover = picked;
-      el.editCoverName.textContent = "new artwork chosen";
-      el.btnEditCover.querySelector(".btn__label").textContent = "Choose another…";
-    }
+    await invoke("update_cartridge", {
+      request: {
+        drivePath: editing.drivePath,
+        title: el.editTitle.value.trim() || editing.title,
+        coverSource: art.cover?.path ?? null,
+        games: (editing.games ?? []).map((g) => ({
+          title: g.title,
+          executable: g.executable,
+        })),
+      },
+    });
+    el.editDialog.close();
+    status("Cartridge updated. No files were moved.", "good");
+    await refreshDrives();
   } catch (error) {
     el.editStatus.textContent = String(error);
-  } finally {
-    el.btnEditCover.disabled = false;
+  }
+}
+
+/* ==========================================================================
+   Wiring
+   ========================================================================== */
+
+el.search.addEventListener("input", renderGames);
+el.btnCustom.addEventListener("click", enterManual);
+el.btnCustomBack.addEventListener("click", () => {
+  manual = null;
+  showPhase("games");
+  renderTickCount();
+  refreshRail();
+});
+el.btnPickFolder.addEventListener("click", pickFolder);
+el.btnClearFolder.addEventListener("click", () => {
+  if (!manual) return;
+  manual.folder = null;
+  manual.choices = [];
+  manual.executable = "";
+  renderFolder();
+  renderExeChoices();
+  refreshRail();
+});
+el.customTitle.addEventListener("input", () => {
+  refreshRail();
+  refreshCreateButton();
+});
+el.customExec.addEventListener("input", () => {
+  if (manual && el.customExec.value.trim()) manual.executable = "";
+  renderExeChoices();
+  refreshCreateButton();
+});
+el.btnCustomCover.addEventListener("click", () => pickCoverFile("cover"));
+
+el.btnCollectionCover.addEventListener("click", () => openArtwork("cover"));
+el.btnInheritCover.addEventListener("click", async () => {
+  const first = picked[0];
+  if (!first) return;
+  try {
+    const cover = await invoke("game_cover", { library: first.library, id: first.id });
+    if (cover) {
+      art.cover = { path: null, preview: cover, inherited: first };
+      setPlate(el.collectionCover, el.collectionCoverImg, cover);
+      refreshRail();
+    }
+  } catch {
+    // nothing cached for it either
   }
 });
-el.btnSettings.addEventListener("click", openSettings);
+el.btnRailArt.addEventListener("click", () => openArtwork("cover"));
+
+el.optCopy.addEventListener("change", () => {
+  copyTouched = true;
+});
+for (const box of [el.optCopy, el.optVerify, el.optIcon, el.optTune, el.optTrim, el.optEject, el.optCloseSteam]) {
+  box.addEventListener("change", refreshOptions);
+}
+el.optFormat.addEventListener("change", () => {
+  refreshFormatFields();
+  refreshOptions();
+  refreshRail();
+});
+for (const radio of document.querySelectorAll("#format-filesystem input")) {
+  radio.addEventListener("change", () => {
+    labelIsOurs = true;
+    refreshFormatFields();
+    renderCollectionHint();
+    refreshOptions();
+  });
+}
+el.formatLabel.addEventListener("input", () => {
+  labelIsOurs = false;
+  refreshCreateButton();
+  refreshRail();
+});
+el.formatConfirm.addEventListener("input", refreshCreateButton);
+
+el.btnOptions.addEventListener("click", () => {
+  showPhase("options");
+  refreshOptions();
+});
+el.btnOptionsBack.addEventListener("click", () => {
+  showPhase(isCollection() ? "name" : manual ? "custom" : "games");
+});
+el.create.addEventListener("click", write);
+el.btnEdit.addEventListener("click", openEditor);
+el.editSave.addEventListener("click", saveEdits);
+el.btnEditCover.addEventListener("click", () => pickCoverFile("cover"));
+el.btnUnregister.addEventListener("click", async () => {
+  try {
+    await invoke("unregister_from_steam", { drivePath: selectedDrive });
+    driveIsSteamLibrary = false;
+    el.btnUnregister.hidden = true;
+    status("Removed from Steam's library list.", "good");
+  } catch (error) {
+    status(String(error), "error");
+  }
+});
+
+el.settings.addEventListener("click", openSettings);
 el.settingsSave.addEventListener("click", saveSettings);
 el.setSgdb.addEventListener("change", () => {
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
 });
-el.btnCollectionCover.addEventListener("click", async () => {
-  el.btnCollectionCover.disabled = true;
-  try {
-    const picked = await invoke("pick_cover_image");
-    if (picked) {
-      collectionCover = picked;
-      el.btnCollectionCoverClear.hidden = false;
-      el.btnCollectionCover.querySelector(".btn__label").textContent = "Change artwork…";
-      refreshCollectionPreview();
-    }
-  } catch (error) {
-    status(String(error), "error");
-  } finally {
-    el.btnCollectionCover.disabled = false;
-  }
-});
-el.btnCollectionGridSgdb.addEventListener("click", () => {
-  openSgdbDialog({ kind: "collection-grid" });
-});
-el.btnCollectionLogo.addEventListener("click", () => {
-  openSgdbDialog({ kind: "logo" });
-});
-el.btnCollectionIcon.addEventListener("click", () => {
-  openSgdbDialog({ kind: "icon" });
-});
-el.btnCollectionBackground.addEventListener("click", () => {
-  openSgdbDialog({ kind: "background" });
-});
-el.btnCollectionCoverClear.addEventListener("click", () => {
-  collectionCover = null;
-  el.btnCollectionCoverClear.hidden = true;
-  el.btnCollectionCover.querySelector(".btn__label").textContent = "Choose artwork…";
-  refreshCollectionPreview();
-});
-el.optVerify.addEventListener("change", refreshCreateButton);
-el.optCopy.addEventListener("change", () => {
-  // refreshOptions, not just the exe picker: the rows that only make sense
-  // once files are moving — the check, and its hint — hang off this too.
-  refreshOptions();
-  refreshCreateButton();
-});
-el.exeChoices.addEventListener("change", refreshCreateButton);
-el.optFormat.addEventListener("change", () => {
-  refreshFormatFields();
-  refreshOptions();
-  refreshCreateButton();
-});
-el.formatFilesystem.addEventListener("change", () => {
-  refreshFormatFields();
-  refreshCreateButton();
+el.btnRescan.addEventListener("click", async () => {
+  await refreshLibrary();
+  await refreshDrives();
+  renderSources();
 });
 
-el.formatConfirm.addEventListener("input", refreshCreateButton);
-el.formatLabel.addEventListener("input", () => {
-  // Once it has been typed in, changing the filesystem must not overwrite it.
-  labelIsOurs = false;
-  refreshCreateButton();
-});
-el.create.addEventListener("click", writeCartridge);
-el.rescan.addEventListener("click", async () => {
-  status("Rescanning…");
-  await Promise.all([loadGames(), loadDrives({ keepSelection: true, quiet: true })]);
-  status("");
-});
-el.unregister.addEventListener("click", async () => {
-  if (!selectedDrive) return;
-  el.unregister.disabled = true;
+el.btnTuneCommands.addEventListener("click", async () => {
   try {
-    const removed = await invoke("unregister_from_steam", { drivePath: selectedDrive });
-    status(
-      removed
-        ? "Removed from Steam's library list. Its files are untouched."
-        : "That drive was not in Steam's library list.",
-      removed ? "good" : "",
-    );
-    el.unregister.hidden = removed;
+    const commands = await invoke("tuning_plan", { drivePath: selectedDrive });
+    status((commands ?? []).join("\n"));
   } catch (error) {
     status(String(error), "error");
-  } finally {
-    el.unregister.disabled = false;
+  }
+});
+el.btnTuneUndo.addEventListener("click", async () => {
+  try {
+    const lines = await invoke("apply_tuning", { drivePath: selectedDrive, applying: false });
+    status((lines ?? []).join(" "), "good");
+    el.btnTuneUndo.hidden = true;
+  } catch (error) {
+    status(String(error), "error");
   }
 });
 
-el.close.addEventListener("click", closeWindow);
-
-if (tauri?.event) {
-  tauri.event.listen("open-settings", openSettings);
-}
+el.close.addEventListener("click", async () => {
+  if (building) return;
+  if (tauri?.window) await tauri.window.getCurrentWindow().close();
+});
 
 document.addEventListener("keydown", (event) => {
-  // Never let Escape discard a half-written cartridge.
-  if (event.key === "Escape" && !building) {
+  if (event.key === "Escape") {
+    if (building) event.preventDefault();
+    return;
+  }
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
-    closeWindow();
+    write();
   }
 });
 
-async function closeWindow() {
-  if (tauri?.window) await tauri.window.getCurrentWindow().close();
+/* ==========================================================================
+   Boot
+   ========================================================================== */
+
+async function refreshLibrary() {
+  try {
+    const result = await invoke("list_games");
+    library = result.games ?? [];
+    scannedAt = Date.now();
+    if (result.problems?.length) status(result.problems.join(" "), "error");
+  } catch (error) {
+    library = [];
+    status(String(error), "error");
+  }
+  renderGames();
+}
+
+async function refreshDrives() {
+  try {
+    drives = await invoke("list_target_drives");
+  } catch {
+    drives = [];
+  }
+  // A drive that has gone away takes the selection with it.
+  if (selectedDrive && !drives.some((d) => d.path === selectedDrive)) {
+    selectedDrive = null;
+    formatPlan = null;
+  }
+  renderDrives();
+  if (!selectedDrive && drives.length === 1) await selectDrive(drives[0]);
+  refreshRail();
 }
 
 async function start() {
-  if (tauri?.event) {
-    tauri.event.listen("cartridge://progress", (event) => onProgress(event.payload));
-  }
   try {
     platform = await invoke("host_platform");
   } catch {
     platform = "";
   }
-  await Promise.all([loadSettings(), loadGames(), loadDrives()]);
+
+  try {
+    settings = { ...settings, ...(await invoke("get_settings")) };
+  } catch {
+    // defaults stand
+  }
+  applyDefaults();
+
+  await refreshLibrary();
+  await refreshDrives();
   refreshOptions();
-  if (tauri?.window) await tauri.window.getCurrentWindow().show();
+  showPhase("games");
+
+  if (tauri?.event) {
+    tauri.event.listen("open-settings", openSettings);
+    tauri.event.listen("cartridge://progress", (event) => onProgress(event.payload));
+  }
 }
 
 /* ==========================================================================
-   Browser preview — opened outside Tauri, so the wizard can be worked on
-   without Playnite, Steam or a spare drive:
-       npx http-server tauri-ui  →  http://localhost:8080/create.html
+   Browser preview
+   --------------------------------------------------------------------------
+   Outside Tauri the wizard serves a sample library so the window can be
+   designed and reviewed without a drive:
+       npx http-server tauri-ui  →  http://localhost:8080/app/create.html
    ========================================================================== */
 
 async function demoInvoke(command, args) {
@@ -1910,9 +2028,6 @@ async function demoInvoke(command, args) {
         { id: "d9b2-halo", name: "Halo Infinite", library: "playnite", source: "Xbox",
           sizeOnDisk: 0, hasCover: false,
           executable: "playnite://playnite/start/d9b2-halo", canCopy: false },
-        { id: "e0c3-mario", name: "Super Mario 64", library: "playnite", source: "Nintendo 64",
-          sizeOnDisk: 0, hasCover: false,
-          executable: "playnite://playnite/start/e0c3-mario", canCopy: false },
         { id: "413150", name: "Stardew Valley", library: "steam", source: "Steam",
           sizeOnDisk: 1_006_632_960, hasCover: false,
           executable: "steam://rungameid/413150", canCopy: true },
@@ -1923,8 +2038,6 @@ async function demoInvoke(command, args) {
     case "set_settings":
       return args.settings;
     case "suggest_collection_name": {
-      // Mirrors create.rs closely enough for the preview: the shared opening
-      // words, or a count.
       const words = args.titles.map((t) => t.trim().split(/\s+/));
       const shared = [];
       for (let i = 0; i < words[0].length; i += 1) {
@@ -1950,7 +2063,7 @@ async function demoInvoke(command, args) {
         ],
       };
     case "update_cartridge":
-      return { confPath: `${args.request.drivePath}/cartridge.conf`, coverWritten: Boolean(args.request.coverSource), autorunWritten: true, icon: null, warnings: [] };
+      return { confPath: `${args.request.drivePath}/cartridge.conf`, warnings: [] };
     case "host_platform":
       return "linux";
     case "tuning_plan":
@@ -1960,35 +2073,22 @@ async function demoInvoke(command, args) {
       ];
     case "apply_tuning":
       return args.applying
-        ? ["Excluded the cartridge from Defender scanning.", "Search indexing switched off for the cartridge."]
-        : ["Defender scans the cartridge again.", "Search indexing switched back on."];
+        ? ["Excluded the cartridge from Defender scanning."]
+        : ["Defender scans the cartridge again."];
     case "pick_cover_image":
-      return { path: "/home/harry/Pictures/collection.jpg", preview: "src/demo/cover.jpg" };
+      return { path: "/home/harry/Pictures/collection.jpg", preview: "src/demo/gow-collection.jpg" };
     case "game_cover":
       return args.id === "367520" ? "src/demo/cover.jpg" : "";
     case "sgdb_last_used_artwork":
       return null;
     case "sgdb_search_games":
-      return [
-        { id: 1, name: args.query || "Hollow Knight" },
-        { id: 2, name: "God of War" },
-      ];
+      return [{ id: 1, name: args.query || "Hollow Knight" }];
     case "sgdb_get_artwork":
       return [
-        {
-          id: 7001,
-          url: "https://cdn.steamgriddb.com/grid/demo-7001.jpg",
-          thumb: "src/demo/cover.jpg",
-          width: 600,
-          height: 900,
-        },
-        {
-          id: 7002,
-          url: "https://cdn.steamgriddb.com/grid/demo-7002.jpg",
-          thumb: "src/demo/cover.jpg",
-          width: 460,
-          height: 215,
-        },
+        { id: 7001, url: "https://cdn.steamgriddb.com/grid/demo-7001.jpg",
+          thumb: "src/demo/cover.jpg", width: 600, height: 900 },
+        { id: 7002, url: "https://cdn.steamgriddb.com/grid/demo-7002.jpg",
+          thumb: "src/demo/gow-collection.jpg", width: 600, height: 900 },
       ];
     case "sgdb_download_artwork":
       return { path: "/tmp/sgdb-cache/demo-cover.jpg", dataUri: "src/demo/cover.jpg" };
@@ -2007,17 +2107,25 @@ async function demoInvoke(command, args) {
       ];
     case "pick_game_folder":
       return {
-        path: "B:\Games\Split Fiction",
-        name: "Split Fiction",
+        path: "B:\\Games\\Split_Fiction v1.2",
+        name: "Split_Fiction v1.2",
         sizeBytes: 74_088_775_680,
         choices: [
-          { relative: "Split/b1.exe", name: "b1.exe", score: 100 },
+          { relative: "SplitFiction.exe", name: "SplitFiction.exe", score: 120 },
+          { relative: "Engine/Binaries/UE4PrereqSetup_x64.exe", name: "UE4PrereqSetup_x64.exe", score: -300 },
           { relative: "unins000.exe", name: "unins000.exe", score: -400 },
         ],
       };
+    case "cartridge_health":
+      return { link: "10 Gbps", linkMbps: 10_000, transport: "UASP",
+               label: args.drivePath.split("/").pop(), filesystem: "exFAT",
+               totalBytes: 128_035_676_160, freeBytes: 119_014_128_640,
+               usedPercent: 7, warnings: [] };
     case "steam_registration":
       return args.drivePath.endsWith("HOLLOW");
     case "unregister_from_steam":
+      return true;
+    case "eject_drive":
       return true;
     case "format_plan":
       return {
@@ -2030,21 +2138,15 @@ async function demoInvoke(command, args) {
     case "create_cartridge":
       return {
         confPath: `${args.request.drivePath}/cartridge.conf`,
-        coverWritten: Boolean(args.request.appId) || Boolean(args.request.games?.length),
-        autorunWritten: true,
+        coverWritten: true,
+        autorunWritten: Boolean(args.request.writeIcon),
         icon: null,
         formatted: args.request.formatDrive,
         formattedFilesystem: args.request.formatFilesystem || "exfat",
         gameCopied: args.request.copyGame,
         bytesCopied: args.request.copyGame ? 9_106_886_656 : 0,
         registeredWithSteam: args.request.copyGame && Boolean(args.request.appId),
-        steamClosed: Boolean(args.request.closeSteam),
-        steamEntryRemoved: true,
-        gameFolder: args.request.copyGame
-          ? args.request.appId
-            ? "steamapps/common"
-            : "Games/Tunic"
-          : null,
+        gameFolder: args.request.copyGame ? "Games" : null,
         warnings: [],
       };
     default:

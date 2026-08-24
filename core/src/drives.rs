@@ -381,6 +381,69 @@ mod windows_impl {
             .chain(std::iter::once(0))
             .collect()
     }
+
+    /// The filesystem name Windows reports for a volume — "exFAT", "NTFS".
+    ///
+    /// The same call that reads the label can fill this buffer, but `list()`
+    /// has no use for it, so it asks separately rather than widening the
+    /// struct every drive in the picker has to carry.
+    pub fn filesystem(mount: &str) -> Option<String> {
+        let root = wide(mount);
+        let mut fs = [0u16; 32];
+        let ok = unsafe {
+            GetVolumeInformationW(
+                root.as_ptr(),
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                fs.as_mut_ptr(),
+                fs.len() as u32,
+            )
+        };
+        if ok == 0 {
+            return None;
+        }
+        let len = fs.iter().position(|&c| c == 0).unwrap_or(0);
+        Some(String::from_utf16_lossy(&fs[..len]))
+    }
+}
+
+/// What filesystem is mounted at `mount`, as a name worth showing someone.
+///
+/// Empty when it cannot be read: the launcher prints the drive's name alone
+/// rather than inventing a filesystem for it.
+pub fn filesystem_at(mount: &Path) -> String {
+    #[cfg(windows)]
+    {
+        windows_impl::filesystem(&mount.to_string_lossy()).unwrap_or_default()
+    }
+
+    #[cfg(not(windows))]
+    {
+        let Ok(text) = std::fs::read_to_string("/proc/mounts") else {
+            return String::new();
+        };
+        parse_proc_mounts(&text)
+            .into_iter()
+            .find(|entry| entry.mount == mount)
+            .map(|entry| display_filesystem(&entry.fs_type))
+            .unwrap_or_default()
+    }
+}
+
+/// `/proc/mounts` spells these in lower case; the names people know have
+/// capitals in them. Anything unrecognised is passed through as it was read
+/// rather than guessed at.
+#[cfg(not(windows))]
+fn display_filesystem(fs_type: &str) -> String {
+    match fs_type {
+        "exfat" => "exFAT".to_string(),
+        "vfat" | "msdos" => "FAT32".to_string(),
+        "ntfs" | "ntfs3" | "fuseblk" => "NTFS".to_string(),
+        other => other.to_string(),
+    }
 }
 
 #[cfg(test)]
