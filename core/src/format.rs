@@ -517,7 +517,10 @@ mod tests {
         let friendly = friendly_pkexec_error(raw);
         assert_ne!(friendly, raw);
         assert!(friendly.contains("try again"), "{friendly}");
-        assert!(friendly.contains(raw), "the original detail should still be in there: {friendly}");
+        assert!(
+            friendly.contains(raw),
+            "the original detail should still be in there: {friendly}"
+        );
     }
 
     #[test]
@@ -616,7 +619,15 @@ mod tests {
         // volume size and lands lower than a cartridge wants.
         assert_eq!(
             args,
-            vec!["mkfs.exfat", "-F", "-c", "128K", "-n", "Cinder", "/dev/sdb1"]
+            vec![
+                "mkfs.exfat",
+                "-F",
+                "-c",
+                "128K",
+                "-n",
+                "Cinder",
+                "/dev/sdb1"
+            ]
         );
     }
 

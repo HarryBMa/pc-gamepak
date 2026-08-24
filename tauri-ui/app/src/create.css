@@ -1,10 +1,14 @@
 /* ==========================================================================
    Create-cartridge wizard.
 
-   Numbered steps, but one screen: there are only two decisions, and hiding the
-   second behind a Next button would make a short job feel long. The palette and
-   the buttons come from tokens.css, so this reads as the same product as the
-   popup it makes cartridges for.
+   One window, three phases in the left column — pick the games, name a
+   collection, then what to put on it — with a rail on the right that says what
+   is being built the whole way through. Selection is always multiple: one game
+   ticked is a cartridge, three is a multicartridge, and there is no mode to
+   enter and no + to discover.
+
+   The palette, the type and the buttons come from tokens.css, so this reads as
+   the same product as the popup it makes cartridges for.
    ========================================================================== */
 
 @import "tokens.css";
@@ -32,79 +36,184 @@
   }
 }
 
+/* ==========================================================================
+   Title bar
+   ========================================================================== */
+
 #bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 14px 14px 20px;
-  border-bottom: 1px solid var(--hairline-soft);
+  padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.075);
 }
+
+#bar-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-stretch: 108%;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: oklch(0.78 0.008 75);
+}
+
+#bar-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+/* While a cartridge is being written, the pip is the thing still moving. */
+#shell.is-running #bar-pip {
+  animation: pip 1.6s steps(1, end) infinite;
+}
+
+@keyframes pip {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0.25; }
+}
+
+#bar-actions {
+  display: flex;
+  gap: 2px;
+}
+
+#bar .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(0.68 0.008 75);
+}
+
+#bar .icon-btn:hover:not(:disabled) {
+  background: oklch(1 0 0 / 0.07);
+  color: var(--ink);
+}
+
+.icon-btn--close:hover:not(:disabled) {
+  background: oklch(0.68 0.19 27 / 0.85);
+  color: oklch(0.98 0.01 27);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Columns
+   ========================================================================== */
 
 #columns {
   display: grid;
-  /* The library list is the wider job; the right column is decisions. */
-  grid-template-columns: 1fr 340px;
+  /* The library list is the wider job; the rail is what is being built. */
+  grid-template-columns: 1fr 348px;
   min-height: 0;
 }
 
-#pick-game,
-#pick-target {
+#work {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 18px 20px 20px;
 }
 
-#pick-target {
-  border-left: 1px solid var(--hairline-soft);
-  background: oklch(0 0 0 / 0.14);
-  /* Opening the format fields makes this column taller than the window, so it
-     scrolls rather than pushing the buttons out of reach. */
-  overflow-y: auto;
-  overscroll-behavior: contain;
+.phase {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 20px 20px 18px;
+  animation: rise 320ms var(--ease) both;
+}
+
+/* `display` on a class the browser's [hidden] rule cannot outrank. */
+.phase[hidden] {
+  display: none;
 }
 
 /* --- Step headings ------------------------------------------------------ */
 
 .step {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin: 0 0 12px;
-  font-size: var(--text-label);
+  gap: 10px;
+  margin-bottom: 11px;
+}
+
+.step__n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.step__h {
+  margin: 0;
+  font-size: 10px;
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: 0.17em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: oklch(0.92 0.008 75);
+  white-space: nowrap;
 }
 
-.step__n {
-  display: grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 3px;
-  background: color-mix(in oklch, var(--accent) 22%, transparent);
-  border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent);
-  color: color-mix(in oklch, var(--accent) 90%, var(--ink));
-  font-size: var(--text-label);
-  letter-spacing: 0;
+.step__rule {
+  flex: 1;
+  height: 1px;
+  background: oklch(1 0 0 / 0.08);
 }
 
-/* --- Search ------------------------------------------------------------- */
+/* The whole mechanism of the selection model, in one line of type. */
+.step__count {
+  flex: none;
+  font-size: 10px;
+  color: oklch(0.6 0.008 75);
+}
 
-#search,
-.field input,
-.field select {
+/* ==========================================================================
+   Step 1 — the library
+   ========================================================================== */
+
+.search {
+  position: relative;
+  flex: none;
+  margin-bottom: 9px;
+}
+
+.search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: oklch(0.6 0.008 75);
+}
+
+#search {
   font-family: inherit;
-  font-size: var(--text-md);
+  font-size: 13px;
   color: var(--ink);
   background: var(--sunk);
-  border: 1px solid var(--hairline-soft);
-  border-radius: 5px;
-  padding: 9px 11px;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 6px;
+  padding: 9px 12px 9px 33px;
   width: 100%;
+  outline: none;
   transition: border-color 130ms linear;
 }
 
@@ -116,113 +225,107 @@
 #search:focus,
 .field input:focus,
 .field select:focus {
-  outline: none;
   border-color: color-mix(in oklch, var(--accent) 60%, transparent);
 }
 
-#search {
-  margin-bottom: 12px;
+#games-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 8px;
+  background: oklch(0 0 0 / 0.24);
+  overflow: hidden;
 }
 
-/* --- Lists -------------------------------------------------------------- */
-
-#games-wrap,
-#drives-wrap {
+#games {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   flex: 1;
-  min-height: 220px;
-  border: 1px solid var(--hairline-soft);
-  border-radius: 6px;
-  background: oklch(0 0 0 / 0.22);
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-#drives-wrap {
-  flex: none;
-  max-height: 132px;
-  margin-bottom: 16px;
-}
-
-#games,
-#drives {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A game row carries its add-to-collection button beside it, not beneath it. */
-#games li {
+.game {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
-  padding-right: 8px;
-}
-
-#games li .row {
-  flex: 1;
-  min-width: 0;
-}
-
-.row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  width: 100%;
-  padding: 9px 12px;
-  border: 0;
-  border-bottom: 1px solid var(--hairline-soft);
-  background: none;
-  color: var(--ink);
-  font-family: inherit;
-  font-size: var(--text-md);
-  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.05);
   cursor: pointer;
   transition: background-color 110ms linear;
 }
 
-li:last-child .row {
+#games li:last-child .game {
   border-bottom: 0;
 }
 
-.row:hover {
-  background: oklch(1 0 0 / 0.035);
+.game:hover {
+  background: oklch(1 0 0 / 0.03);
 }
 
-.row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+.game input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
-/* Selection is marked with a colour bar rather than a fill, so the row text
-   keeps its contrast. */
-.row[aria-selected="true"] {
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.row__name {
+.game__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.row__meta {
+.game__meta {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
+  font-size: 10.5px;
   color: var(--ink-3);
 }
 
-/* A drive that already holds a cartridge: not an error, but worth saying. */
-.row__warn {
-  color: color-mix(in oklch, var(--accent) 80%, var(--ink));
+/* A game that is not installed locally has no size to report. */
+.game__meta .is-unknown {
+  opacity: 0.45;
 }
 
-#games-empty,
-#drives-empty {
+.game__meta::before {
+  content: none;
+}
+
+.game__divider {
+  width: 1px;
+  height: 9px;
+  background: oklch(1 0 0 / 0.16);
+}
+
+/* Ticked. A colour bar rather than a fill, so the row text keeps contrast. */
+.game.is-on {
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.game.is-on .game__name {
+  font-weight: 600;
+}
+
+.game.is-on .game__meta {
+  color: oklch(0.72 0.008 75);
+}
+
+#games-empty {
   margin: 0;
   padding: 16px 14px;
   font-size: var(--text-sm);
@@ -230,19 +333,30 @@ li:last-child .row {
   color: var(--ink-3);
 }
 
+#games-foot {
+  flex: none;
+  margin: 0;
+  padding: 9px 14px;
+  border-top: 1px solid oklch(1 0 0 / 0.05);
+  background: oklch(0 0 0 / 0.22);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
 .link {
   appearance: none;
   background: none;
   border: 0;
-  padding: 8px 0 0;
+  padding: 0;
   font: inherit;
-  font-size: var(--text);
-  color: var(--ink-2);
+  font-size: inherit;
+  color: oklch(0.86 0.008 75);
   text-align: left;
   text-decoration: underline;
-  text-decoration-color: var(--hairline);
+  text-decoration-color: oklch(1 0 0 / 0.28);
   text-underline-offset: 3px;
   cursor: pointer;
+  transition: color 130ms linear;
 }
 
 .link:hover {
@@ -250,21 +364,152 @@ li:last-child .row {
   text-decoration-color: currentColor;
 }
 
-/* --- Preview ------------------------------------------------------------ */
+/* ==========================================================================
+   Fields
+   ========================================================================== */
 
-#preview {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
+.field {
+  display: block;
 }
 
-#preview-art {
+.field + .field {
+  margin-top: 12px;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: 6px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: oklch(0.62 0.008 75);
+}
+
+.field input,
+.field select {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 6px;
+  padding: 9px 12px;
+  width: 100%;
+  outline: none;
+  transition: border-color 130ms linear;
+}
+
+/* The one field a phase is about gets the size to say so. */
+.field__input--lead {
+  font-size: 17px !important;
+  font-weight: 600;
+  padding: 11px 13px !important;
+  border-color: color-mix(in oklch, var(--accent) 50%, transparent) !important;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.field-row .field + .field {
+  margin-top: 0;
+}
+
+.hint {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: oklch(0.64 0.008 75);
+}
+
+.hint code,
+.opt__hint code {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: oklch(0.86 0.008 75);
+}
+
+.hint--warn,
+.hint--danger {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.hint--warn {
+  color: oklch(0.79 0.13 30);
+}
+
+.hint--danger {
+  color: color-mix(in oklch, var(--danger) 70%, var(--ink));
+}
+
+.hint--warn svg,
+.hint--danger svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.folder-pick {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.folder-pick input {
+  flex: 1;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn--quiet {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: oklch(1 0 0 / 0.04);
+  color: oklch(0.9 0.008 75);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  transition: border-color 160ms linear, background-color 160ms linear;
+}
+
+.btn--quiet:hover:not(:disabled) {
+  border-color: oklch(1 0 0 / 0.3);
+  background: oklch(1 0 0 / 0.07);
+}
+
+.btn--quiet:disabled {
+  cursor: not-allowed;
+  color: var(--ink-3);
+  border-color: var(--hairline-soft);
+}
+
+/* The one that offers the thing the phase is missing. */
+.btn--accent {
+  border-color: color-mix(in oklch, var(--accent) 50%, transparent);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  color: color-mix(in oklch, var(--accent) 70%, var(--ink));
+}
+
+.btn--accent:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 20%, transparent);
+}
+
+/* ==========================================================================
+   Plates — cover art, wherever it is shown
+   ========================================================================== */
+
+.plate {
   position: relative;
-  /* The launcher is a cover-shaped 3:4 preview, not a library thumbnail. */
-  aspect-ratio: 3 / 4;
-  width: min(100%, 220px);
-  align-self: center;
+  aspect-ratio: 2 / 3;
   border-radius: 4px;
   overflow: hidden;
   background: var(--sunk);
@@ -273,18 +518,1242 @@ li:last-child .row {
     0 6px 16px -8px oklch(0 0 0 / 0.75);
 }
 
-#preview-img {
+.plate img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-/* `display` on an id selector beats the browser's [hidden] rule, so hiding
-   the preview has to be spelled out here too. */
-#preview-img:not([src]),
-#preview-img[src=""],
-#preview-img[hidden] {
+.plate img[hidden] {
+  display: none;
+}
+
+/* No art at all — and for a collection that is the normal state, not a fault. */
+.plate--empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  background: repeating-linear-gradient(
+    135deg,
+    oklch(0.2 0.005 65) 0 6px,
+    oklch(0.17 0.005 65) 6px 12px
+  );
+  color: oklch(0.5 0.008 75);
+}
+
+.plate--empty p {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: oklch(0.56 0.008 75);
+}
+
+/* Once there is art, the hatching and its label have nothing to say. */
+.plate.has-art {
+  background: var(--sunk);
+}
+
+.plate.has-art svg,
+.plate.has-art p {
+  display: none;
+}
+
+/* ==========================================================================
+   Step 1b — a game nothing scanned
+   ========================================================================== */
+
+#custom-body,
+#name-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 154px 1fr;
+  gap: 22px;
+  align-items: stretch;
+}
+
+#custom-art .plate,
+#name-art .plate {
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 1px oklch(0 0 0 / 0.6),
+    0 10px 26px -12px oklch(0 0 0 / 0.85);
+}
+
+#custom-art .btn,
+#name-art .btn {
+  width: 100%;
+  margin-top: 9px;
+  justify-content: center;
+}
+
+#custom-fields,
+#name-fields {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Ranked: what a person is most likely to have meant, first. */
+#exe-choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.exe {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 6px;
+  background: oklch(0 0 0 / 0.28);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms linear, background-color 160ms linear;
+}
+
+.exe:hover {
+  border-color: oklch(1 0 0 / 0.18);
+}
+
+.exe[aria-pressed="true"] {
+  border-color: color-mix(in oklch, var(--accent) 60%, transparent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+}
+
+.exe__name {
+  flex: 1;
+  min-width: 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Helper runtimes and uninstallers are pushed down, and say why. */
+.exe__why {
+  flex: none;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.exe.is-demoted .exe__name {
+  color: oklch(0.7 0.008 75);
+}
+
+/* ==========================================================================
+   Step 2 — name it and give it a face
+   ========================================================================== */
+
+#order {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
+}
+
+#order-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: oklch(0 0 0 / 0.28);
+  font-size: 12.5px;
+  cursor: grab;
+}
+
+.order-row.is-dragging {
+  opacity: 0.4;
+}
+
+.order-row.is-over {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.order-row__n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--accent) 20%, transparent);
+  color: color-mix(in oklch, var(--accent) 80%, var(--ink));
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.order-row__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-row__size {
+  flex: none;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: oklch(0.62 0.008 75);
+}
+
+/* ==========================================================================
+   Step 3 — options, grouped by what they touch
+   ========================================================================== */
+
+#options {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.group {
+  margin: 0 0 9px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: oklch(0.56 0.008 75);
+}
+
+.group--danger {
+  color: color-mix(in oklch, var(--danger) 62%, var(--ink-3));
+}
+
+.group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.07);
+}
+
+#options .group__body:last-of-type {
+  border-bottom: 0;
+}
+
+.opt {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.opt[hidden] {
+  display: none;
+}
+
+.opt input {
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.opt__body {
+  display: block;
+  min-width: 0;
+}
+
+.opt__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.opt__hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: oklch(0.64 0.008 75);
+}
+
+/* The destructive option is marked, not hidden. */
+.opt--danger input {
+  accent-color: var(--danger);
+}
+
+.opt--danger .opt__label {
+  color: color-mix(in oklch, var(--danger) 68%, var(--ink));
+}
+
+#format-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin: 2px 0 0 24px;
+  padding: 12px 13px;
+  border-left: 1px solid color-mix(in oklch, var(--danger) 45%, transparent);
+  background: color-mix(in oklch, var(--danger) 6%, transparent);
+  border-radius: 0 4px 4px 0;
+  animation: rise 320ms var(--ease) both;
+}
+
+#format-fields[hidden] {
+  display: none;
+}
+
+#format-fields .field input:focus {
+  border-color: color-mix(in oklch, var(--danger) 60%, transparent);
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid oklch(1 0 0 / 0.1);
+  border-radius: 6px;
+  background: oklch(0 0 0 / 0.24);
+  cursor: pointer;
+  transition: border-color 160ms linear, background-color 160ms linear;
+}
+
+.choice:has(:checked) {
+  border-color: color-mix(in oklch, var(--accent) 55%, transparent);
+  background: color-mix(in oklch, var(--accent) 9%, transparent);
+}
+
+.choice input {
+  flex: none;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.choice__body {
+  min-width: 0;
+}
+
+.choice__name {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.choice__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* ==========================================================================
+   Writing — the same window, running
+   ========================================================================== */
+
+#running-phase {
+  margin-bottom: 6px;
+}
+
+#running-title {
+  margin: 0 0 18px;
+  font-size: 26px;
+  font-weight: 800;
+  font-stretch: 96%;
+  line-height: 1.02;
+  letter-spacing: -0.016em;
+}
+
+#running-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.figure__label {
+  margin: 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: oklch(0.58 0.008 75);
+}
+
+.figure__value {
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.figure__unit {
+  font-size: 12px;
+  color: oklch(0.66 0.008 75);
+}
+
+#progress-track {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  border-radius: 3px;
+  background: oklch(0 0 0 / 0.5);
+  box-shadow: inset 0 0 0 1px var(--hairline-soft);
+  overflow: hidden;
+}
+
+#progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 200ms linear;
+}
+
+/* A step with no byte count still needs to look alive. */
+#progress-fill.is-indeterminate {
+  width: 100%;
+  animation: sweep 1100ms ease-in-out infinite;
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* With the sweep off, an indeterminate bar would scale to nothing and read
+     as a stalled build. It fills instead, dimmed, and the text carries it. */
+  #progress-fill.is-indeterminate {
+    animation: none;
+    opacity: 0.45;
+  }
+}
+
+#running-rate {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 9px 0 0;
+  font-size: 10.5px;
+  color: oklch(0.62 0.008 75);
+}
+
+#current-file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: right;
+}
+
+#log-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
+}
+
+#log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: oklch(0.62 0.008 75);
+}
+
+.log-row__mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1px solid oklch(1 0 0 / 0.14);
+  color: transparent;
+}
+
+.log-row.is-done {
+  color: oklch(0.82 0.008 75);
+}
+
+.log-row.is-done .log-row__mark {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--good) 80%, transparent);
+  color: oklch(0.14 0.02 145);
+}
+
+.log-row.is-now {
+  color: var(--ink);
+}
+
+.log-row.is-now .log-row__mark {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 3px color-mix(in oklch, var(--accent) 55%, transparent);
+}
+
+/* ==========================================================================
+   The rail
+   ========================================================================== */
+
+#rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 20px;
+  border-left: 1px solid oklch(1 0 0 / 0.075);
+  background: oklch(0 0 0 / 0.16);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#rail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  text-align: center;
+  color: oklch(0.4 0.008 65);
+}
+
+#rail-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: oklch(0.72 0.008 75);
+  max-width: 215px;
+}
+
+#rail-empty[hidden],
+#rail-body[hidden] {
+  display: none;
+}
+
+/* Cartridge, or Multicartridge — the panel titles itself to match the tick
+   count, so there is never a mode to be in. */
+#rail-kind {
+  margin: 0 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: oklch(0.62 0.008 75);
+}
+
+.pill {
+  padding: 2px 5px 1px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
+  color: color-mix(in oklch, var(--accent) 80%, var(--ink));
+  letter-spacing: 0.12em;
+}
+
+.pill[hidden] {
+  display: none;
+}
+
+#rail-id {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 13px;
+  align-items: center;
+}
+
+#rail-names {
+  min-width: 0;
+}
+
+#rail-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  font-stretch: 102%;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+#rail-sub {
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: oklch(0.62 0.008 75);
+}
+
+#btn-rail-art {
+  margin-top: 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* --- The games in it ---------------------------------------------------- */
+
+#rail-games {
+  margin-top: 15px;
+}
+
+#rail-game-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 188px;
+  overflow-y: auto;
+}
+
+.rail-game {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 7px;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 7px;
+  background: oklch(0 0 0 / 0.3);
+}
+
+.rail-game__cover {
+  flex: none;
+  width: 26px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    135deg,
+    oklch(0.2 0.005 65) 0 5px,
+    oklch(0.17 0.005 65) 5px 10px
+  );
+}
+
+.rail-game__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-game__size {
+  flex: none;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: oklch(0.66 0.008 75);
+}
+
+/* --- What it costs on the drive ----------------------------------------- */
+
+#rail-space {
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
+}
+
+#rail-space[hidden] {
+  display: none;
+}
+
+.rail-space__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+#rail-drive-label {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: oklch(0.62 0.008 75);
+}
+
+#rail-drive-fill {
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: oklch(0.74 0.008 75);
+}
+
+/* One band per game, so it is visible which one is taking the room. */
+#rail-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  border-radius: 3px;
+  background: oklch(0 0 0 / 0.5);
+  overflow: hidden;
+}
+
+#rail-bar div {
+  transition: width 200ms linear;
+}
+
+/* Over the drive's capacity: the bar says so before the button refuses. */
+#rail-bar.is-over div {
+  background: var(--danger) !important;
+}
+
+/* --- The drive ---------------------------------------------------------- */
+
+#rail-drives {
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
+}
+
+#rail-drives[hidden] {
+  display: none;
+}
+
+#drives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.drive {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 6px;
+  background: oklch(0 0 0 / 0.28);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms linear, background-color 160ms linear;
+}
+
+.drive:hover {
+  border-color: oklch(1 0 0 / 0.18);
+}
+
+.drive[aria-selected="true"] {
+  border-color: color-mix(in oklch, var(--accent) 60%, transparent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+}
+
+.drive__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drive__meta {
+  flex: none;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+/* A drive that already holds a cartridge: not an error, but worth saying. */
+.drive__warn {
+  color: color-mix(in oklch, var(--accent) 80%, var(--ink));
+}
+
+#rail-drives .link {
+  display: block;
+  margin-top: 9px;
+  font-size: 11px;
+}
+
+/* --- The plan ----------------------------------------------------------- */
+
+#rail-plan,
+#rail-forced {
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
+}
+
+#rail-plan[hidden],
+#rail-forced[hidden] {
+  display: none;
+}
+
+#plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  counter-reset: plan;
+}
+
+.plan-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.plan-row__n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: oklch(1 0 0 / 0.07);
+  color: oklch(0.78 0.008 75);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.plan-row--danger .plan-row__n {
+  background: color-mix(in oklch, var(--danger) 24%, transparent);
+  color: color-mix(in oklch, var(--danger) 76%, var(--ink));
+}
+
+.plan-row__what {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.plan-row__detail {
+  display: block;
+  margin-top: 2px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: oklch(0.62 0.008 75);
+}
+
+#forced {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.forced-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 11.5px;
+  color: oklch(0.78 0.008 75);
+}
+
+.forced-row__mark {
+  flex: none;
+  width: 12px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: color-mix(in oklch, var(--good) 76%, var(--ink));
+}
+
+.forced-row.is-off {
+  color: var(--ink-3);
+}
+
+.forced-row.is-off .forced-row__mark {
+  color: var(--ink-3);
+}
+
+/* --- The rail's footer -------------------------------------------------- */
+
+#rail-foot {
+  flex: none;
+  margin-top: auto;
+  padding-top: 17px;
+}
+
+#ready-message {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: oklch(0.8 0.008 75);
+}
+
+/* The dot is the state: accent when ready, danger when something will be
+   erased, nothing at all when there is not yet anything to write. */
+#ready-message.is-ready::before,
+#ready-message.is-destructive::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+#ready-message.is-destructive {
+  color: color-mix(in oklch, var(--danger) 62%, var(--ink));
+}
+
+#ready-message.is-destructive::before {
+  background: var(--danger);
+}
+
+#rail-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+#btn-options {
+  flex: none;
+  height: 46px;
+}
+
+#btn-create {
+  flex: 1;
+  height: 46px;
+  border-radius: 6px;
+}
+
+#status {
+  margin: 12px 0 0;
+  min-height: 1.4em;
+  font-size: var(--text);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+#status:empty {
+  margin: 0;
+  min-height: 0;
+}
+
+#status.is-error {
+  color: color-mix(in oklch, var(--danger) 78%, var(--ink));
+}
+
+#status.is-good {
+  color: color-mix(in oklch, var(--good) 72%, var(--ink));
+}
+
+/* ==========================================================================
+   Dialogs
+   ========================================================================== */
+
+dialog {
+  width: min(660px, 92vw);
+  max-height: 86vh;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow:
+    inset 0 0 0 1px oklch(1 0 0 / 0.07),
+    0 30px 60px -20px oklch(0 0 0 / 0.8);
+  overflow: hidden;
+}
+
+dialog::backdrop {
+  background: oklch(0.08 0.004 65 / 0.66);
+}
+
+dialog form {
+  display: flex;
+  flex-direction: column;
+  max-height: 86vh;
+  padding: 16px 20px 20px;
+  overflow: hidden;
+}
+
+.dialog-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 13px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.dialog-head h3 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  font-stretch: 104%;
+  letter-spacing: -0.014em;
+}
+
+.dialog-head .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: oklch(1 0 0 / 0.05);
+}
+
+.dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.dialog-actions {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.rescan {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rescan .hint {
+  margin: 0;
+}
+
+#edit-games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* --- The artwork picker ------------------------------------------------- */
+
+#sgdb-dialog {
+  width: min(840px, 94vw);
+}
+
+#sgdb-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.tab {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: oklch(0.68 0.008 75);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 180ms linear, color 180ms linear,
+    box-shadow 180ms linear;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"] {
+  background: color-mix(in oklch, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 50%, transparent);
+  color: color-mix(in oklch, var(--accent) 76%, var(--ink));
+}
+
+#sgdb-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 232px;
+  gap: 22px;
+}
+
+#sgdb-picker {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+#sgdb-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.art-card {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  border-radius: 7px;
+  overflow: hidden;
+  background: oklch(0 0 0 / 0.3);
+  cursor: pointer;
+  transition: border-color 180ms linear, box-shadow 180ms linear;
+}
+
+.art-card:hover {
+  border-color: oklch(1 0 0 / 0.24);
+}
+
+.art-card[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 18%, transparent);
+}
+
+.art-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.art-card__meta {
+  display: block;
+  padding: 5px 7px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--ink-3);
+}
+
+/* The receipt: a line of type, not a wizard page. */
+#ico-receipt {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: color-mix(in oklch, var(--good) 70%, var(--ink));
+}
+
+#ico-receipt[hidden] {
+  display: none;
+}
+
+/* --- The launcher preview ----------------------------------------------- */
+
+#sgdb-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+#preview-art {
+  position: relative;
+  /* The launcher is a cover-shaped 3:4 preview, not a library thumbnail. */
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--sunk);
+  box-shadow:
+    inset 0 0 0 1px oklch(0 0 0 / 0.6),
+    0 8px 20px -10px oklch(0 0 0 / 0.8);
+}
+
+#preview-hero,
+#preview-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity 320ms var(--ease);
+}
+
+#preview-hero[hidden],
+#preview-grid[hidden],
+#preview-logo[hidden] {
   display: none;
 }
 
@@ -298,7 +1767,7 @@ li:last-child .row {
     oklch(0.185 0.005 65) 0 7px,
     oklch(0.16 0.005 65) 7px 14px
   );
-  font-size: var(--text-label);
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.2em;
   color: var(--ink-3);
@@ -308,97 +1777,42 @@ li:last-child .row {
   display: none;
 }
 
-#preview-chrome,
 #preview-stage {
   position: absolute;
-  inset-inline: 0;
-  z-index: 1;
-}
-
-#preview-chrome {
-  top: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 11px;
-  background: linear-gradient(to bottom, oklch(0.08 0.004 65 / 0.72), transparent);
-}
-
-.preview-chrome__brand {
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: var(--ink-2);
-}
-
-.preview-chrome__dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 1px;
-  background: var(--accent);
-}
-
-#preview-stage {
-  bottom: 0;
-  top: auto;
-  padding: 44px 11px 11px;
+  inset: auto 0 0 0;
+  padding: 40px 11px 11px;
   background: linear-gradient(to top, oklch(0.07 0.004 65 / 0.96), transparent);
 }
 
-#preview-stage .eyebrow {
-  font-size: 7px;
+#preview-logo {
+  display: block;
+  max-width: 78%;
+  max-height: 34px;
+  width: auto;
+  margin: 0 0 5px;
+  object-fit: contain;
+  object-position: left bottom;
 }
 
 #preview-title {
-  margin: 5px 0 0;
-  font-size: 17px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 800;
+  font-stretch: 88%;
   line-height: 0.98;
   text-transform: uppercase;
   text-wrap: balance;
 }
 
-#preview-sub {
-  margin: 5px 0 0;
-  font-size: 8px;
-  color: var(--ink-2);
-}
-
-#preview-games {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin: 7px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-#preview-games[hidden] {
+/* The logo replaces the title, exactly as the launcher does. */
+#preview-stage.has-logo #preview-title {
   display: none;
-}
-
-#preview-games li {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 5px;
-  border: 1px solid oklch(1 0 0 / 0.16);
-  border-radius: 2px;
-  background: oklch(0 0 0 / 0.35);
-  font-size: 8px;
-}
-
-#preview-games kbd,
-#preview-actions kbd {
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 7px;
-  color: var(--accent);
 }
 
 #preview-actions {
   display: flex;
   gap: 5px;
-  margin-top: 8px;
+  margin-top: 9px;
 }
 
 #preview-actions span {
@@ -418,699 +1832,27 @@ li:last-child .row {
   color: var(--accent-ink);
 }
 
-#preview-source {
-  margin: 7px 0 0;
+#preview-actions span:last-child {
+  flex: none;
+  width: 26px;
 }
 
-#btn-sgdb {
-  margin-top: 8px;
-}
-
-/* --- Manual entry ------------------------------------------------------- */
-
-#custom {
+#preview-icon-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 18px;
-  animation: rise 380ms var(--ease) both;
 }
 
-/* `display` on an id selector beats the browser's [hidden] rule, so hiding has
-   to be stated explicitly or the manual fields show through. */
-#custom[hidden] {
-  display: none;
-}
-
-.field {
-  display: block;
-}
-
-.field__label {
-  display: block;
-  margin-bottom: 5px;
-  font-size: var(--text-label);
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-
-.field__hint {
+#preview-icon-row .hint {
   margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  color: var(--ink-3);
 }
 
-.field__hint code {
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: var(--text-label);
-  color: var(--ink-2);
-}
-
-/* --- Options ------------------------------------------------------------ */
-
-#options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-#advanced-options {
-  margin: 2px 0 0 23px;
-  border-top: 1px solid var(--hairline-soft);
-  border-bottom: 1px solid var(--hairline-soft);
-}
-
-#advanced-options summary {
-  padding: 9px 0;
-  color: var(--ink-2);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-#advanced-options summary::marker {
-  color: var(--accent);
-}
-
-#advanced-options-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 0 10px;
-}
-
-.opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  cursor: pointer;
-}
-
-.opt input {
+#preview-icon {
   flex: none;
-  width: 14px;
-  height: 14px;
-  margin: 1px 0 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.opt__body {
-  display: block;
-  min-width: 0;
-}
-
-.opt__label {
-  display: block;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-.opt__hint {
-  display: block;
-  margin-top: 3px;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-
-/* The destructive option is marked, not hidden. */
-.opt--danger .opt__label {
-  color: color-mix(in oklch, var(--danger) 68%, var(--ink));
-}
-
-.opt--danger input {
-  accent-color: var(--danger);
-}
-
-#format-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  margin: 2px 0 0 23px;
-  padding: 11px 12px;
-  border-left: 1px solid color-mix(in oklch, var(--danger) 45%, transparent);
-  background: color-mix(in oklch, var(--danger) 6%, transparent);
-  border-radius: 0 4px 4px 0;
-  animation: rise 320ms var(--ease) both;
-}
-
-/* `display` on an id beats the browser's [hidden] rule. */
-#format-fields[hidden] {
-  display: none;
-}
-
-#format-fields .field input:focus {
-  border-color: color-mix(in oklch, var(--danger) 60%, transparent);
-}
-
-#format-warning {
-  color: color-mix(in oklch, var(--danger) 70%, var(--ink));
-}
-
-/* --- Progress ----------------------------------------------------------- */
-
-#progress {
-  margin-top: 12px;
-}
-
-#progress[hidden] {
-  display: none;
-}
-
-#progress-track {
-  height: 4px;
-  border-radius: 2px;
-  background: oklch(0 0 0 / 0.45);
-  box-shadow: inset 0 0 0 1px var(--hairline-soft);
-  overflow: hidden;
-}
-
-#progress-fill {
-  --progress-pct: 0;
-  height: 100%;
-  width: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  transform-origin: left center;
-  transform: scaleX(var(--progress-pct));
-  transition: transform 200ms linear;
-}
-
-/* A step with no byte count still needs to look alive. */
-#progress-fill.is-indeterminate {
-  width: 100%;
-  transform-origin: left center;
-  animation: sweep 1100ms ease-in-out infinite;
-}
-
-/* With the sweep off, an indeterminate bar would scale to nothing and read as
-   a stalled build. It fills instead, dimmed, and the text carries the step. */
-@media (prefers-reduced-motion: reduce) {
-  #progress-fill.is-indeterminate {
-    transform: scaleX(1);
-    opacity: 0.45;
-  }
-}
-
-@keyframes sweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(300%); }
-}
-
-#progress-text {
-  margin: 6px 0 0;
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-}
-
-/* --- Actions ------------------------------------------------------------ */
-
-#actions {
-  display: flex;
-  gap: 9px;
-  /* Anchored to the bottom of the column rather than left floating under the
-     drive list, so the primary action sits where one is looked for — and pinned
-     there, so it stays reachable when the column scrolls. */
-  margin-top: auto;
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  padding-block: 12px;
-  /* Opaque: the scrolling content passes underneath. Matches the column's own
-     composited background. */
-  background: oklch(0.158 0.005 65);
-}
-
-#btn-create {
-  flex: 1;
-}
-
-#ready-message {
-  margin: 0 0 2px;
-  min-height: 1.4em;
-  color: var(--ink-3);
-}
-
-.btn--tiny {
-  min-height: 30px;
-  padding: 0 10px;
-}
-
-#status {
-  margin: 12px 0 0;
-  min-height: 1.4em;
-  font-size: var(--text);
-  line-height: 1.5;
-  color: var(--ink-2);
-}
-
-#status.is-error {
-  color: color-mix(in oklch, var(--danger) 78%, var(--ink));
-}
-
-#status.is-good {
-  color: color-mix(in oklch, var(--good) 72%, var(--ink));
-}
-
-/* --- Executable picker --------------------------------------------------- */
-
-#exe-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin: 2px 0 0 23px;
-  animation: rise 320ms var(--ease) both;
-}
-
-/* `display` on an id beats the browser's [hidden] rule. */
-#exe-pick[hidden] {
-  display: none;
-}
-
-#exe-choices {
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: var(--text);
-  width: 100%;
-  padding: 8px 10px;
-  color: var(--ink);
-  background: var(--sunk);
-  border: 1px solid var(--hairline-soft);
+  width: 34px;
+  height: 34px;
+  aspect-ratio: auto;
   border-radius: 5px;
-  cursor: pointer;
-}
-
-#exe-choices:focus {
-  outline: none;
-  border-color: color-mix(in oklch, var(--accent) 60%, transparent);
-}
-
-/* --- SteamGridDB dialog --------------------------------------------------- */
-
-#sgdb-dialog,
-#settings-dialog,
-#edit-dialog {
-  width: min(720px, 90vw);
-  border: 1px solid var(--hairline-soft);
-  border-radius: 8px;
-  padding: 0;
-  color: var(--ink);
-  background: linear-gradient(200deg, var(--panel) 0%, var(--shell) 100%);
-}
-
-#sgdb-dialog::backdrop,
-#settings-dialog::backdrop,
-#edit-dialog::backdrop {
-  background: oklch(0 0 0 / 0.6);
-}
-
-#sgdb-form,
-#settings-form,
-#edit-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-}
-
-#settings-dialog {
-  width: min(560px, 90vw);
-}
-
-#edit-dialog {
-  width: min(620px, 92vw);
-}
-
-#edit-games {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.edit-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  border-radius: 4px;
-  background: var(--sunk);
-}
-
-.edit-row__name {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  padding: 4px 6px;
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-sm);
-}
-
-.edit-row__name:hover {
-  border-color: var(--hairline-soft);
-}
-
-.edit-row__name:focus {
-  outline: none;
-  border-color: color-mix(in oklch, var(--accent) 60%, transparent);
-  background: oklch(0 0 0 / 0.25);
-}
-
-.edit-row__n {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 3px;
-  background: color-mix(in oklch, var(--accent) 22%, transparent);
-  color: color-mix(in oklch, var(--accent) 90%, var(--ink));
-  font-size: var(--text-label);
-  font-weight: 700;
-}
-
-.edit-row__drop {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 2px 5px;
-  font: inherit;
-  font-size: var(--text-lg);
-  line-height: 1;
-  color: var(--ink-3);
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-.edit-row__drop:hover:not(:disabled) {
-  color: var(--danger);
-  background: oklch(1 0 0 / 0.06);
-}
-
-.edit-row__drop:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.edit-row__move {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 2px 5px;
-  font: inherit;
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-.edit-row__move:hover:not(:disabled) {
-  color: var(--ink);
-  background: oklch(1 0 0 / 0.06);
-}
-
-.edit-row__move:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
-/* The key only matters once the lookup is on, so it moves with the toggle. */
-#sgdb-key-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-left: 26px;
-}
-
-#sgdb-key-field[hidden] {
-  display: none;
-}
-
-#settings-status:empty {
-  display: none;
-}
-
-.sgdb-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sgdb-head h3 {
-  margin: 0;
-  font-size: var(--text-lg);
-}
-
-#sgdb-results {
-  min-height: 220px;
-  max-height: 320px;
-  overflow: auto;
-  border: 1px solid var(--hairline-soft);
-  border-radius: 6px;
-  padding: 8px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 8px;
-}
-
-.sgdb-card {
-  border: 1px solid var(--hairline-soft);
-  border-radius: 6px;
-  padding: 4px;
-  background: oklch(0 0 0 / 0.2);
-  color: inherit;
-  cursor: pointer;
-}
-
-.sgdb-card img {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  border-radius: 4px;
-  display: block;
-}
-
-.sgdb-card span {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--text-label);
-  color: var(--ink-3);
-}
-
-.sgdb-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (max-width: 760px) {
-  body {
-    overflow: auto;
-  }
-
-  #shell {
-    width: 100%;
-    min-height: 100vh;
-    height: auto;
-    border-radius: 0;
-  }
-
-  #columns {
-    grid-template-columns: minmax(0, 1fr);
-    overflow: visible;
-  }
-
-  #pick-game,
-  #pick-target {
-    min-height: 0;
-    padding: 16px;
-  }
-
-  #pick-game {
-    min-height: 380px;
-  }
-
-  #games-wrap {
-    flex: none;
-    height: 260px;
-  }
-
-  #pick-target {
-    border-top: 1px solid var(--hairline-soft);
-    border-left: 0;
-    overflow: visible;
-  }
-
-  #actions {
-    position: sticky;
-    margin-inline: -16px;
-    padding-inline: 16px;
-  }
-}
-
-/* The folder picker sits beside its Clear, with the chosen path underneath. */
-.folder-pick {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3, 0.75rem);
-  flex-wrap: wrap;
-}
-
-#folder-chosen {
-  overflow-wrap: anywhere;
-}
-
-/* --- Bundle panel -------------------------------------------------------- */
-
-#drive-space {
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-  margin: 4px 0 0;
-}
-
-#bundle-panel {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  animation: rise 320ms var(--ease) both;
-}
-
-#bundle-panel[hidden] {
-  display: none;
-}
-
-#bundle-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.bundle-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--sunk);
-  border: 1px solid var(--hairline-soft);
-  border-radius: 6px;
-  font-size: var(--text);
-}
-
-.bundle-item__name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bundle-item__size {
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-
-.bundle-item__art {
-  flex: none;
-  padding: 3px 7px;
-  border: 1px solid var(--hairline-soft);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-size: var(--text-label);
-  cursor: pointer;
-}
-
-.bundle-item__art:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.bundle-item__remove {
-  padding: 2px 6px;
-  font-size: var(--text-sm);
-  border-radius: 4px;
-  background: transparent;
-  border: 1px solid var(--hairline-soft);
-  cursor: pointer;
-  color: var(--ink-3);
-  line-height: 1;
-}
-
-.bundle-item__remove:hover {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-#bundle-space {
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-  text-align: right;
-}
-
-#bundle-space.is-error {
-  color: color-mix(in oklch, var(--danger) 78%, var(--ink));
-  font-weight: 600;
-}
-
-#collection-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  animation: rise 280ms var(--ease) both;
-}
-
-#collection-meta[hidden] {
-  display: none;
-}
-
-#collection-title {
-  font-size: var(--text-md);
-  width: 100%;
-  padding: 7px 10px;
-  color: var(--ink);
-  background: var(--sunk);
-  border: 1px solid var(--hairline-soft);
-  border-radius: 5px;
-}
-
-#collection-title:focus {
-  outline: none;
-  border-color: color-mix(in oklch, var(--accent) 60%, transparent);
-}
-
-/* Bundle-toggle button on game rows */
-.row__bundle-btn {
-  padding: 3px 9px;
-  font-size: var(--text-sm);
-  border-radius: 4px;
-  background: transparent;
-  border: 1px solid var(--hairline-soft);
-  cursor: pointer;
-  color: var(--ink-3);
-  white-space: nowrap;
-  align-self: center;
-  line-height: 1.4;
-}
-
-.row__bundle-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.row__bundle-btn.is-added {
-  background: color-mix(in oklch, var(--accent) 15%, transparent);
-  border-color: var(--accent);
-  color: var(--accent);
+  background-size: cover;
+  background-position: center;
 }

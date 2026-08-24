@@ -190,6 +190,20 @@ pub struct CartridgeRequest {
     /// formatting does, so it is never implied.
     #[serde(default)]
     pub trim_after_write: bool,
+    /// Write `autorun.ico` and `autorun.inf` at the root, so Explorer shows the
+    /// cover instead of a grey disk.
+    ///
+    /// Defaults to true: a cartridge that does not name itself in Explorer is
+    /// half a cartridge, and this is the behaviour every build had before the
+    /// flag existed. It is a flag at all because the two files are visible
+    /// clutter on a drive someone may also be using for something else.
+    #[serde(default = "default_true")]
+    pub write_icon: bool,
+}
+
+/// serde needs a function; a bare `true` is not a valid default expression.
+fn default_true() -> bool {
+    true
 }
 
 impl CartridgeRequest {
@@ -515,8 +529,9 @@ pub fn create_cartridge(
         // own attempt below did not already resolve it.
         let device = current_device(&root);
 
-        let remounted = format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
-            .map_err(|e| e.to_string())?;
+        let remounted =
+            format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
+                .map_err(|e| e.to_string())?;
         result.formatted = true;
         result.formatted_filesystem = Some(filesystem);
 
@@ -700,22 +715,24 @@ pub fn create_cartridge(
         result.conf_path = conf_path.to_string_lossy().into_owned();
 
         // ---- autorun.inf ---------------------------------------------------
-        progress(Progress {
-            step: "autorun",
-            message: "Naming the drive…".to_string(),
-            done_bytes: 0,
-            total_bytes: 0,
-        });
-        match autorun::write_autorun(
-            &root,
-            &title,
-            collection_icon.as_deref().or(collection_cover.as_deref()),
-        ) {
-            Ok(icon) => {
-                result.autorun_written = true;
-                result.icon = icon;
+        if request.write_icon {
+            progress(Progress {
+                step: "autorun",
+                message: "Naming the drive…".to_string(),
+                done_bytes: 0,
+                total_bytes: 0,
+            });
+            match autorun::write_autorun(
+                &root,
+                &title,
+                collection_icon.as_deref().or(collection_cover.as_deref()),
+            ) {
+                Ok(icon) => {
+                    result.autorun_written = true;
+                    result.icon = icon;
+                }
+                Err(e) => warnings.push(format!("autorun.inf was not written: {e}")),
             }
-            Err(e) => warnings.push(format!("autorun.inf was not written: {e}")),
         }
 
         if !result.cover_written {
@@ -814,7 +831,9 @@ pub fn create_cartridge(
 
     // ---- 5. cartridge.conf ----------------------------------------------
     fn file_name(p: &Option<PathBuf>) -> Option<&str> {
-        p.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str())
+        p.as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
     }
     let conf = render_cartridge_conf(
         &title,
@@ -830,28 +849,30 @@ pub fn create_cartridge(
     result.conf_path = conf_path.to_string_lossy().into_owned();
 
     // ---- 6. autorun.inf --------------------------------------------------
-    progress(Progress {
-        step: "autorun",
-        message: "Naming the drive…".to_string(),
-        done_bytes: 0,
-        total_bytes: 0,
-    });
+    if request.write_icon {
+        progress(Progress {
+            step: "autorun",
+            message: "Naming the drive…".to_string(),
+            done_bytes: 0,
+            total_bytes: 0,
+        });
 
-    let autorun_source = icon_destination.as_deref().or(cover_destination.as_deref());
-    match autorun::write_autorun(&root, &title, autorun_source) {
-        Ok(icon) => {
-            result.autorun_written = true;
-            result.icon = icon;
-            if autorun_source.is_some() && result.icon.is_none() {
-                warnings.push(
-                    "Explorer needs an .ico for a custom drive icon and the cover is a JPEG, \
+        let autorun_source = icon_destination.as_deref().or(cover_destination.as_deref());
+        match autorun::write_autorun(&root, &title, autorun_source) {
+            Ok(icon) => {
+                result.autorun_written = true;
+                result.icon = icon;
+                if autorun_source.is_some() && result.icon.is_none() {
+                    warnings.push(
+                        "Explorer needs an .ico for a custom drive icon and the cover is a JPEG, \
                      so the drive keeps its default icon. Drop a cover.ico on the cartridge \
                      to change that."
-                        .to_string(),
-                );
+                            .to_string(),
+                    );
+                }
             }
+            Err(e) => warnings.push(format!("autorun.inf was not written: {e}")),
         }
-        Err(e) => warnings.push(format!("autorun.inf was not written: {e}")),
     }
 
     if !result.cover_written {
