@@ -38,6 +38,12 @@ pub struct Health {
     pub link_mbps: Option<u32>,
     /// "UASP" or "BOT", or empty when unknown.
     pub transport: String,
+    /// The volume's own name — "CINDER" — or empty when it has none. This is
+    /// what is printed on the cartridge in Explorer, so the launcher can say
+    /// which drive it is looking at without the user reading a mount path.
+    pub label: String,
+    /// "exFAT", "btrfs", "ntfs", or empty when it cannot be read.
+    pub filesystem: String,
     pub total_bytes: u64,
     pub free_bytes: u64,
     /// 0-100. Saturates rather than dividing by zero on an unreadable volume.
@@ -59,6 +65,7 @@ pub fn inspect(mount: &str) -> Health {
     };
 
     let link = probe(mount);
+    let (label, filesystem) = volume(mount);
     let mut health = Health {
         link: link
             .as_ref()
@@ -67,6 +74,8 @@ pub fn inspect(mount: &str) -> Health {
             .unwrap_or_default(),
         link_mbps: link.as_ref().and_then(|l| l.mbps),
         transport: link.map(|l| l.transport).unwrap_or_default(),
+        label,
+        filesystem,
         total_bytes,
         free_bytes,
         used_percent,
@@ -131,6 +140,21 @@ fn speed_label(mbps: u32) -> String {
 struct Link {
     mbps: Option<u32>,
     transport: String,
+}
+
+/// The volume's own name and filesystem.
+///
+/// The name comes from the same enumeration the capacity does, so a cartridge
+/// is described by exactly what the drive picker would have called it. Both are
+/// empty rather than approximated when the volume cannot be read.
+fn volume(mount: &str) -> (String, String) {
+    let path = Path::new(mount);
+    let label = crate::drives::list_drives()
+        .into_iter()
+        .find(|d| Path::new(&d.path) == path)
+        .map(|d| d.label)
+        .unwrap_or_default();
+    (label, crate::drives::filesystem_at(path))
 }
 
 // --------------------------------------------------------------------------
@@ -339,7 +363,7 @@ mod tests {
             total_bytes: 128_000_000_000,
             free_bytes: 64_000_000_000,
             used_percent: 50,
-            warnings: Vec::new(),
+            ..Default::default()
         };
         assert!(advise(&health).is_empty());
     }

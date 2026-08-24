@@ -9,7 +9,7 @@
  *   launch_game({ executable, drivePath })    -> ()
  *   eject_drive({ drivePath })                -> ()
  *   can_eject({ drivePath })                  -> bool
- *   cartridge_health({ drivePath })           -> { link, transport, usedPercent, warnings[] }
+ *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
  *
  * `cover` arrives as a data URI already. There is no command that takes a path
  * to read, so the webview cannot ask the backend for arbitrary files.
@@ -25,27 +25,39 @@ const invoke = tauri?.core?.invoke ?? demoInvoke;
 
 const el = {
   card: document.getElementById("card"),
+  face: document.getElementById("face"),
+  slot: document.getElementById("slot"),
+  slotLabel: document.getElementById("slot-label"),
+  insert: document.getElementById("btn-insert"),
   cover: document.getElementById("cover-img"),
+  coverB: document.getElementById("cover-img-b"),
   placeholder: document.getElementById("cover-placeholder"),
-  eyebrow: document.getElementById("eyebrow-text"),
+  eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
   title: document.getElementById("game-title"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
-  bundleHint: document.getElementById("bundle-hint"),
   play: document.getElementById("btn-play"),
+  playLabel: document.querySelector("#btn-play .btn__label"),
   eject: document.getElementById("btn-eject"),
   close: document.getElementById("btn-close"),
   details: document.getElementById("btn-details"),
+  input: document.getElementById("btn-input"),
+  inputLabel: document.getElementById("input-label"),
   openSettings: document.getElementById("btn-open-settings"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
+  sheetBack: document.getElementById("btn-sheet-back"),
+  sheetThumb: document.getElementById("sheet-thumb"),
+  sheetTitle: document.getElementById("sheet-title"),
+  sheetSub: document.getElementById("sheet-sub"),
+  readings: document.getElementById("readings"),
   specs: document.getElementById("specs"),
-  health: document.getElementById("health"),
+  paths: document.getElementById("paths"),
+  pathsToggle: document.getElementById("btn-paths"),
+  pathsLabel: document.getElementById("paths-label"),
   toast: document.getElementById("toast"),
   gameList: document.getElementById("game-list"),
-  bundleEjectRow: document.getElementById("bundle-eject-row"),
-  bundleEject: document.getElementById("btn-bundle-eject"),
 };
 
 let cartridge = null;
@@ -199,11 +211,45 @@ function sampleAccent(img) {
 }
 
 /* ==========================================================================
+   The slot, and the cartridge seated in it
+   ========================================================================== */
+
+/** How long the face takes to leave or enter the slot; matches style.css. */
+const SEAT_MS = 620;
+
+/**
+ * Show what is behind the cartridge.
+ *
+ * The empty slot is not decoration: it is what the window has to say when
+ * there is no readable cartridge to show, and what Eject leaves behind. The
+ * label carries the reason, so nothing has to be explained twice.
+ */
+function showSlot(label, action) {
+  el.slotLabel.textContent = label;
+  if (action) {
+    el.insert.textContent = action.label;
+    el.insert.hidden = false;
+    el.insert.onclick = action.onClick;
+  } else {
+    el.insert.hidden = true;
+    el.insert.onclick = null;
+  }
+  el.card.classList.add("is-ejected");
+  // Nothing on the face is reachable once it has left the slot.
+  el.face.inert = true;
+}
+
+/** Seat the cartridge: the entrance, mirroring the insert that just happened. */
+function seat() {
+  el.face.inert = false;
+  el.card.classList.remove("is-ejected");
+}
+
+/* ==========================================================================
    Details sheet
    ========================================================================== */
 
-function specRow(label, value, muted = false) {
-  const row = document.createElement("div");
+function specRow(list, label, value, muted = false) {
   const dt = document.createElement("dt");
   dt.textContent = label;
   const dd = document.createElement("dd");
@@ -212,27 +258,138 @@ function specRow(label, value, muted = false) {
   // bug report, so they opt out of the window-wide selection ban.
   dd.classList.add("selectable");
   if (muted) dd.classList.add("is-muted");
+  const row = document.createElement("div");
   row.append(dt, dd);
-  return row;
+  list.append(row);
 }
 
-function renderSpecs(info) {
-  const rows = [specRow("Title", info.title || "—", !info.title)];
+/**
+ * A reading, with its advisory folded behind its own icon.
+ *
+ * The two things the sheet is opened for are whether the link is healthy and
+ * whether the drive is nearly full. Everything that explains a reading belongs
+ * to that reading, not to a block of prose under the whole sheet, so it hides
+ * behind the icon on the card it is about and the sheet stays quiet until it
+ * is asked why.
+ */
+function reading({ label, value, unit, note, fill, advisory, icon }) {
+  const card = document.createElement("div");
+  card.className = "reading";
+
+  const head = document.createElement("div");
+  head.className = "reading__head";
+  const labelEl = document.createElement("p");
+  labelEl.className = "reading__label";
+  labelEl.textContent = label;
+  head.append(labelEl);
+
+  let box;
+  if (advisory) {
+    const why = document.createElement("button");
+    why.className = "reading__why";
+    why.type = "button";
+    why.setAttribute("aria-expanded", "false");
+    why.setAttribute("aria-label", `Why ${label.toLowerCase()} matters`);
+    why.title = "Why this matters";
+    why.innerHTML = icon === "warn"
+      ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="11" height="11" aria-hidden="true"><path d="M8 2.6L14.6 13.4H1.4z" /><path d="M8 6.6v3.1M8 11.6v.1" /></svg>'
+      : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6.4" /><path d="M8 5.1v.1M8 7.4v3.6" /></svg>';
+    head.append(why);
+
+    box = document.createElement("div");
+    box.className = "reading__advisory";
+    const p = document.createElement("p");
+    // The lead is the reading restated; the rest is why it matters.
+    const lead = document.createElement("strong");
+    lead.textContent = advisory.lead;
+    p.append(lead, ` ${advisory.body}`);
+    box.append(p);
+
+    why.addEventListener("click", () => {
+      const open = box.classList.toggle("is-open");
+      why.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  card.append(head);
+
+  const valueEl = document.createElement("p");
+  valueEl.className = "reading__value";
+  valueEl.textContent = value;
+  if (unit) {
+    const unitEl = document.createElement("span");
+    unitEl.className = "reading__unit";
+    unitEl.textContent = ` ${unit}`;
+    valueEl.append(unitEl);
+  }
+  card.append(valueEl);
+
+  if (note) {
+    const noteEl = document.createElement("p");
+    noteEl.className = "reading__note";
+    noteEl.textContent = note;
+    card.append(noteEl);
+  }
+
+  if (typeof fill === "number") {
+    const bar = document.createElement("div");
+    bar.className = "reading__bar";
+    const inner = document.createElement("div");
+    inner.className = "reading__fill";
+    inner.style.width = `${Math.max(0, Math.min(100, fill))}%`;
+    bar.append(inner);
+    card.append(bar);
+  }
+
+  if (box) card.append(box);
+  return card;
+}
+
+/** Split "9.7 GB" into the number and its unit, so the number can be set large. */
+function splitMeasure(text) {
+  const match = /^(\S+)\s*(.*)$/.exec(text ?? "");
+  return match ? { value: match[1], unit: match[2] } : { value: text ?? "—", unit: "" };
+}
+
+function renderIdentity(info) {
+  el.sheetTitle.textContent = info.title || "Cartridge";
+  if (info.cover) {
+    el.sheetThumb.src = info.cover;
+    el.sheetThumb.hidden = false;
+  } else {
+    el.sheetThumb.hidden = true;
+    el.sheetThumb.removeAttribute("src");
+  }
+}
+
+/**
+ * The paths. Least-read thing on the sheet, so they start folded.
+ *
+ * A collection carries one launch target per game rather than one for the
+ * cartridge, so the list says exactly what each row of the rail starts.
+ */
+function renderPaths(info) {
+  el.paths.replaceChildren();
   const games = info.games ?? [];
 
   if (games.length > 1) {
-    // One row per game, so the sheet says exactly what each button starts.
-    rows.push(specRow("Games", String(games.length)));
-    for (const game of games) rows.push(specRow(game.title, game.executable));
+    for (const game of games) {
+      specRow(el.paths, game.title || "Untitled", game.executable || "nothing configured", !game.executable);
+    }
   } else {
-    rows.push(specRow("Launch", info.executable || "nothing configured", !info.executable));
+    specRow(el.paths, "Launch", info.executable || "nothing configured", !info.executable);
   }
 
-  rows.push(
-    specRow("Drive", info.drive_path || "—"),
-    specRow("Cover", info.cover_path || "none found", !info.cover_path),
-  );
-  el.specs.replaceChildren(...rows);
+  specRow(el.paths, "Drive", info.drive_path || "—", !info.drive_path);
+  specRow(el.paths, "Cover", info.cover_path || "none found", !info.cover_path);
+}
+
+function togglePaths(open) {
+  const next = open ?? !el.paths.classList.contains("is-open");
+  el.paths.classList.toggle("is-open", next);
+  el.paths.hidden = !next;
+  el.pathsToggle.setAttribute("aria-expanded", String(next));
+  el.pathsLabel.textContent = next ? "Hide file paths" : "Show file paths";
 }
 
 /**
@@ -251,29 +408,83 @@ async function renderHealth() {
   try {
     health = await invoke("cartridge_health", { drivePath: cartridge.drive_path });
   } catch {
-    return; // The sheet is still useful without it.
+    return; // the sheet is still useful without it
   }
 
-  const rows = [];
-  if (health.link) rows.push(specRow("Link", health.link));
-  if (health.transport) rows.push(specRow("Transport", health.transport));
-  if (health.totalBytes > 0) {
-    rows.push(
-      specRow("Space", `${formatBytes(health.freeBytes)} free · ${health.usedPercent}% full`),
+  // The drive's own name, so the sheet says which cartridge this is without
+  // anyone reading a mount path.
+  const marks = [health.label, health.filesystem].filter(Boolean);
+  el.sheetSub.textContent = marks.join(" · ");
+
+  const cards = [];
+
+  if (health.link) {
+    const { value, unit } = splitMeasure(health.link);
+    const slow = typeof health.linkMbps === "number" && health.linkMbps < 10_000;
+    cards.push(
+      reading({
+        label: "Link",
+        value,
+        unit,
+        note: health.transport || undefined,
+        icon: slow ? "warn" : "info",
+        advisory: advisoryForLink(health),
+      }),
     );
   }
-  el.specs.append(...rows);
 
-  // Anything worth saying gets said in full, under the table.
-  el.health.replaceChildren(
-    ...(health.warnings ?? []).map((text) => {
-      const p = document.createElement("p");
-      p.className = "health__note";
-      p.textContent = text;
-      return p;
-    }),
-  );
-  el.health.hidden = (health.warnings ?? []).length === 0;
+  if (health.totalBytes > 0) {
+    const { value, unit } = splitMeasure(formatBytes(health.freeBytes));
+    cards.push(
+      reading({
+        label: "Free",
+        value,
+        unit,
+        fill: health.usedPercent,
+        icon: "warn",
+        advisory: advisoryForSpace(health),
+      }),
+    );
+  }
+
+  el.readings.replaceChildren(...cards);
+}
+
+/**
+ * The link advisory, rewritten for a card rather than a paragraph.
+ *
+ * The backend's `warnings` are full sentences meant to stand alone. Here the
+ * reading is already on screen directly above, so the lead restates it in three
+ * words and the body is only the part the number cannot say.
+ */
+function advisoryForLink(health) {
+  if (typeof health.linkMbps === "number" && health.linkMbps < 1000) {
+    return {
+      lead: "USB 2.0 port or cable.",
+      body: "Games will stream badly. Try a different port, and the cable the enclosure came with.",
+    };
+  }
+  if (typeof health.linkMbps === "number" && health.linkMbps < 10_000) {
+    return {
+      lead: "About half what the enclosure can do.",
+      body: "Usually a front-panel port, a hub, or a cable that is not rated for 10 Gbps.",
+    };
+  }
+  if (health.transport === "BOT") {
+    return {
+      lead: "One command at a time.",
+      body: "UASP would queue them — worth 2–3× on the small random reads a game streams. A different port or enclosure usually fixes it.",
+    };
+  }
+  return null;
+}
+
+function advisoryForSpace(health) {
+  if (health.usedPercent < 85) return null;
+  return {
+    lead: `${health.usedPercent}% full.`,
+    body: "No DRAM of its own and no host memory over USB, so the last 15% costs more than it looks like. Leaving room back keeps random reads quick.",
+  };
 }
 
 function formatBytes(bytes) {
@@ -310,6 +521,36 @@ function toggleSheet(open) {
   else el.details.focus({ preventScroll: true });
   el.card.scrollTop = 0;
 }
+
+/* ==========================================================================
+   Which prompts are shown
+   --------------------------------------------------------------------------
+   A keycap helps someone with a keyboard; a controller needs the action's own
+   icon, because face-button lettering differs between Xbox, PlayStation and
+   Switch pads. gamepad.js decides this by itself when a pad appears, and the
+   chip in the corner is the override for the case it gets wrong — a pad plugged
+   in that nobody is holding, or a keyboard used in front of a TV.
+   ========================================================================== */
+
+/** null = follow the hardware; true/false = the user has said which. */
+let inputOverride = null;
+
+function padMode() {
+  return inputOverride ?? document.body.classList.contains("is-gamepad");
+}
+
+function renderInputMode() {
+  const pad = padMode();
+  document.body.classList.toggle("is-gamepad", pad);
+  el.inputLabel.textContent = pad ? "Controller" : "Keyboard";
+  el.input.setAttribute("aria-pressed", String(pad));
+  el.input.title = `Prompts shown: ${pad ? "Controller" : "Keyboard"}`;
+}
+
+el.input.addEventListener("click", () => {
+  inputOverride = !padMode();
+  renderInputMode();
+});
 
 /* ==========================================================================
    Status
@@ -353,18 +594,120 @@ el.toast.addEventListener("click", dismissToast);
 let ejectable = true;
 
 function setBusy(busy) {
-  el.play.disabled = busy || !cartridge?.executable;
+  el.play.disabled = busy || !playable();
   el.eject.disabled = busy || !cartridge || !ejectable;
-  if (el.bundleEject) el.bundleEject.disabled = busy || !cartridge || !ejectable;
   if (el.gameList && !el.gameList.hidden) {
-    for (const btn of el.gameList.querySelectorAll(".game-row__play")) {
-      btn.disabled = busy;
+    for (const row of el.gameList.querySelectorAll(".game-row")) {
+      row.setAttribute("aria-disabled", String(busy));
     }
   }
 }
 
 async function closeWindow() {
   if (tauri?.window) await tauri.window.getCurrentWindow().close();
+}
+
+/* ==========================================================================
+   The rail: which game Play acts on
+   ========================================================================== */
+
+/** Index into cartridge.games; 0 for a single game. */
+let selected = 0;
+
+/** Which layer is currently showing, so the other one can take the next art. */
+let coverFront = true;
+
+function games() {
+  return cartridge?.games ?? [];
+}
+
+function isCollection() {
+  return Boolean(cartridge?.is_bundle) && games().length > 0;
+}
+
+function currentGame() {
+  return isCollection() ? games()[selected] : cartridge;
+}
+
+function playable() {
+  return Boolean(currentGame()?.executable);
+}
+
+/**
+ * Move the selection.
+ *
+ * A collection has one Play, and it acts on whatever the rail has picked — so
+ * picking a game is what changes the artwork, the title and what Play will
+ * start. Giving every row its own button made the window a list of buttons;
+ * this makes it a cartridge with a side selected.
+ */
+function select(index) {
+  const list = games();
+  if (index < 0 || index >= list.length || index === selected) return;
+  selected = index;
+
+  for (const row of el.gameList.querySelectorAll(".game-row")) {
+    row.setAttribute("aria-selected", String(Number(row.dataset.index) === index));
+  }
+
+  const game = list[index];
+  el.title.textContent = game.title || "Unknown game";
+  el.title.classList.toggle("is-long", (game.title ?? "").length > 15);
+  if (game.cover) crossfadeCover(game.cover);
+  setBusy(false);
+}
+
+/** Bring the next game's art up behind the current one, then swap. */
+function crossfadeCover(src) {
+  const incoming = coverFront ? el.coverB : el.cover;
+  incoming.hidden = false;
+  incoming.src = src;
+  coverFront = !coverFront;
+  el.card.classList.toggle("is-crossfaded", !coverFront);
+}
+
+function renderRail(list) {
+  el.gameList.replaceChildren();
+
+  list.forEach((game, index) => {
+    const row = document.createElement("li");
+    row.className = "game-row";
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(index === selected));
+    row.tabIndex = 0;
+    row.dataset.index = String(index);
+
+    const img = document.createElement("img");
+    img.className = "game-row__cover";
+    img.alt = "";
+    if (game.cover) img.src = game.cover;
+
+    const body = document.createElement("span");
+    body.className = "game-row__body";
+    const titleEl = document.createElement("span");
+    titleEl.className = "game-row__title";
+    titleEl.textContent = game.title || "Unknown game";
+    const meta = document.createElement("span");
+    meta.className = "game-row__meta";
+    // Only a game whose files are actually on the cartridge has a size worth
+    // printing; a key that points at an installed copy takes no room.
+    meta.textContent = game.sizeBytes ? formatBytes(game.sizeBytes) : "";
+    body.append(titleEl, meta);
+
+    const dot = document.createElement("span");
+    dot.className = "game-row__dot";
+    dot.setAttribute("aria-hidden", "true");
+
+    row.append(img, body, dot);
+    row.addEventListener("click", () => select(index));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select(index);
+      }
+    });
+    el.gameList.append(row);
+  });
 }
 
 /* ==========================================================================
@@ -390,21 +733,17 @@ async function resolveDrivePath() {
   return new URLSearchParams(location.search).get("drive") ?? "";
 }
 
+/**
+ * There is nothing to show.
+ *
+ * The window stays a slot rather than a cartridge with an error printed on it:
+ * an unreadable cartridge is an empty slot, and saying so in the slot's own
+ * label needs no second explanation underneath.
+ */
 function fail(headline, detail) {
-  el.stage?.classList?.remove("has-logo");
-  if (el.titleLogo) {
-    el.titleLogo.hidden = true;
-    el.titleLogo.removeAttribute("src");
-    el.titleLogo.alt = "";
-  }
-  el.title.textContent = headline;
-  el.title.classList.toggle("is-long", headline.length > 15);
-  el.eyebrow.textContent = "Cartridge";
   el.card.classList.add("is-blocked");
-  el.notice.hidden = false;
-  el.notice.textContent = `${detail} Close this window, reconnect the cartridge, and try again.`;
-  el.play.disabled = true;
-  el.eject.disabled = !cartridge || !ejectable;
+  showSlot(headline, { label: "Close", onClick: closeWindow });
+  toast(`${detail} Close this window, reconnect the cartridge, and try again.`, true);
 }
 
 function renderTitle(title, logo) {
@@ -430,6 +769,11 @@ function renderTitle(title, logo) {
 }
 
 async function init() {
+  // The window opens on an empty slot and the cartridge seats into it, which is
+  // the insert that has just happened in the user's hand.
+  el.card.classList.add("is-ejected");
+  el.face.inert = true;
+
   const drivePath = await resolveDrivePath();
 
   if (!drivePath) {
@@ -454,116 +798,54 @@ async function init() {
   } catch {
     ejectable = true;
   }
-  if (!ejectable) {
-    el.eject.hidden = true;
-    if (el.bundleEjectRow) el.bundleEjectRow.hidden = true;
-  }
+  if (!ejectable) el.eject.hidden = true;
 
   renderTitle(cartridge.title, cartridge.logo);
+  renderIdentity(cartridge);
   renderSpecs(cartridge);
+  renderPaths(cartridge);
 
-  if (!cartridge.executable) {
+  // A collection: the cartridge's own name goes above, the rail picks which
+  // game the one Play acts on, and the title becomes the selected game.
+  if (isCollection()) {
+    el.card.classList.add("is-collection");
+    el.eyebrow.hidden = false;
+    el.eyebrow.textContent = cartridge.title || "Collection";
+    el.gameList.hidden = false;
+    renderRail(games());
+    const first = games()[0];
+    if (first) {
+      el.title.textContent = first.title || "Unknown game";
+      el.title.classList.toggle("is-long", (first.title ?? "").length > 15);
+    }
+  }
+
+  if (!playable()) {
     el.card.classList.add("is-blocked");
     el.notice.hidden = false;
     el.notice.textContent =
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
   }
 
-  // Collections may carry a wide Hero for the launcher background. A grid is
-  // still the fallback, so older cartridges and collections without a Hero
-  // keep the cover-first presentation.
-  const launcherArt = cartridge.background || cartridge.cover;
+  // A collection shows the selected game's own art; a single game may carry a
+  // wide Hero for the launcher background, with the grid as the fallback.
+  const launcherArt = isCollection()
+    ? games()[selected]?.cover || cartridge.cover
+    : cartridge.background || cartridge.cover;
   if (launcherArt) await showCover(launcherArt);
-
-  // Bundle mode: replace the single Play button with a per-game list.
-  if (cartridge.is_bundle && cartridge.games?.length > 0) {
-    document.getElementById("button-row").hidden = true;
-    el.gameList.hidden = false;
-    el.bundleEjectRow.hidden = !ejectable;
-    el.bundleEject.disabled = !ejectable;
-    el.bundleHint.hidden = false;
-    el.eyebrow.textContent = `Collection · ${cartridge.games.length} games`;
-    renderGameList(cartridge.games);
-  }
 
   setBusy(false);
   await showWindow();
+  seat();
   // Only now is there something to point at: with a pad connected the cursor
-  // starts on the first Play button.
+  // starts on Play.
   gamepad.focusFirst();
 }
 
-/* ==========================================================================
-   Bundle game list
-   ========================================================================== */
-
-/**
- * Render the per-game list for a multi-game bundle cartridge.
- * Each row has a small cover thumbnail, the game title, and a Play button.
- * Arrow keys move focus; Enter activates the focused play button.
- */
-function renderGameList(games) {
-  el.gameList.replaceChildren();
-  let focusedIndex = 0;
-
-  games.forEach((game, index) => {
-    const li = document.createElement("li");
-    li.className = "game-row";
-
-    const img = document.createElement("img");
-    img.className = "game-row__cover";
-    img.alt = "";
-    if (game.cover) img.src = game.cover;
-
-    const titleEl = document.createElement("span");
-    titleEl.className = "game-row__title";
-    titleEl.textContent = game.title || "Unknown game";
-
-    const key = document.createElement("kbd");
-    key.className = "game-row__key";
-    key.textContent = index < 9 ? String(index + 1) : "";
-    key.setAttribute("aria-hidden", "true");
-
-    const btn = document.createElement("button");
-    btn.className = "game-row__play";
-    btn.type = "button";
-    btn.textContent = "Play";
-    btn.setAttribute("aria-label", `Play ${game.title || "Unknown game"}`);
-    btn.dataset.gameIndex = String(index);
-    btn.addEventListener("click", async () => {
-      if (!game.executable || btn.disabled) return;
-      setBusy(true);
-      toast("Launching…");
-      try {
-        await invoke("launch_game", {
-          executable: game.executable,
-          drivePath: cartridge.drive_path,
-        });
-        toast("Launched");
-        setTimeout(closeWindow, 900);
-      } catch (error) {
-        toast(String(error), true);
-        setBusy(false);
-      }
-    });
-
-    li.append(img, key, titleEl, btn);
-    el.gameList.append(li);
-  });
-
-  // Arrow-key navigation between game rows.
-  el.gameList.addEventListener("keydown", (event) => {
-    const btns = Array.from(el.gameList.querySelectorAll(".game-row__play"));
-    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-      event.preventDefault();
-      focusedIndex = Math.min(focusedIndex + 1, btns.length - 1);
-      btns[focusedIndex]?.focus();
-    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-      event.preventDefault();
-      focusedIndex = Math.max(focusedIndex - 1, 0);
-      btns[focusedIndex]?.focus();
-    }
-  });
+function renderSpecs(info) {
+  el.specs.replaceChildren();
+  const list = info.games ?? [];
+  if (list.length > 1) specRow(el.specs, "Games", String(list.length));
 }
 
 function showCover(src) {
@@ -594,13 +876,22 @@ async function showWindow() {
    Actions
    ========================================================================== */
 
-el.play.addEventListener("click", async () => {
-  if (!cartridge?.executable || el.play.disabled) return;
+/** Set while a launch is in flight, so the sweep runs once and Play holds. */
+let launching = false;
+
+async function doPlay() {
+  const game = currentGame();
+  if (!game?.executable || el.play.disabled || launching) return;
+
+  launching = true;
   setBusy(true);
+  el.play.classList.add("is-launching");
+  el.playLabel.textContent = "Launching";
   toast("Launching…");
+
   try {
     await invoke("launch_game", {
-      executable: cartridge.executable,
+      executable: game.executable,
       drivePath: cartridge.drive_path,
     });
     toast("Launched");
@@ -608,66 +899,67 @@ el.play.addEventListener("click", async () => {
     setTimeout(closeWindow, 900);
   } catch (error) {
     toast(String(error), true);
+    launching = false;
+    el.play.classList.remove("is-launching");
+    el.playLabel.textContent = "Play";
     setBusy(false);
   }
-});
+}
+
+el.play.addEventListener("click", doPlay);
 
 /** Set once the user has been warned that a game lives on this cartridge. */
 let ejectConfirmed = false;
 
-async function doEject(btnLabel) {
-  if (!cartridge) return;
+async function doEject() {
+  if (!cartridge || el.eject.disabled) return;
+
   if (cartridge.holds_game && !ejectConfirmed) {
     ejectConfirmed = true;
-    if (btnLabel) btnLabel.textContent = "Eject anyway";
+    el.eject.title = "Eject anyway";
+    el.eject.setAttribute("aria-label", "Eject anyway");
     el.notice.hidden = false;
-    el.notice.textContent = "The game is installed on this cartridge. Quit it first, then press Eject anyway.";
+    el.notice.textContent =
+      "The game is installed on this cartridge. Quit it first, then press Eject again.";
     toast("Eject is waiting for confirmation", true);
     return;
   }
+
   setBusy(true);
   toast("Ejecting…");
   try {
     await invoke("eject_drive", { drivePath: cartridge.drive_path });
-    toast("Safe to remove");
-    setTimeout(closeWindow, 1400);
+    // The face leaves the slot, and what is left is the thing to take out —
+    // which is the whole message, so the toast stops repeating it.
+    dismissToast();
+    showSlot("Safe to remove", null);
+    setTimeout(closeWindow, SEAT_MS + 800);
   } catch (error) {
     toast(String(error), true);
     setBusy(false);
   }
 }
 
-el.eject.addEventListener("click", async () => {
-  if (!cartridge || el.eject.disabled) return;
-  await doEject(el.eject.querySelector(".btn__label"));
-});
-
-el.bundleEject.addEventListener("click", async () => {
-  if (!cartridge || el.bundleEject.disabled) return;
-  await doEject(el.bundleEject.querySelector(".btn__label"));
-});
+el.eject.addEventListener("click", doEject);
 
 // A controller reaches the same four things the keyboard does, and nothing
 // more: it moves focus and clicks, so it cannot start anything a person at the
 // keyboard could not.
 const gamepad = connectGamepad({
-  play: () => {
-    if (cartridge?.is_bundle && cartridge.games?.length > 0) {
-      el.gameList.querySelector(".game-row__play")?.click();
-    } else {
-      el.play.click();
-    }
-  },
+  play: doPlay,
   details: () => toggleSheet(),
   back: () => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
     else closeWindow();
   },
+  changed: renderInputMode,
 });
 
 el.close.addEventListener("click", closeWindow);
 el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
+el.sheetBack.addEventListener("click", () => toggleSheet(false));
+el.pathsToggle.addEventListener("click", () => togglePaths());
 el.openSettings.addEventListener("click", async () => {
   try {
     await invoke("open_wizard_settings");
@@ -681,12 +973,14 @@ document.addEventListener("keydown", (event) => {
   const sheetOpen = el.sheet.classList.contains("is-open");
 
   // 1-9 start the nth game of a collection, so a cartridge you know can be
-  // played without reaching for the mouse or arrowing down the list.
-  if (!sheetOpen && cartridge?.is_bundle && /^[1-9]$/.test(event.key)) {
-    const button = el.gameList.querySelectorAll(".game-row__play")[Number(event.key) - 1];
-    if (button) {
+  // played without reaching for the mouse or arrowing down the rail. The
+  // selection follows, so the window shows what it just started.
+  if (!sheetOpen && isCollection() && /^[1-9]$/.test(event.key)) {
+    const index = Number(event.key) - 1;
+    if (index < games().length) {
       event.preventDefault();
-      button.click();
+      select(index);
+      doPlay();
     }
     return;
   }
@@ -695,18 +989,12 @@ document.addEventListener("keydown", (event) => {
     case "Enter":
       if (sheetOpen) return;
       event.preventDefault();
-      // For bundles, Enter plays the first game.
-      if (cartridge?.is_bundle && cartridge.games?.length > 0) {
-        el.gameList.querySelector(".game-row__play")?.click();
-      } else {
-        el.play.click();
-      }
+      doPlay();
       break;
     case "e":
     case "E":
       event.preventDefault();
-      if (cartridge?.is_bundle) el.bundleEject.click();
-      else el.eject.click();
+      el.eject.click();
       break;
     case "i":
     case "I":
@@ -754,12 +1042,14 @@ async function demoInvoke(command, args) {
               executable: "steam://rungameid/310970",
               cover: "src/demo/gow-1.jpg",
               cover_path: "",
+              sizeBytes: 64_200_000_000,
             },
             {
               title: "God of War: Ragnarök",
               executable: "steam://rungameid/1476670",
               cover: "src/demo/gow-2.jpg",
               cover_path: "",
+              sizeBytes: 44_700_000_000,
             },
           ],
         };
@@ -786,6 +1076,8 @@ async function demoInvoke(command, args) {
         link: "10 Gbps",
         linkMbps: 10000,
         transport: "BOT",
+        label: "CINDER",
+        filesystem: "exFAT",
         totalBytes: 128_035_676_160,
         freeBytes: 9_663_676_416,
         usedPercent: 92,
@@ -800,4 +1092,5 @@ async function demoInvoke(command, args) {
   }
 }
 
+renderInputMode();
 init();

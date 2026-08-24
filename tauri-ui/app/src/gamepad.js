@@ -42,10 +42,10 @@ export function focusable(root = document) {
   // querySelectorAll returns document order — which would put the window's
   // chrome first and land the cursor on the close button instead of the game.
   const order = [
-    "#game-list .game-row__play",
+    "#game-list .game-row",
     "#btn-play",
-    "#btn-bundle-eject",
     "#btn-eject",
+    "#btn-input",
     "#btn-details",
     "#btn-close",
   ];
@@ -53,7 +53,7 @@ export function focusable(root = document) {
   const reachable = [];
   for (const selector of order) {
     for (const el of root.querySelectorAll(selector)) {
-      if (el.disabled) continue;
+      if (el.disabled || el.getAttribute("aria-disabled") === "true") continue;
       // offsetParent is null for anything display:none, which is how the
       // single-game row and the collection list hide each other.
       if (el.offsetParent === null) continue;
@@ -191,6 +191,7 @@ export function connect(actions) {
     // The focus ring is normally only drawn for keyboard users; with a pad in
     // hand it is the only way to see where you are.
     document.body.classList.add("is-gamepad");
+    actions.changed?.();
     requestAnimationFrame(frame);
   }
 
@@ -214,6 +215,7 @@ export function connect(actions) {
     previous = [];
     held = null;
     document.body.classList.remove("is-gamepad");
+    actions.changed?.();
   }
 
   window.addEventListener("gamepadconnected", start);
