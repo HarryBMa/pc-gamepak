@@ -850,6 +850,9 @@
   display: flex;
   align-items: flex-start;
   gap: 9px;
+  /* A grid item defaults to min-width:auto and refuses to shrink below its
+     content, which pushed the label straight out of the cell. */
+  min-width: 0;
   padding: 9px 11px;
   border: 1px solid oklch(1 0 0 / 0.1);
   border-radius: 6px;
@@ -865,6 +868,8 @@
 
 .choice input {
   flex: none;
+  width: 14px;
+  height: 14px;
   margin: 1px 0 0;
   accent-color: var(--accent);
   cursor: pointer;
@@ -872,6 +877,7 @@
 
 .choice__body {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .choice__name {

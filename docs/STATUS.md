@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 156 tests
+### `core/` — `gamepak-core`, 170 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -17,7 +17,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `edit` | Rewrites a cartridge's metadata — name, artwork, which games are listed and in what order — without copying or deleting anything. |
 | `drives` | Which volumes may be written to — an allowlist of automount locations, never a denylist. Parses `/proc/mounts`; Win32 volume APIs on Windows. |
 | `format` | exFAT and btrfs, behind four gates: removable allowlist re-derived here, not the system drive, the current label typed back exactly, and explicitly asked for. |
-| `health` | Negotiated link speed, UASP vs BOT, how full the drive is. sysfs on Linux; the transport only, lazily, on Windows. |
+| `health` | Negotiated link speed, UASP vs BOT, how full the drive is, and the volume's own name and filesystem. sysfs on Linux; the transport only, lazily, on Windows. |
 | `playnite` | Reads a Playnite JSON library export: one list covering Steam, GOG, Epic, Xbox, itch, emulators. Finds Playnite on Windows and through Proton prefixes on Linux. |
 | `portable` | Ranks the executables in a copied game folder so Play points at the game rather than its uninstaller. |
 | `settings` | What the user has switched on, stored beside the artwork cache. Everything defaults to off. |
@@ -35,14 +35,23 @@ the wizard make is testable on any machine, in CI, without a webview.
 Exactly one window is ever built, so neither mode costs anything for the other.
 24 commands, no command that takes a path to read.
 
-**Launcher** — the artwork fills a 420 × 560 window; title, Play, Eject. A
-collection shows one Play per game with its own art, answering to `1`–`9`. The
-accent colour is sampled from the cover. Details behind the gear, including the
-connection health. Nothing on a cartridge runs without a click.
+**Launcher** — the artwork fills a 420 × 560 window, which is the slot the
+cartridge is seated in: Eject rides the whole face out and leaves the slot
+behind. Title, Play and an eject icon; everything else appears only under the
+pointer. A collection grows a rail, and the one Play acts on whatever it has
+selected, with `1`–`9` selecting and starting the *n*th. The accent colour is
+sampled from the cover. A pad swaps the keycaps for face-button icons and gets a
+focus ring that is always drawn. Details behind the ⓘ, leading with link and
+free space and folding the paths away. Nothing on a cartridge runs without a
+click.
 
-**Wizard** — search your library, pick one game or several, pick the drive,
-choose what goes on it, Write. Formatting, copying, collections, artwork by file
-picker or SteamGridDB, per-cartridge Windows tuning.
+**Wizard** — search your library, tick one game or several, pick the drive,
+choose what goes on it, Write. Selection is always multiple: one ticked is a
+cartridge, more is a multicartridge, and the second step for a name and a face
+only exists for the latter. The third step groups the options by what they touch
+and turns them into a numbered plan with a time estimate; the write itself
+happens in the same window, as a log that ticks itself off. Formatting, copying,
+artwork by file picker or SteamGridDB, per-cartridge Windows tuning.
 
 ### `watcher/` — both platforms, 28 tests
 
@@ -82,8 +91,11 @@ Ranked by how much it matters.
 1. **A tagged release.** Everything downstream — AUR, WinGet, Scoop — points at
    artefacts that do not exist yet. Nothing else on this list unblocks as much.
 2. **Nobody has run this on real hardware.** Every path is unit-tested and the
-   frontend is screenshotted, but no cartridge has been written by this code on a
-   real drive. That is the next real milestone, not a feature.
+   frontend is screenshotted and driven in a headless browser against sample
+   data, but no cartridge has been written by this code on a real drive. That is
+   the next real milestone, not a feature. In particular the wizard's running
+   panel — the throughput, the countdown and the log — is wired to the progress
+   events but has never seen a real one arrive over time.
 
    Related, and now fixed: until PR #10 nothing on Windows compiled at all —
    `gamepak-core` had no `windows-sys` dependency despite calling the Win32
@@ -101,12 +113,26 @@ Ranked by how much it matters.
    pieces are all in `verify`, it needs a command and a button.
 7. **Windows code signing.** Unsigned means SmartScreen on every download.
 8. **macOS** is not supported at all — no watcher, no installer, no icons.
+9. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
+   pointed at both as the way to install, and neither has ever been in the
+   repository — `linux/install.sh`, `linux/install-user.sh` and
+   `windows/install.ps1` are the real entry points and the docs now say so. CI's
+   `shell scripts` job still globs `./*.sh` expecting them, which is why that
+   job is red on `main`: either write the wrappers, or narrow the glob to
+   `linux/*.sh`.
+10. **The settings the design asks for that no command answers.** Per-source
+   toggles with game counts, the artwork cache's size and an Empty button, a
+   copy-speed default, and the launcher-on-the-cartridge options are all drawn
+   in the design and absent here. The dialog is grouped the way the design asks
+   and reports what was actually scanned instead of offering switches that would
+   do nothing.
 
 ## The rootless Linux install
 
 Built. `linux/install-user.sh` puts everything under `$HOME` and runs the watcher
-as a systemd user service; `linux/uninstall-user.sh` takes it back out. The menu
-in `gamepak-linux.sh` offers both.
+as a systemd user service; `linux/uninstall-user.sh` takes it back out. You pick
+between this and the system install by which script you run — the `gamepak-*`
+menu wrappers the README used to point at were never written.
 
 | Install | Trigger | Resident | Needs root |
 |---|---|---|---|

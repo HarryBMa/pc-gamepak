@@ -22,6 +22,21 @@ const PAGES = [
 const idsIn = (html) =>
   new Set([...html.matchAll(/\bid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
 
+/**
+ * A one-character alias for getElementById, if the file defines one.
+ *
+ * A file with a hundred lookups tends to shorten them, and a shorthand this
+ * check cannot see is worse than no shorthand: the check keeps passing while
+ * silently testing nothing. Matching the definition rather than assuming a name
+ * keeps that from being a trap.
+ */
+const aliasIn = (js) => {
+  const m = js.match(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*\w+\s*\)\s*=>\s*document\.getElementById\(/,
+  );
+  return m?.[1] ?? null;
+};
+
 const wantedBy = (js) => {
   const wanted = new Map(); // id -> how it was referenced
   for (const m of js.matchAll(/getElementById\(\s*["']([^"']+)["']\s*\)/g)) {
@@ -30,6 +45,15 @@ const wantedBy = (js) => {
   // Only bare "#id" selectors; anything more complex is not worth guessing at.
   for (const m of js.matchAll(/querySelector(?:All)?\(\s*["']#([A-Za-z0-9_-]+)["']\s*\)/g)) {
     wanted.set(m[1], `querySelector("#${m[1]}")`);
+  }
+
+  const alias = aliasIn(js);
+  if (alias) {
+    const escaped = alias.replace(/[$]/g, "\\$&");
+    const calls = new RegExp(`(?<![\\w$.])${escaped}\\(\\s*["']([^"']+)["']\\s*\\)`, "g");
+    for (const m of js.matchAll(calls)) {
+      wanted.set(m[1], `${alias}("${m[1]}")`);
+    }
   }
   return wanted;
 };
@@ -49,6 +73,12 @@ for (const page of PAGES) {
         console.error(`✗ ${script}: ${how} — no #${id} in ${page.html}`);
         failures += 1;
       }
+    }
+    // Zero is never right for a script that drives a page, and it is what a
+    // broken matcher looks like from the outside.
+    if (wanted.size === 0) {
+      console.error(`✗ ${script}: no element lookups found — this check is not checking anything`);
+      failures += 1;
     }
     console.log(`${script} → ${page.html}: ${wanted.size} ids checked`);
   }
