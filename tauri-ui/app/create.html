@@ -192,6 +192,8 @@
                 <ol id="order-list" aria-label="Play order"></ol>
                 <p class="hint">
                   Drag to reorder — this is the order the games appear in on the launcher.
+                  Each game carries its own poster; the artwork above is the
+                  cartridge's own background and icon.
                 </p>
               </div>
             </div>
@@ -637,7 +639,7 @@
   <dialog id="sgdb-dialog">
     <form id="sgdb-form" method="dialog">
       <header class="dialog-head">
-        <h3>Artwork</h3>
+        <h3 id="sgdb-title">Artwork</h3>
         <button id="sgdb-close" class="icon-btn icon-btn--close" type="submit" value="cancel"
                 aria-label="Close">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"

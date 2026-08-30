@@ -170,6 +170,7 @@ const el = {
   settingsStatus: $("settings-status"),
 
   sgdbDialog: $("sgdb-dialog"),
+  sgdbTitle: $("sgdb-title"),
   sgdbTabs: $("sgdb-tabs"),
   sgdbSearch: $("sgdb-search"),
   sgdbStatus: $("sgdb-status"),
@@ -469,6 +470,21 @@ function renderOrder() {
     const n = document.createElement("span");
     n.className = "order-row__n";
     n.textContent = String(index + 1);
+
+    // The poster this game gets on the launcher. Steam and Playnite already
+    // have one for most games, so the row shows what will be used rather than
+    // an empty slot waiting to be filled in.
+    const thumb = document.createElement("span");
+    thumb.className = "order-row__art";
+    if (safeSrc(game.cover)) {
+      const img = document.createElement("img");
+      img.alt = "";
+      img.src = safeSrc(game.cover);
+      thumb.append(img);
+    } else {
+      thumb.classList.add("is-empty");
+    }
+
     const name = document.createElement("span");
     name.className = "order-row__name";
     name.textContent = game.name;
@@ -476,9 +492,43 @@ function renderOrder() {
     size.className = "order-row__size";
     size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "—";
 
-    li.append(n, name, size);
+    const poster = document.createElement("button");
+    poster.className = "order-row__poster";
+    poster.type = "button";
+    // Not draggable, or starting the drag from the button would reorder rather
+    // than press.
+    poster.draggable = false;
+    poster.textContent = game.coverSource ? "Change" : "Poster…";
+    poster.setAttribute("aria-label", `Choose the poster for ${game.name}`);
+    poster.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openArtwork("cover", Number(li.dataset.index));
+    });
+
+    li.append(n, thumb, name, size, poster);
     el.orderList.append(li);
   });
+}
+
+/**
+ * Fill in the poster each game already has, for the order list to show.
+ *
+ * One request per game, and only for the ones with nothing yet: a collection
+ * is built from a library that has cached art for most of it, and the point of
+ * the list is to show which games will look bare before the cartridge is
+ * written rather than after.
+ */
+async function fillGameCovers() {
+  const missing = picked.filter((game) => !game.cover);
+  for (const game of missing) {
+    try {
+      const cover = await invoke("game_cover", { library: game.library, id: game.id });
+      if (cover) game.cover = cover;
+    } catch {
+      // no art is a state, not a failure
+    }
+  }
+  if (missing.length) renderOrder();
 }
 
 /* Drag to reorder — this is the order the games appear in on the launcher. */
@@ -1362,6 +1412,9 @@ async function write() {
     renderCollectionHint();
     showPhase("name");
     refreshCreateButton();
+    // Not awaited: the step is usable while the posters arrive, and the list
+    // redraws itself when they do.
+    fillGameCovers();
     return;
   }
 
@@ -1465,12 +1518,34 @@ function stepKeyFor(what) {
 let artTarget = "cover";
 let sgdbTimer = null;
 
-function openArtwork(target) {
-  artTarget = target;
+/**
+ * Which game's poster is being chosen, as an index into `picked`.
+ *
+ * `null` means the cartridge's own art. A multicartridge has both: one
+ * background, logo and icon for the cartridge, and a poster for each game on
+ * it, because the launcher shows a different picture per row and a different
+ * one again behind the whole thing.
+ */
+let artGame = null;
+
+function artGameOf() {
+  return artGame === null ? null : picked[artGame] ?? null;
+}
+
+function openArtwork(target, gameIndex = null) {
+  artTarget = gameIndex === null ? target : "cover";
+  artGame = gameIndex;
+
+  const game = artGameOf();
+  // A game on a collection has exactly one piece of art: its poster. The
+  // background, logo and icon belong to the cartridge, not to any one game, so
+  // the tabs that pick them are not offered here.
+  el.sgdbTabs.hidden = game !== null;
   for (const tab of el.sgdbTabs.children) {
-    tab.setAttribute("aria-selected", String(tab.dataset.type === kindFor(target)));
+    tab.setAttribute("aria-selected", String(tab.dataset.type === kindFor(artTarget)));
   }
-  el.sgdbSearch.value = cartridgeTitle();
+  el.sgdbTitle.textContent = game ? `Poster — ${game.name}` : "Artwork";
+  el.sgdbSearch.value = game ? game.name : cartridgeTitle();
   el.icoReceipt.hidden = true;
   refreshPreview();
   el.sgdbDialog.showModal();
@@ -1496,8 +1571,28 @@ function kindFor(target) {
  * that was used last time.
  */
 function artworkKeys() {
-  const game = cartridgeTitle() || "untitled";
+  const name = artGameOf()?.name ?? cartridgeTitle() ?? "";
+  const game = name || "untitled";
   return { cacheKey: `${game}-${kindFor(artTarget)}`, gameKey: game };
+}
+
+/**
+ * File a chosen image against whatever the dialog is currently pointed at.
+ *
+ * A game's poster lives on the game, so it survives reordering and so
+ * buildRequest can hand the backend one cover per `[game]` block. Everything
+ * else is the cartridge's, and lives in `art`.
+ */
+function applyArt(path, preview) {
+  const game = artGameOf();
+  if (game) {
+    game.coverSource = path;
+    game.cover = preview;
+    renderOrder();
+    refreshRail();
+    return;
+  }
+  art[artTarget] = { path, preview };
 }
 
 function targetFor(kind) {
@@ -1570,7 +1665,7 @@ async function chooseArtwork(item, btn) {
 
   try {
     const got = await invoke("sgdb_download_artwork", { url: item.url, ...artworkKeys() });
-    art[artTarget] = { path: got.path, preview: got.dataUri };
+    applyArt(got.path, got.dataUri);
     el.sgdbStatus.textContent = "";
 
     // The icon is the only kind that becomes a different file on disk, so it
@@ -1591,8 +1686,13 @@ async function chooseArtwork(item, btn) {
 
 /** Where the chosen artwork lands: the launcher, exactly as it will look. */
 function refreshPreview() {
+  // While a game's poster is being chosen, the preview shows that game — it is
+  // the row the picture will land on, not the cartridge's own face.
+  const targeted = artGameOf();
   const hero = art.background?.preview;
-  const grid = art.cover?.preview ?? (isCollection() ? null : picked[0]?.cover);
+  const grid = targeted
+    ? targeted.cover
+    : art.cover?.preview ?? (isCollection() ? null : picked[0]?.cover);
 
   el.previewHero.hidden = !safeSrc(hero);
   if (safeSrc(hero)) el.previewHero.src = safeSrc(hero);
@@ -1606,11 +1706,19 @@ function refreshPreview() {
   el.previewLogo.hidden = !safeSrc(logo);
   if (safeSrc(logo)) el.previewLogo.src = safeSrc(logo);
   el.previewStage.classList.toggle("has-logo", Boolean(safeSrc(logo)));
-  el.previewTitle.textContent = cartridgeTitle() || "Nothing yet";
+  el.previewTitle.textContent = targeted?.name ?? (cartridgeTitle() || "Nothing yet");
 
   const icon = art.icon?.preview ?? grid;
   el.previewIcon.style.backgroundImage = safeSrc(icon) ? `url("${safeSrc(icon)}")` : "";
 }
+
+// The target outlives the dialog otherwise, and every later preview would go on
+// showing the game whose poster was picked last.
+el.sgdbDialog.addEventListener("close", () => {
+  artGame = null;
+  el.sgdbTabs.hidden = false;
+  refreshPreview();
+});
 
 el.sgdbSearch.addEventListener("input", () => {
   clearTimeout(sgdbTimer);
@@ -1623,7 +1731,7 @@ el.sgdbUseManual.addEventListener("click", async () => {
   el.sgdbStatus.textContent = "Fetching…";
   try {
     const got = await invoke("sgdb_download_artwork", { url, ...artworkKeys() });
-    art[artTarget] = { path: got.path, preview: got.dataUri };
+    applyArt(got.path, got.dataUri);
     el.sgdbStatus.textContent = "";
     refreshPreview();
     refreshRail();

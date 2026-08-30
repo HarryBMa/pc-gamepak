@@ -732,6 +732,48 @@
   color: oklch(0.62 0.008 75);
 }
 
+/* The poster this game gets on the launcher, at the proportions it will have
+   there: box art, taller than it is wide. */
+.order-row__art {
+  flex: none;
+  display: block;
+  width: 20px;
+  height: 30px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: oklch(0 0 0 / 0.45);
+}
+
+.order-row__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.order-row__art.is-empty {
+  border: 1px dashed oklch(0.42 0.008 75);
+}
+
+.order-row__poster {
+  flex: none;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 3px 7px;
+  background: oklch(0 0 0 / 0.4);
+  color: oklch(0.78 0.008 75);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background-color 160ms linear, color 160ms linear;
+}
+
+.order-row__poster:hover {
+  background: color-mix(in oklch, var(--accent) 26%, transparent);
+  color: var(--ink);
+}
+
 /* ==========================================================================
    Step 3 — options, grouped by what they touch
    ========================================================================== */
@@ -1621,6 +1663,12 @@ dialog form {
   display: flex;
   gap: 4px;
   margin-bottom: 14px;
+}
+
+/* `display: flex` outranks the browser's own [hidden] rule, so hiding the tabs
+   for a single game's poster needs saying here. */
+#sgdb-tabs[hidden] {
+  display: none;
 }
 
 .tab {
