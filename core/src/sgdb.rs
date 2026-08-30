@@ -344,19 +344,44 @@ fn api_key_from(settings: &crate::settings::Settings) -> Result<String, String> 
 /// list, so one body serves for either.
 const NOT_FOUND_BODY: &[u8] = br#"{"success":true,"data":[]}"#;
 
+/// A call to the v2 API, which refuses anything unauthenticated.
 fn request_with_retry(url: &str) -> Result<Vec<u8>, String> {
     let key = api_key()?;
+    get_with_retry(url, Some(&key), true)
+}
+
+/// A fetch of one image from the CDN.
+///
+/// Deliberately unauthenticated. The images are served from a different host to
+/// the API — cdn2.steamgriddb.com rather than www.steamgriddb.com — and it does
+/// not take the API key: a request carrying one is answered with 401, so every
+/// download failed while every search succeeded.
+///
+/// It also means the "paste a URL" field works with no API key at all, which is
+/// the whole point of offering it to someone who has lookup switched off.
+fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
+    get_with_retry(url, None, false)
+}
+
+/// One GET, retrying the failures worth retrying.
+///
+/// `not_found_is_empty` separates the two callers' idea of a 404. For the API it
+/// is an ordinary answer — this game has no artwork of that kind — and an empty
+/// envelope lets the caller carry on. For an image it is a real failure, and
+/// handing back a JSON envelope pretending to be a picture would only move the
+/// error somewhere harder to read.
+fn get_with_retry(url: &str, key: Option<&str>, not_found_is_empty: bool) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_secs(15))
         .build();
 
     for attempt in 0..DEFAULT_RETRIES {
-        // Their v2 API refuses anything unauthenticated.
-        let response = agent
-            .get(url)
-            .set("Authorization", &format!("Bearer {key}"))
-            .call();
+        let mut request = agent.get(url);
+        if let Some(key) = key {
+            request = request.set("Authorization", &format!("Bearer {key}"));
+        }
+        let response = request.call();
         match response {
             Ok(resp) => {
                 let mut reader = resp.into_reader();
@@ -379,7 +404,7 @@ fn request_with_retry(url: &str) -> Result<Vec<u8>, String> {
                     std::thread::sleep(base);
                     continue;
                 }
-                if code == 404 {
+                if code == 404 && not_found_is_empty {
                     // Nothing there. Not an error worth showing: a game with no
                     // artwork of the requested kind is an ordinary result, and
                     // the caller can still fall back to another kind.
@@ -475,7 +500,7 @@ pub fn download_artwork(url: &str, cache_key: &str) -> Result<PathBuf, String> {
         return Ok(destination);
     }
 
-    let bytes = request_with_retry(trimmed_url)?;
+    let bytes = download_bytes(trimmed_url)?;
     if bytes.is_empty() {
         return Err("SteamGridDB returned an empty image.".to_string());
     }
