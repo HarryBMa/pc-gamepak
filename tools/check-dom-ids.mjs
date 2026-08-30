@@ -10,8 +10,12 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+// fileURLToPath, not `new URL(...).pathname`: on Windows the latter yields
+// "/C:/…", and path.resolve reads the leading slash as relative and prepends
+// the drive again, leaving "C:\C:\…".
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Which script drives which page. */
 const PAGES = [
