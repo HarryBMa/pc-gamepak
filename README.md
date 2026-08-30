@@ -563,6 +563,14 @@ plug-in cartridge, the drive would become the sacrificial part. In a USB
 enclosure, the NVMe drive is installed once and left alone, while the repeated
 insertions happen on the cheaper, easier-to-replace USB side instead.
 
+<img width="340" alt="A cartridge with its backplate removed: an M.2 2230 NVMe drive screwed into an aluminium enclosure, the USB-C plug moulded into the shell, and the plate and its single screw beside it" src="docs/hardware-cartridge.jpg" />
+
+That is the whole assembly, opened up: the 2230 drive screwed down inside the
+shell, the USB-C plug part of the enclosure rather than part of the drive, and a
+backplate held on by one screw. Building a cartridge is this once — after that
+the plate goes back on and the only thing that ever meets a port again is the
+enclosure's own connector.
+
 That trade-off does **not** mean giving up useful speed. 10 Gbps over USB 3.2
 Gen 2 is around 1 GB/s in practice — already ahead of what a 2.5" SATA SSD can
 deliver, and far beyond Switch-cartridge or SD-card territory. The aluminium
@@ -589,9 +597,6 @@ internal NVMe if a bargain cartridge drive cannot keep up.
 Nothing here is specific to NVMe or to 2230. Any removable storage your OS will
 automount works: 2.5" SATA SSDs in a dock, SD cards, USB sticks, external HDDs.
 The form factor is a comfort choice, not a technical one.
-
-> **Photos of the physical cartridges are not in the repository yet.** Drop them
-> in `docs/` and link them here — the screenshots below are the software.
 
 </details>
 
