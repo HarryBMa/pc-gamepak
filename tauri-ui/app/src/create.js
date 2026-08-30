@@ -1486,6 +1486,20 @@ function kindFor(target) {
   return { cover: "grid", background: "hero", logo: "logo", icon: "icon" }[target] ?? "grid";
 }
 
+/**
+ * How a downloaded image is filed.
+ *
+ * `cacheKey` names the file in the artwork cache, alongside a hash of the URL,
+ * so it is namespaced by game as well as kind: two cartridges both asking for
+ * a grid are not asking for the same picture. `gameKey` is what the backend
+ * remembers the choice under, so reopening a cartridge can offer the artwork
+ * that was used last time.
+ */
+function artworkKeys() {
+  const game = cartridgeTitle() || "untitled";
+  return { cacheKey: `${game}-${kindFor(artTarget)}`, gameKey: game };
+}
+
 function targetFor(kind) {
   return { grid: "cover", hero: "background", logo: "logo", icon: "icon" }[kind] ?? "cover";
 }
@@ -1518,7 +1532,7 @@ async function searchArtwork() {
     }
     const artwork = await invoke("sgdb_get_artwork", {
       gameId: found[0].id,
-      kind: kindFor(artTarget),
+      artType: kindFor(artTarget),
     });
     renderArtwork(artwork ?? []);
   } catch (error) {
@@ -1555,7 +1569,7 @@ async function chooseArtwork(item, btn) {
   el.sgdbStatus.textContent = "Fetching…";
 
   try {
-    const got = await invoke("sgdb_download_artwork", { url: item.url, kind: kindFor(artTarget) });
+    const got = await invoke("sgdb_download_artwork", { url: item.url, ...artworkKeys() });
     art[artTarget] = { path: got.path, preview: got.dataUri };
     el.sgdbStatus.textContent = "";
 
@@ -1608,7 +1622,7 @@ el.sgdbUseManual.addEventListener("click", async () => {
   if (!url) return;
   el.sgdbStatus.textContent = "Fetching…";
   try {
-    const got = await invoke("sgdb_download_artwork", { url, kind: kindFor(artTarget) });
+    const got = await invoke("sgdb_download_artwork", { url, ...artworkKeys() });
     art[artTarget] = { path: got.path, preview: got.dataUri };
     el.sgdbStatus.textContent = "";
     refreshPreview();
@@ -1909,9 +1923,20 @@ el.btnRescan.addEventListener("click", async () => {
   renderSources();
 });
 
+/**
+ * What "Tune Windows for this cartridge" covers, under the names the backend
+ * parses. One checkbox, two tweaks — Defender and Search, as the step it adds
+ * to the plan says.
+ */
+const WINDOWS_TWEAKS = ["defender", "indexing"];
+
 el.btnTuneCommands.addEventListener("click", async () => {
   try {
-    const commands = await invoke("tuning_plan", { drivePath: selectedDrive });
+    const commands = await invoke("tuning_plan", {
+      drivePath: selectedDrive,
+      tweaks: WINDOWS_TWEAKS,
+      applying: true,
+    });
     status((commands ?? []).join("\n"));
   } catch (error) {
     status(String(error), "error");
@@ -1919,7 +1944,11 @@ el.btnTuneCommands.addEventListener("click", async () => {
 });
 el.btnTuneUndo.addEventListener("click", async () => {
   try {
-    const lines = await invoke("apply_tuning", { drivePath: selectedDrive, applying: false });
+    const lines = await invoke("apply_tuning", {
+      drivePath: selectedDrive,
+      tweaks: WINDOWS_TWEAKS,
+      applying: false,
+    });
     status((lines ?? []).join(" "), "good");
     el.btnTuneUndo.hidden = true;
   } catch (error) {
