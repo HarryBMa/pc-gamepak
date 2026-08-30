@@ -72,8 +72,22 @@ function Install-StandardWatcher {
         }
     }
 
+    # Name the user on both the trigger and the principal.
+    #
+    # `-AtLogOn` with no `-User` means *any* user logging on, which is a
+    # machine-wide task, and registering one without elevation fails with
+    # "Access denied". The watcher is a per-user thing — it opens a window on
+    # one desktop — so the trigger fires for this user, the task runs as this
+    # user, and the whole install needs no UAC prompt.
+    $UserId = "$env:USERDOMAIN\$env:USERNAME"
+
     $Action  = New-ScheduledTaskAction -Execute $WatcherTarget
-    $Trigger = New-ScheduledTaskTrigger -AtLogOn
+    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
+
+    $Principal = New-ScheduledTaskPrincipal `
+        -UserId $UserId `
+        -LogonType Interactive `
+        -RunLevel Limited
 
     # No execution time limit: this is meant to stay running for the session.
     $Settings = New-ScheduledTaskSettingsSet `
@@ -87,7 +101,9 @@ function Install-StandardWatcher {
         -TaskName $TaskName `
         -Action $Action `
         -Trigger $Trigger `
+        -Principal $Principal `
         -Settings $Settings `
+        -Force `
         -Description "Opens the cartridge launcher when a cartridge is plugged in" | Out-Null
 
     Write-Host "Starting watcher..."
