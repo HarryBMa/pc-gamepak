@@ -52,6 +52,7 @@ const el = {
   readings: document.getElementById("readings"),
   specs: document.getElementById("specs"),
   paths: document.getElementById("paths"),
+  pathsFold: document.getElementById("paths-fold"),
   pathsToggle: document.getElementById("btn-paths"),
   pathsLabel: document.getElementById("paths-label"),
   toast: document.getElementById("toast"),
@@ -383,9 +384,10 @@ function renderPaths(info) {
 }
 
 function togglePaths(open) {
-  const next = open ?? !el.paths.classList.contains("is-open");
-  el.paths.classList.toggle("is-open", next);
-  el.paths.hidden = !next;
+  // The fold opens; the list inside it only holds the rows.
+  const next = open ?? !el.pathsFold.classList.contains("is-open");
+  el.pathsFold.classList.toggle("is-open", next);
+  el.pathsFold.hidden = !next;
   el.pathsToggle.setAttribute("aria-expanded", String(next));
   el.pathsLabel.textContent = next ? "Hide file paths" : "Show file paths";
 }

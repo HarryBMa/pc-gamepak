@@ -136,7 +136,7 @@
 
         <!-- Paths are the least-read thing here, so they start folded. -->
         <button id="btn-paths" class="disclosure" type="button" aria-expanded="false"
-                aria-controls="paths">
+                aria-controls="paths-fold">
           <svg class="disclosure__caret" viewBox="0 0 16 16" fill="none" stroke="currentColor"
                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
                width="11" height="11" aria-hidden="true">
@@ -144,7 +144,12 @@
           </svg>
           <span id="paths-label">Show file paths</span>
         </button>
-        <dl id="paths" hidden></dl>
+        <!-- The fold is what opens and closes; the list inside it is what gets
+             clipped while it does. A <dl> cannot do both jobs itself, because
+             the rows it animates are its own children. -->
+        <div id="paths-fold" hidden>
+          <dl id="paths"></dl>
+        </div>
       </div>
 
       <footer id="sheet-footer">

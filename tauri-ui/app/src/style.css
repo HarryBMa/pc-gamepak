@@ -897,23 +897,30 @@ body.is-gamepad :focus {
   color: var(--accent);
 }
 
+/* Opens on grid-template-rows rather than max-height. A max-height needs a
+   number picked in advance, and an advisory longer than the guess is silently
+   cut off; 0fr to 1fr is however tall the text actually is. The spacing above
+   moved into the paragraph's padding so it is clipped with everything else,
+   rather than animating a margin the layout has to reflow around. */
 .reading__advisory {
-  overflow: hidden;
-  max-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
   opacity: 0;
-  margin-top: 0;
-  transition: max-height 400ms var(--ease), opacity 280ms ease,
-    margin-top 400ms var(--ease);
+  transition: grid-template-rows 400ms var(--ease), opacity 280ms ease;
 }
 
 .reading__advisory.is-open {
-  max-height: 150px;
+  grid-template-rows: 1fr;
   opacity: 1;
-  margin-top: 9px;
 }
 
 .reading__advisory p {
+  /* Both required for the row to collapse: a grid item's automatic minimum
+     size is its content, which would hold the row open at 0fr. */
+  min-height: 0;
+  overflow: hidden;
   margin: 0;
+  padding-top: 9px;
   font-size: 11px;
   line-height: 1.5;
   color: oklch(0.82 0.008 75);
@@ -995,26 +1002,33 @@ body.is-gamepad :focus {
   transform: rotate(90deg);
 }
 
-#paths {
+/* Same fold as the advisory above, and for the same reason: a cartridge with
+   six games has six path rows, and no max-height guess fits both that and a
+   cartridge with one. */
+#paths-fold {
   display: grid;
-  gap: 10px;
-  overflow: hidden;
-  max-height: 0;
+  grid-template-rows: 0fr;
   opacity: 0;
-  margin: 0;
-  transition: max-height 420ms var(--ease), opacity 300ms ease,
-    margin-top 420ms var(--ease);
+  transition: grid-template-rows 420ms var(--ease), opacity 300ms ease;
 }
 
-#paths[hidden] {
+#paths-fold[hidden] {
   /* Kept in the layout so it can animate. */
   display: grid;
 }
 
-#paths.is-open {
-  max-height: 260px;
+#paths-fold.is-open {
+  grid-template-rows: 1fr;
   opacity: 1;
-  margin-top: 12px;
+}
+
+#paths {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-top: 12px;
 }
 
 #paths dt {
