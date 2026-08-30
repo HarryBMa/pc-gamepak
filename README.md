@@ -42,8 +42,9 @@ git clone https://github.com/HarryBMa/pc-gamepak.git
 cd pc-gamepak
 cd tauri-ui && npm install && npm run build && cd ..
 
-./gamepak-linux.sh          # Linux  → 1) Install
-# Windows: right-click gamepak-windows.ps1 → Run with PowerShell → 1) Install
+sudo linux/install.sh       # Linux, system install
+# or: linux/install-user.sh  # Linux, no root
+# Windows: right-click windows/install.ps1 → Run with PowerShell
 ```
 
 Then plug a drive in, or run `pc-gamepak --create` to make one.
@@ -690,11 +691,11 @@ cd pc-gamepak
 cd tauri-ui && npm install && npm run build && cd ..
 ```
 
-**Linux** — two shapes, and the menu asks which:
+**Linux** — two shapes, and you pick by which script you run:
 
 ```bash
-./gamepak-linux.sh          # → 1) Install            (recommended)
-                            # → 2) Install without root
+sudo linux/install.sh       # 1) the system install   (recommended)
+linux/install-user.sh       # 2) install without root
 ```
 
 **1 — the system install.** A udev rule, two systemd template units, the helpers
@@ -728,7 +729,7 @@ tail ~/.local/state/pc-gamepak/watcher.log
 
 ```powershell
 cd watcher; cargo build --release; cd ..
-# Right-click gamepak-windows.ps1 → Run with PowerShell → 1) Install
+# Right-click windows/install.ps1 → Run with PowerShell
 ```
 
 Installs the watcher and launcher to `%LOCALAPPDATA%\PC-GamePak` and
@@ -868,11 +869,11 @@ verifies every element the scripts reach for exists in the HTML — the UI ships
 unbundled, so a missing id is a runtime crash rather than a build error.
 
 ```
-gamepak-linux.sh            installer menu (Linux)
-gamepak-windows.ps1         installer menu (Windows)
 cartridge.conf.example      the one file a cartridge needs
 core/                       cartridge logic, no UI — this is where the tests are
-linux/                      udev rule, systemd units, the user service, helpers
+linux/                      udev rule, systemd units, the user service, helpers,
+                            and install.sh / install-user.sh
+windows/                    install.ps1, uninstall.ps1, eject.ps1
 watcher/                    volume watcher: WM_DEVICECHANGE on Windows, the
                             mount table on Linux (rootless install only)
 tauri-ui/                   one binary, two windows (Tauri 2 + Rust, no framework)

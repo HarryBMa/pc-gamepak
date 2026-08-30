@@ -538,7 +538,7 @@ reason. **Replug first** is the answer, and it is not written down anywhere.
 `IsInRole(Administrator) = False`. Needed for: initialising the disk and
 creating a partition, formatting, `FSCTL_LOCK_VOLUME` and
 `FSCTL_DISMOUNT_VOLUME` on eject, Defender exclusions, and the watcher install
-in `gamepak-windows.ps1`.
+in `windows/install.ps1`.
 
 ### Open issue 4 (host, now cleared) — corrupt cargo registry cache
 

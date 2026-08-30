@@ -113,7 +113,14 @@ Ranked by how much it matters.
    pieces are all in `verify`, it needs a command and a button.
 7. **Windows code signing.** Unsigned means SmartScreen on every download.
 8. **macOS** is not supported at all — no watcher, no installer, no icons.
-9. **The settings the design asks for that no command answers.** Per-source
+9. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
+   pointed at both as the way to install, and neither has ever been in the
+   repository — `linux/install.sh`, `linux/install-user.sh` and
+   `windows/install.ps1` are the real entry points and the docs now say so. CI's
+   `shell scripts` job still globs `./*.sh` expecting them, which is why that
+   job is red on `main`: either write the wrappers, or narrow the glob to
+   `linux/*.sh`.
+10. **The settings the design asks for that no command answers.** Per-source
    toggles with game counts, the artwork cache's size and an Empty button, a
    copy-speed default, and the launcher-on-the-cartridge options are all drawn
    in the design and absent here. The dialog is grouped the way the design asks
@@ -123,8 +130,9 @@ Ranked by how much it matters.
 ## The rootless Linux install
 
 Built. `linux/install-user.sh` puts everything under `$HOME` and runs the watcher
-as a systemd user service; `linux/uninstall-user.sh` takes it back out. The menu
-in `gamepak-linux.sh` offers both.
+as a systemd user service; `linux/uninstall-user.sh` takes it back out. You pick
+between this and the system install by which script you run — the `gamepak-*`
+menu wrappers the README used to point at were never written.
 
 | Install | Trigger | Resident | Needs root |
 |---|---|---|---|
