@@ -49,7 +49,6 @@ export function focusable(root = document) {
     "#btn-play",
     "#game-list .game-row",
     "#btn-eject",
-    "#btn-input",
     "#btn-details",
     "#btn-close",
   ];

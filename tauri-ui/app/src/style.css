@@ -289,30 +289,6 @@ body.is-gamepad #chrome-actions {
   transform: translateY(0);
 }
 
-/* Which prompts are being shown. Reads as a label, presses as an override. */
-.chip {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 6px;
-  background: oklch(0.1 0.004 65 / 0.42);
-  color: oklch(0.86 0.008 75);
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background-color 180ms linear;
-}
-
-.chip:hover {
-  background: oklch(0.1 0.004 65 / 0.72);
-}
-
 #chrome .icon-btn {
   position: relative;
   width: 28px;

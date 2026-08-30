@@ -42,8 +42,6 @@ const el = {
   eject: document.getElementById("btn-eject"),
   close: document.getElementById("btn-close"),
   details: document.getElementById("btn-details"),
-  input: document.getElementById("btn-input"),
-  inputLabel: document.getElementById("input-label"),
   openSettings: document.getElementById("btn-open-settings"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
@@ -523,36 +521,6 @@ function toggleSheet(open) {
 }
 
 /* ==========================================================================
-   Which prompts are shown
-   --------------------------------------------------------------------------
-   A keycap helps someone with a keyboard; a controller needs the action's own
-   icon, because face-button lettering differs between Xbox, PlayStation and
-   Switch pads. gamepad.js decides this by itself when a pad appears, and the
-   chip in the corner is the override for the case it gets wrong — a pad plugged
-   in that nobody is holding, or a keyboard used in front of a TV.
-   ========================================================================== */
-
-/** null = follow the hardware; true/false = the user has said which. */
-let inputOverride = null;
-
-function padMode() {
-  return inputOverride ?? document.body.classList.contains("is-gamepad");
-}
-
-function renderInputMode() {
-  const pad = padMode();
-  document.body.classList.toggle("is-gamepad", pad);
-  el.inputLabel.textContent = pad ? "Controller" : "Keyboard";
-  el.input.setAttribute("aria-pressed", String(pad));
-  el.input.title = `Prompts shown: ${pad ? "Controller" : "Keyboard"}`;
-}
-
-el.input.addEventListener("click", () => {
-  inputOverride = !padMode();
-  renderInputMode();
-});
-
-/* ==========================================================================
    Status
    ========================================================================== */
 
@@ -952,7 +920,6 @@ const gamepad = connectGamepad({
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
     else closeWindow();
   },
-  changed: renderInputMode,
 });
 
 el.close.addEventListener("click", closeWindow);
@@ -1092,5 +1059,4 @@ async function demoInvoke(command, args) {
   }
 }
 
-renderInputMode();
 init();
