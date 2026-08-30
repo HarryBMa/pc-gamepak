@@ -674,10 +674,34 @@ fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
     });
 }
 
+/// Put the launcher away while the wizard is up, and bring it back after.
+///
+/// The popup is always_on_top, because a cartridge going in has to land over
+/// whatever is already running. That makes it the one window a wizard opened
+/// from its own Settings link cannot appear in front of: the wizard is there,
+/// focused and taking input, with the popup sitting on top of the part you
+/// clicked to get it. Hiding it is not decoration — it is the difference
+/// between the Settings link working and appearing not to.
+///
+/// A no-op when the app was started with --create, which has no popup at all.
+fn hide_launcher(app: &tauri::AppHandle) {
+    if let Some(launcher) = app.get_webview_window("main") {
+        let _ = launcher.hide();
+    }
+}
+
+fn show_launcher(app: &tauri::AppHandle) {
+    if let Some(launcher) = app.get_webview_window("main") {
+        let _ = launcher.show();
+        let _ = launcher.set_focus();
+    }
+}
+
 fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("create") {
         window.show()?;
         window.set_focus()?;
+        hide_launcher(app);
         if open_settings {
             window.emit("open-settings", ())?;
         }
@@ -688,7 +712,7 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
     // 200% desktop scaling the wizard is taller than the screen it opens on and
     // a fixed window leaves the title bar and the game list off the edge with
     // no way back. The minimum keeps both columns usable.
-    WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
+    let wizard = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
         .title("Create cartridge")
         .inner_size(880.0, 660.0)
         .min_inner_size(720.0, 520.0)
@@ -712,11 +736,27 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
             }
             let _ = window.show();
             let _ = window.set_focus();
+            hide_launcher(window.app_handle());
             if open_settings {
                 let _ = window.emit("open-settings", ());
             }
         })
         .build()?;
+
+    // The popup comes back when the wizard goes away, whichever way it goes:
+    // create.js closes the window, so this is a destroy rather than a hide.
+    // Registered on the window rather than inside on_page_load, so a wizard
+    // that never finishes loading still gives the launcher back when it is
+    // closed.
+    let handle = app.clone();
+    wizard.on_window_event(move |event| {
+        if matches!(
+            event,
+            tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. }
+        ) {
+            show_launcher(&handle);
+        }
+    });
 
     Ok(())
 }
