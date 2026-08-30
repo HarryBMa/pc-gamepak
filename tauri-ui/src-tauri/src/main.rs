@@ -648,8 +648,30 @@ async fn create_cartridge(
 /// straight past cartridge creation to Settings — the same place the tray
 /// menu's "Open settings" lands.
 #[tauri::command]
-fn open_wizard_settings(app: tauri::AppHandle) -> Result<(), String> {
-    open_wizard(&app, true).map_err(|e| e.to_string())
+fn open_wizard_settings(app: tauri::AppHandle) {
+    spawn_open_wizard(app, true);
+}
+
+/// Build the wizard from a thread that is not the event loop's.
+///
+/// A command handler and a tray-menu handler both run on the main thread, and
+/// building a webview window there does not work: the native window is created,
+/// centred and sized, and then its webview never finishes initialising — so
+/// `on_page_load` never fires, create.js never runs, and the window sits
+/// invisible forever. Nothing is deadlocked, which is what makes it confusing;
+/// the message pump answers, the launcher redraws, and the only symptom is that
+/// Settings and the tray's wizard entries appear to do nothing at all.
+///
+/// Creating it from another thread leaves the event loop free to service the
+/// creation it has been asked for. `setup` is the exception that shows the rule:
+/// it runs before the event loop starts, so it can and does call open_wizard
+/// directly.
+fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
+    std::thread::spawn(move || {
+        if let Err(error) = open_wizard(&app, open_settings) {
+            eprintln!("could not open the wizard: {error}");
+        }
+    });
 }
 
 fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()> {
@@ -662,21 +684,11 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         return Ok(());
     }
 
-    let builder = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()));
-    let builder = if open_settings {
-        builder.on_page_load(|window, payload| {
-            if payload.event() == PageLoadEvent::Finished {
-                let _ = window.emit("open-settings", ());
-            }
-        })
-    } else {
-        builder
-    };
     // Resizable, unlike the popup: 880x660 is logical pixels, so at 150% or
     // 200% desktop scaling the wizard is taller than the screen it opens on and
     // a fixed window leaves the title bar and the game list off the edge with
     // no way back. The minimum keeps both columns usable.
-    let window = builder
+    WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
         .title("Create cartridge")
         .inner_size(880.0, 660.0)
         .min_inner_size(720.0, 520.0)
@@ -685,9 +697,27 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         .transparent(true)
         .center()
         .visible(false)
+        // Built hidden and shown here, once the page has loaded.
+        //
+        // This used to be the frontend's job. It is not a job the frontend can
+        // be trusted with: create.js shows the window at the end of its startup,
+        // so any await in there that never settles leaves a window that exists,
+        // has size and position, and is permanently invisible — which from the
+        // outside is indistinguishable from the app having frozen. Page load is
+        // a signal this side already has, and it does not depend on the wizard
+        // finishing its library scan.
+        .on_page_load(move |window, payload| {
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            let _ = window.show();
+            let _ = window.set_focus();
+            if open_settings {
+                let _ = window.emit("open-settings", ());
+            }
+        })
         .build()?;
 
-    let _ = window;
     Ok(())
 }
 
@@ -740,27 +770,18 @@ fn main() {
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
-                    "open-wizard" => {
-                        let _ = open_wizard(app, false);
-                    }
-                    "open-settings" => {
-                        let _ = open_wizard(app, true);
-                    }
+                    "open-wizard" => spawn_open_wizard(app.clone(), false),
+                    "open-settings" => spawn_open_wizard(app.clone(), true),
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .build(app)?;
 
             if wizard {
-                WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
-                    .title("Create cartridge")
-                    .inner_size(880.0, 660.0)
-                    .resizable(false)
-                    .decorations(false)
-                    .transparent(true)
-                    .center()
-                    .visible(false)
-                    .build()?;
+                // The same door the tray and the launcher's Settings link use,
+                // rather than a second builder that had drifted to a fixed size
+                // the resizing comment in open_wizard explicitly argues against.
+                open_wizard(app.handle(), false)?;
             } else {
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("PC GamePak")

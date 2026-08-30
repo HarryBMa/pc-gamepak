@@ -1977,6 +1977,18 @@ async function refreshDrives() {
 }
 
 async function start() {
+  // Subscribed before the first await, not after. open_wizard emits
+  // "open-settings" as soon as the page finishes loading, and a listener
+  // attached after the library scan would arrive long after that event had come
+  // and gone — opening the wizard on the game list instead of on Settings.
+  //
+  // Showing the window is deliberately not done here; open_wizard does it on
+  // page load, so nothing below can strand a window nobody can see.
+  if (tauri?.event) {
+    tauri.event.listen("open-settings", openSettings);
+    tauri.event.listen("cartridge://progress", (event) => onProgress(event.payload));
+  }
+
   try {
     platform = await invoke("host_platform");
   } catch {
@@ -1994,11 +2006,6 @@ async function start() {
   await refreshDrives();
   refreshOptions();
   showPhase("games");
-
-  if (tauri?.event) {
-    tauri.event.listen("open-settings", openSettings);
-    tauri.event.listen("cartridge://progress", (event) => onProgress(event.payload));
-  }
 }
 
 /* ==========================================================================
