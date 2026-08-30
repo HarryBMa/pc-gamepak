@@ -56,9 +56,9 @@ mod windows_watcher {
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::System::Threading::CreateMutexW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, EnumWindows, GetClassNameW,
-        GetMessageW, GetWindowTextW, PostMessageW, PostQuitMessage, RegisterClassW, MSG,
-        WM_CLOSE, WM_DESTROY, WM_DEVICECHANGE, WNDCLASSW, WS_OVERLAPPED,
+        CreateWindowExW, DefWindowProcW, DispatchMessageW, EnumWindows, GetClassNameW, GetMessageW,
+        GetWindowTextW, PostMessageW, PostQuitMessage, RegisterClassW, MSG, WM_CLOSE, WM_DESTROY,
+        WM_DEVICECHANGE, WNDCLASSW, WS_OVERLAPPED,
     };
 
     /// A volume has been inserted and is available.
@@ -282,7 +282,10 @@ mod windows_watcher {
 
         let needle = format!("({letter}:)").encode_utf16().collect::<Vec<u16>>();
         unsafe {
-            EnumWindows(Some(enum_explorer_windows), &needle as *const Vec<u16> as LPARAM);
+            EnumWindows(
+                Some(enum_explorer_windows),
+                &needle as *const Vec<u16> as LPARAM,
+            );
         }
     }
 
@@ -293,7 +296,13 @@ mod windows_watcher {
         let class_len = GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32);
         // "CabinetWClass" is a real Explorer folder window, not the desktop or
         // a taskbar/tray host that also happens to own a top-level HWND.
-        if class_len <= 0 || &class[..class_len as usize] != "CabinetWClass".encode_utf16().collect::<Vec<u16>>().as_slice() {
+        if class_len <= 0
+            || &class[..class_len as usize]
+                != "CabinetWClass"
+                    .encode_utf16()
+                    .collect::<Vec<u16>>()
+                    .as_slice()
+        {
             return 1; // keep enumerating
         }
 
@@ -341,8 +350,7 @@ mod windows_watcher {
     /// regardless.
     fn acquired_single_instance() -> bool {
         let name = wide("Global\\PcCartridgeWatcherSingleInstance");
-        let handle =
-            unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+        let handle = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
         if handle == 0 {
             // Could not even ask; do not block a real launch on this.
             return true;

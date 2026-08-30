@@ -41,9 +41,13 @@ export function focusable(root = document) {
   // Queried one selector at a time and concatenated, because a combined
   // querySelectorAll returns document order — which would put the window's
   // chrome first and land the cursor on the close button instead of the game.
+  // Play first, deliberately. A collection already has a game selected, so the
+  // cursor landing on Play keeps "plug in, press A" true for a cartridge with
+  // one game and one with six; the rail is a d-pad move away for changing
+  // which game that is.
   const order = [
-    "#game-list .game-row",
     "#btn-play",
+    "#game-list .game-row",
     "#btn-eject",
     "#btn-input",
     "#btn-details",

@@ -52,15 +52,22 @@ refused by the backend until the user opts in and supplies their own key.
   `/proc/self/mountinfo` on Linux, `WM_DEVICECHANGE` on Windows) and opens the
   launcher. NFC/PC-SC tags are a second doorbell: a UID names a directory holding
   an ordinary `cartridge.conf`.
-- **Launcher:** 420 × 560 window, the 3:4 of a cover, artwork filling it. Title,
-  Play, Eject on top; everything else behind the gear. Accent colour sampled from
-  the cover at load. A collection shows one Play per game, each with its own
-  thumbnail; `1`–`9` answer to the first nine. Keys: `Enter`, `1`–`9`, `E`, `I`,
-  `Esc`. Gamepad: d-pad/stick to move, A press, B back, Y details, Start play —
-  polling loop exists only while a pad is connected and the window is open.
+- **Launcher:** 420 × 560 window, the 3:4 of a cover, artwork filling it. The
+  window is the slot and the cover is the cartridge in it: Eject rides the whole
+  face out. Title, Play and an eject icon on top; the corner buttons appear under
+  the pointer, everything else behind the ⓘ. Accent colour sampled from the cover
+  at load. A collection grows a rail that picks which game the one Play acts on,
+  cross-fading the art to it; `1`–`9` select and start the first nine. Keys:
+  `Enter`, `1`–`9`, `E`, `I`, `Esc`. Gamepad: d-pad/stick to move, A press, B
+  back, Y details, Start play — polling loop exists only while a pad is connected
+  and the window is open, and the keycaps become face-button icons while it is.
 - **Wizard:** searchable library (Playnite JSON export first, Steam manifests
-  always, the only source on Linux), cover preview, drive picker, options, Write.
-  Collections get a suggested name and chosen artwork. Editing an existing
+  always, the only source on Linux), drive picker, options, Write. Selection is
+  always multiple — one game ticked is a cartridge, several a multicartridge, and
+  the rail titles itself to match. A collection gets a second step for the two
+  things it cannot infer, a suggested name and chosen artwork; a single game
+  never sees it. Options are grouped by what they touch, with the destructive one
+  alone, and become a numbered plan with a time estimate. Editing an existing
   cartridge rewrites metadata only and moves no files.
 - **Eject:** powers the drive down; asks twice when the game itself lives on the
   cartridge.
@@ -108,8 +115,9 @@ launcher's 420 × 560 3:4 window is a product fact, tied to cover-art proportion
 
 Not binding, and open to replacement by later visual work: the current type
 (bundled Archivo variable + Spline Sans Mono), the accent-sampled-from-cover
-rule, and the existing surface treatment. They are the incumbent implementation,
-evidence rather than commitment.
+rule, and the existing surface treatment — now the slot-and-cartridge reading of
+the launcher window, and the tick-count selection model in the wizard. They are
+the incumbent implementation, evidence rather than commitment.
 
 ## Evidence on Hand
 

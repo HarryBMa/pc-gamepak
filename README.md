@@ -23,7 +23,7 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](#working-on-it)
 [![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8B8?logo=tauri&logoColor=white)](#working-on-it)
 
-<img width="420" alt="The cartridge launcher: cover art filling the window, the game title, and Play and Eject buttons" src="docs/launcher.png" />
+<img width="420" alt="The cartridge launcher: cover art filling the window, the game title, and a wide Play button beside an eject icon" src="docs/launcher.png" />
 
 </div>
 
@@ -103,31 +103,35 @@ form factor is a comfort choice, not a technical one.
 <summary><b>The launcher</b> — one window, cover art, Play and Eject</summary>
 <br />
 
-The window is 420 × 560 — the 3:4 of a cover — and the artwork fills it. Only
-three things sit on top: what the cartridge is, Play, and Eject.
+The window is 420 × 560 — the 3:4 of a cover — and the artwork fills it. The
+window is the slot and the cover is the cartridge seated in it: press Eject and
+the whole face rides out, leaving the empty slot behind.
 
-<img width="420" alt="The launcher showing Cinder &amp; Salt with Play and Eject" src="docs/launcher.png" />
-<img width="420" alt="The details sheet, showing mount point, launch target and cover path" src="docs/launcher-details.png" />
+<img width="420" alt="The launcher showing Cinder &amp; Salt: cover art filling the window, the title, and a wide Play button beside an eject icon" src="docs/launcher.png" />
+<img width="420" alt="The details sheet: link speed and free space as two large figures, above a folded Show file paths disclosure" src="docs/launcher-details.png" />
 
 The accent colour is sampled from the cover art at load, so the Play button
-belongs to whatever game is in the dock. Everything the launcher knows beyond
-the title lives behind the gear, because you rarely need it.
+belongs to whatever game is in the dock. At rest almost nothing else is on
+screen — the buttons in the corner appear when the pointer is in the window,
+and everything the launcher knows beyond the title is behind the ⓘ.
 
 ### More than one game on a cartridge
 
 A 256 GB drive holds a series, not a game. Put several on one cartridge and the
-launcher shows the collection's artwork and title with **one Play button per
-game** — no menu, no submenu, nothing to learn.
+launcher grows a rail: **picking a game is what Play acts on**, and the artwork
+behind it cross-fades to whichever one is selected — no menu, no submenu,
+nothing to learn.
 
-<img width="420" alt="The launcher showing a God of War collection: the collection's artwork behind a list of games, each with its own Play button and thumbnail, and Eject below" src="docs/launcher-bundle.png" />
+<img width="420" alt="The launcher showing a God of War collection: the selected game's art filling the window, the collection name above the title, and a rail of games above one shared Play button" src="docs/launcher-bundle.png" />
 
-Each row carries the game's own art, and the first nine answer to the number
-keys. A cartridge with one game on it still gets the plain Play and Eject pair.
+Each row carries the game's own art and size, and the first nine answer to the
+number keys — pressing one selects that game and starts it, so the window shows
+what it just launched. A cartridge with one game on it has no rail at all.
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Play, or the first game of a collection |
-| `1`–`9` | Play the *n*th game of a collection |
+| `Enter` | Play the selected game |
+| `1`–`9` | Select the *n*th game of a collection and play it |
 | `E` | Eject |
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
@@ -144,12 +148,18 @@ loop only exists while a pad is connected and the window is open.
 | **A** | Press the focused button |
 | **B** | Back out of details, or dismiss |
 | **Y** | Details |
-| **Start** | Play, or the first game of a collection |
+| **Start** | Play the selected game |
 
-The cursor starts on the first Play button, so a pad and a cartridge is: plug
-in, press A. Holding a direction repeats after a pause, and a controller can
-only move focus and click — exactly what a person at the keyboard can reach, and
-nothing more.
+The cursor starts on Play — on a collection too, since one game is already
+selected — so a pad and a cartridge is: plug in, press A. The rail is one
+d-pad press away when you want a different game. Holding a direction repeats
+after a pause, and a controller can only move focus and click — exactly what a
+person at the keyboard can reach, and nothing more.
+
+With a pad connected the prompts change with it: the keycaps give way to each
+action's own icon, because face-button lettering differs between Xbox,
+PlayStation and Switch and a printed **A** would be wrong on two of the three.
+The chip in the corner overrides the guess when the hardware gets it wrong.
 
 The wizard is deliberately not controller-driven. Making a cartridge is a
 desk job.
@@ -167,7 +177,7 @@ Run the installer menu and choose **Create a cartridge**, or start it directly:
 pc-gamepak --create
 ```
 
-<img width="760" alt="The create-cartridge wizard: searchable game list on the left, cover preview, drive picker and options on the right" src="docs/wizard.png" />
+<img width="760" alt="The create-cartridge wizard: a searchable game list with tick boxes on the left, and a rail on the right showing the cartridge being built, the drive picker and Write" src="docs/wizard.png" />
 
 The wizard lists everything installed. **Playnite** is read first when present —
 one list covering Steam, GOG, Epic, Xbox, Ubisoft, itch and emulators — and
@@ -187,25 +197,35 @@ can point the wizard at the right directory.
 > it once before using the wizard. Any extension that writes a `library.json` or
 > `games.json` file will work.
 
-Pick a game, pick the drive, choose what goes on it, press Write.
+Tick a game, pick the drive, choose what goes on it, press Write. Selection is
+always multiple — the header counts what is ticked and adds up its size, and the
+rail on the right titles itself **Cartridge** or **Multicartridge** to match.
+There is no mode to enter.
 
 ### Collections
 
-Add a second game with the **+** beside it and the cartridge becomes a
-collection. The wizard then asks for the two things it cannot work out on its
-own — what to call it, and what it should look like:
+Tick a second game and the cartridge is a collection — nothing else to press.
+The rail counts them, and the bar under it puts one band per game so you can see
+which one is taking the room:
 
-<img width="760" alt="The wizard with two games added to a bundle: the collection preview, a collection name field, a Choose artwork button, and the copy option covering both games" src="docs/wizard-bundle.png" />
+<img width="760" alt="The wizard with three games ticked: the rail titled Multicartridge with a three-game list and a space bar split into one band per game" src="docs/wizard-bundle.png" />
+
+A collection is the one thing in a library with no artwork of its own, so a
+second step appears for the two things the wizard cannot work out — what to call
+it, and what it should look like:
 
 - **The name** is suggested from what the games share — *God of War* and *God of
-  War Ragnarök* give *God of War Collection* — and can be typed over.
-- **The artwork** is whatever picture you point at, through the desktop's own
-  file dialog. Without one the first game's cover stands in.
-- **The order** is the order you added them in, and it is the order of the Play
-  buttons in the launcher.
+  War Ragnarök* give *God of War Collection* — and can be typed over. The drive
+  itself takes a squeezed version of it, because exFAT allows 11 characters.
+- **The artwork** is whatever picture you point at, or the first game's cover if
+  you would rather borrow one. Without either, the launcher shows a placeholder.
+- **The order** is drag-to-reorder, and it is the order the games appear in on
+  the launcher's rail.
+
+A single game never sees that step: it takes its name and its art from itself.
 
 Copying works the same for a collection as for a single game: tick the box and
-every game goes across, each Play button pointing at its own copy.
+every game goes across, each entry pointing at its own copy.
 
 ### Changing a cartridge you already made
 
@@ -219,8 +239,8 @@ on this drive** appears:
 <img width="760" alt="The edit dialog: the cartridge name, a Change artwork button, and the list of games with controls to rename, reorder and remove them" src="docs/wizard-edit.png" />
 
 You can rename the cartridge, change its artwork, rename the individual games,
-reorder them — the order is the order of the Play buttons — and take one off the
-list. Adding a game means writing the cartridge again, since that is when files
+reorder them — the order is the order of the launcher's rail — and take one off
+the list. Adding a game means writing the cartridge again, since that is when files
 move.
 
 **Nothing here copies or deletes a game.** Taking a game off the list leaves its
@@ -255,11 +275,13 @@ this survive the cable*, the job it does in zip and gzip, and the wrong tool for
 **The drive's name and icon** — an `autorun.inf` with `label=`, so Explorer shows
 *HOLLOW KNIGHT* rather than *Removable Disk (D:)*. The `icon=` key is written
 when a usable `.ico` can be produced; Explorer will not take a JPEG, so a
-Steam-sourced cover usually leaves the default icon in place.
+Steam-sourced cover usually leaves the default icon in place. On by default, and
+a tick box under **The cartridge itself** when you would rather the drive stayed
+plain.
 
 **The game itself**, by whichever route suits where it came from:
 
-<img width="760" alt="The wizard copying a GOG game, with a dropdown choosing which executable Play should start" src="docs/wizard-portable.png" />
+<img width="760" alt="Adding a game by hand: the chosen folder, a title taken from the folder name, and the executables inside it ranked with the uninstaller and the runtime pushed to the bottom" src="docs/wizard-portable.png" />
 
 - *Steam games* go to `steamapps/` and the drive is registered in Steam's
   `libraryfolders.vdf`, so Steam plays **from the cartridge** rather than your
@@ -276,8 +298,12 @@ Steam-sourced cover usually leaves the default icon in place.
   uninstallers and redistributables sink) and offers the best guess, which you
   can change.
 
-**Games in no library at all** can be entered by hand with any supported URI or a
-path on the cartridge.
+**Games in no library at all** — an itch download, a folder nothing scanned —
+are entered by hand: point at the folder and the wizard ranks the programs
+inside it, saying which it thinks are uninstallers or runtimes rather than
+hiding them, and tidies a title out of the folder name for you to correct. There
+is no art to inherit for these, so the cover is honestly empty until you give it
+one. Any supported URI or a path on the cartridge works too.
 
 <a id="artwork-from-steamgriddb"></a>
 
@@ -288,7 +314,7 @@ emulator entries, older GOG titles — and the launcher then shows a placeholder
 The wizard can look artwork up on [SteamGridDB](https://www.steamgriddb.com/)
 to fill those gaps.
 
-<img width="760" alt="The wizard's settings: a switch for SteamGridDB lookup, off by default, and a field for a personal API key" src="docs/wizard-settings.png" />
+<img width="760" alt="The wizard's settings, grouped: where games come from, artwork with the SteamGridDB switch off by default and a key field, and defaults for a new cartridge" src="docs/wizard-settings.png" />
 
 **It is off by default**, and it is the only part of this project that talks to
 the network. Turn it on behind the gear in the wizard's title bar, where it also
@@ -302,7 +328,7 @@ artwork…** opens the desktop's own file dialog and copies whatever you point a
 
 ### Formatting erases the drive
 
-<img width="760" alt="The wizard with formatting enabled: a field asking you to type the drive's current name, with Write disabled until it matches" src="docs/wizard-format.png" />
+<img width="760" alt="The wizard's third step with formatting enabled: options grouped by what they touch, the destructive one alone under its own heading, and a field asking you to type the drive's current name before Write will run" src="docs/wizard-format.png" />
 
 Formatting is opt-in per cartridge and gated four ways: the target must be on
 the removable-drive allowlist the wizard re-derives itself, it must not be the
@@ -371,7 +397,7 @@ Neither of these gets better with a faster cartridge.
 Press `I` on the launcher and it reports three things about the drive in front
 of it:
 
-<img width="420" alt="The launcher's details sheet showing link speed, transport and free space, with plain-language notes about what to do" src="docs/launcher-health.png" />
+<img width="420" alt="The details sheet with an advisory open: the link reading explaining BOT mode in plain language, and the file paths unfolded below" src="docs/launcher-health.png" />
 
 - **Link** — 10 Gbps is what a Gen 2 enclosure should negotiate. 5 Gbps means a
   front-panel port, a hub, or a cable that is not rated for it; 480 Mbps means
