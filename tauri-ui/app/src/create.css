@@ -18,14 +18,14 @@
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   overflow: hidden;
-  border-radius: var(--radius);
-  background: linear-gradient(200deg, var(--panel) 0%, var(--shell) 100%);
+  border-radius: 18px;
+  background: linear-gradient(180deg, oklch(0.18 0.006 65) 0%, oklch(0.145 0.005 65) 100%);
   box-shadow:
     inset 0 1px 0 oklch(1 0 0 / 0.07),
     inset 0 0 0 1px oklch(1 0 0 / 0.05),
-    0 20px 44px -14px oklch(0 0 0 / 0.7);
+    0 26px 52px -18px oklch(0 0 0 / 0.8);
   animation: shell-in 460ms var(--ease) both;
 }
 
@@ -44,8 +44,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 12px 12px 20px;
-  border-bottom: 1px solid oklch(1 0 0 / 0.075);
+  padding: 10px 12px 10px 18px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.06);
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.02), transparent);
 }
 
 #bar-title {
@@ -115,23 +116,24 @@
    is open reads as continuous with the panel below it. */
 #tabs {
   display: flex;
-  gap: 2px;
-  padding: 0 20px;
-  border-bottom: 1px solid oklch(1 0 0 / 0.075);
+  gap: 6px;
+  padding: 8px 18px 0;
+  border-bottom: 1px solid oklch(1 0 0 / 0.06);
+  background: oklch(1 0 0 / 0.015);
 }
 
 .tab {
   position: relative;
   appearance: none;
   border: 0;
-  background: none;
+  background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  padding: 10px 14px 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 11px 14px 12px;
   cursor: pointer;
-  border-radius: 7px 7px 0 0;
+  border-radius: 8px 8px 0 0;
   transition: color 160ms linear, background-color 160ms linear;
 }
 
@@ -148,9 +150,11 @@
 .tab[aria-selected="true"]::after {
   content: "";
   position: absolute;
-  inset: auto 10px -1px;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
   height: 2px;
-  border-radius: 2px 2px 0 0;
+  border-radius: 999px;
   background: var(--accent);
 }
 
@@ -161,9 +165,9 @@
 
 #columns {
   display: grid;
-  /* The library list is the wider job; the rail is what is being built. */
-  grid-template-columns: 1fr 348px;
+  grid-template-columns: minmax(0, 1fr) 348px;
   min-height: 0;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.006), oklch(1 0 0 / 0));
 }
 
 #panel-create,
@@ -213,6 +217,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.012), transparent 70%);
 }
 
 .phase {
@@ -325,9 +330,10 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid oklch(1 0 0 / 0.08);
-  border-radius: 8px;
-  background: oklch(0 0 0 / 0.24);
+  border: 1px solid oklch(1 0 0 / 0.07);
+  border-radius: 12px;
+  background: linear-gradient(180deg, oklch(0 0 0 / 0.18), oklch(0 0 0 / 0.12));
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04);
   overflow: hidden;
 }
 
@@ -1209,8 +1215,8 @@
   flex-direction: column;
   min-height: 0;
   padding: 20px;
-  border-left: 1px solid oklch(1 0 0 / 0.075);
-  background: oklch(0 0 0 / 0.16);
+  border-left: 1px solid oklch(1 0 0 / 0.06);
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.02), oklch(0 0 0 / 0.12));
   overflow-y: auto;
   overscroll-behavior: contain;
 }

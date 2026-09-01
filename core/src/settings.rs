@@ -21,6 +21,11 @@ pub struct Settings {
     /// A personal SteamGridDB API key. Their v2 API refuses unauthenticated
     /// requests, so the integration does nothing useful without one.
     pub steamgriddb_api_key: String,
+    /// Size the launcher window to the active SteamGridDB hero artwork ratio.
+    ///
+    /// The default stays off: the launcher opens in its standard compact popup
+    /// size unless the user deliberately asks for the wider hero layout.
+    pub launcher_hero_window: bool,
     /// Folders to scan for games that no launcher knows about.
     ///
     /// Empty means "whatever `folders::default_roots` finds", which is the
@@ -65,6 +70,7 @@ impl Default for Settings {
         Self {
             steamgriddb_enabled: false,
             steamgriddb_api_key: String::new(),
+            launcher_hero_window: false,
             game_folder_roots: Vec::new(),
             default_filesystem: "exfat".to_string(),
             // Costs a read pass over the drive and is worth it: the alternative

@@ -188,6 +188,7 @@ const el = {
   icoReceipt: $("ico-receipt"),
   sgdbManualUrl: $("sgdb-manual-url"),
   sgdbUseManual: $("sgdb-use-manual"),
+  sgdbUseLocal: $("sgdb-use-local"),
   previewArt: $("preview-art"),
   previewHero: $("preview-hero"),
   previewGrid: $("preview-grid"),
@@ -225,6 +226,7 @@ let copyTouched = false;
 let settings = {
   steamgriddbEnabled: false,
   steamgriddbApiKey: "",
+  launcherHeroWindow: false,
   defaultFilesystem: "exfat",
   defaultVerify: true,
   defaultIcon: true,
@@ -232,6 +234,7 @@ let settings = {
 };
 
 let editing = null;
+let activeTab = "create";
 
 /** Which phase the left column is showing. */
 let phase = "games";
@@ -1072,6 +1075,14 @@ function cartridgeTitle() {
 }
 
 function refreshRail() {
+  if (activeTab === "edit") {
+    el.barText.textContent = editing?.title ? `Edit ${editing.title}` : "Edit cartridge";
+    el.railEmpty.hidden = true;
+    el.railBody.hidden = true;
+    el.railDrives.hidden = true;
+    return;
+  }
+
   const has = picked.length > 0 || Boolean(manual);
   el.railEmpty.hidden = has;
   el.railBody.hidden = !has;
@@ -1783,12 +1794,26 @@ el.sgdbUseManual.addEventListener("click", async () => {
 });
 
 /** A file on this machine, rather than anything fetched. */
-async function pickCoverFile(target) {
+async function pickCoverFile(target = artTarget) {
   try {
     const chosen = await invoke("pick_cover_image");
     if (!chosen) return;
+    const game = artGameOf();
+    if (game) {
+      game.coverSource = chosen.path;
+      game.cover = chosen.preview;
+      renderOrder();
+      refreshPreview();
+      refreshRail();
+      return;
+    }
     art[target] = { path: chosen.path, preview: chosen.preview };
-    setPlate(el.collectionCover, el.collectionCoverImg, chosen.preview);
+    if (target === "cover") {
+      setPlate(el.collectionCover, el.collectionCoverImg, chosen.preview);
+    }
+    if (target === "background") {
+      setPlate(el.previewHero, el.previewHero, chosen.preview);
+    }
     refreshPreview();
     refreshRail();
   } catch (error) {
@@ -1810,6 +1835,9 @@ function applySettings() {
   el.setEject.checked = settings.defaultEject !== false;
   el.setRegisterSteam.checked = settings.defaultRegisterSteam !== false;
   el.setFormat.checked = Boolean(settings.defaultFormat);
+  if (document.getElementById("set-launcher-hero")) {
+    document.getElementById("set-launcher-hero").checked = Boolean(settings.launcherHeroWindow);
+  }
 }
 
 /**
@@ -1841,13 +1869,34 @@ function applyDefaults() {
    ========================================================================== */
 
 /** Which tab is showing. The rail belongs to both and never moves. */
-function showTab(name) {
-  const editing = name === "edit";
-  el.tabCreate.setAttribute("aria-selected", String(!editing));
-  el.tabEdit.setAttribute("aria-selected", String(editing));
-  el.panelCreate.hidden = editing;
-  el.panelEdit.hidden = !editing;
-  if (editing) refreshEditDrives();
+async function showTab(name) {
+  const isEdit = name === "edit";
+  activeTab = isEdit ? "edit" : "create";
+
+  el.tabCreate.setAttribute("aria-selected", String(!isEdit));
+  el.tabEdit.setAttribute("aria-selected", String(isEdit));
+  el.tabCreate.tabIndex = isEdit ? -1 : 0;
+  el.tabEdit.tabIndex = isEdit ? 0 : -1;
+  el.panelCreate.hidden = isEdit;
+  el.panelEdit.hidden = !isEdit;
+
+  if (isEdit) {
+    await refreshEditDrives();
+    const cartridges = (drives ?? []).filter((drive) => drive.hasCartridge);
+    const preferred = cartridges.find((drive) => drive.path === selectedDrive) ?? cartridges[0];
+    if (preferred && (!editing || editing.drivePath !== preferred.path)) {
+      await openEditor(preferred.path);
+    }
+    el.barText.textContent = editing?.title ? `Edit ${editing.title}` : "Edit cartridge";
+    return;
+  }
+
+  el.barText.textContent = building
+    ? `Writing ${el.optFormat.checked ? el.formatLabel.value.trim() || driveLabel() : driveLabel()}`
+    : isCollection()
+      ? "Create multicartridge"
+      : "Create cartridge";
+  refreshRail();
 }
 
 /**
@@ -1869,6 +1918,13 @@ async function refreshEditDrives() {
 
   el.editDrives.replaceChildren();
   el.editDrivesEmpty.hidden = cartridges.length > 0;
+
+  if (activeTab === "edit" && cartridges.length > 0) {
+    const preferred = cartridges.find((drive) => drive.path === selectedDrive) ?? cartridges[0];
+    if (!editing || editing.drivePath !== preferred.path) {
+      await openEditor(preferred.path);
+    }
+  }
 
   for (const drive of cartridges) {
     const li = document.createElement("li");
@@ -1931,6 +1987,7 @@ async function saveSettings() {
       settings: {
         steamgriddbEnabled: el.setSgdb.checked,
         steamgriddbApiKey: el.setSgdbKey.value.trim(),
+        launcherHeroWindow: document.getElementById("set-launcher-hero")?.checked ?? false,
         defaultFilesystem: el.setFilesystem.value,
         defaultVerify: el.setVerify.checked,
         defaultIcon: el.setIcon.checked,
@@ -2136,6 +2193,7 @@ el.customExec.addEventListener("input", () => {
 el.btnCustomCover.addEventListener("click", () => pickCoverFile("cover"));
 
 el.btnCollectionCover.addEventListener("click", () => openArtwork("cover"));
+el.sgdbUseLocal.addEventListener("click", () => pickCoverFile(artTarget));
 el.btnInheritCover.addEventListener("click", async () => {
   const first = picked[0];
   if (!first) return;
@@ -2192,7 +2250,7 @@ el.btnRefetchArt.addEventListener("click", refetchArtwork);
 
 // Edit is now a single tab action, not a second link in the drive list.
 el.editSave.addEventListener("click", saveEdits);
-el.btnEditCover.addEventListener("click", () => pickCoverFile("cover"));
+el.btnEditCover.addEventListener("click", () => openArtwork("cover"));
 el.btnUnregister.addEventListener("click", async () => {
   try {
     await invoke("unregister_from_steam", { drivePath: selectedDrive });
@@ -2362,7 +2420,7 @@ async function demoInvoke(command, args) {
       ] };
     case "get_settings":
       // The preview mirrors a fresh install: offline until switched on.
-      return { steamgriddbEnabled: false, steamgriddbApiKey: "" };
+      return { steamgriddbEnabled: false, steamgriddbApiKey: "", launcherHeroWindow: false };
     case "set_settings":
       return args.settings;
     case "suggest_collection_name": {

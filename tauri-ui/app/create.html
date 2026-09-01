@@ -113,9 +113,6 @@
               <button id="btn-custom-cover" class="btn btn--quiet" type="button">
                 Choose artwork…
               </button>
-              <p class="hint">
-                Nothing cached this game, so there is no art to inherit.
-              </p>
             </div>
 
             <div id="custom-fields">
@@ -147,11 +144,6 @@
                 <input id="custom-exec" type="text" placeholder="steam://rungameid/367520"
                        autocomplete="off" spellcheck="false" />
               </label>
-              <p class="hint">
-                A <code>steam://</code>, <code>heroic://</code>, <code>gog://</code>,
-                <code>epic://</code>, <code>lutris://</code> or <code>https://</code> link,
-                or a path to a file on the cartridge.
-              </p>
 
               <button id="btn-custom-back" class="link" type="button">
                 Back to the game list
@@ -184,11 +176,7 @@
               <button id="btn-collection-cover" class="btn btn--quiet btn--accent" type="button">
                 Choose artwork…
               </button>
-              <p class="hint">
-                A collection has no art of its own.
-                <button id="btn-inherit-cover" class="link" type="button"></button>,
-                or pick a file.
-              </p>
+              <button id="btn-inherit-cover" class="link" type="button" hidden></button>
             </div>
 
             <div id="name-fields">
@@ -205,7 +193,7 @@
                 <p class="hint">
                   Drag to reorder — this is the order the games appear in on the launcher.
                   Each game carries its own poster; the artwork above is the
-                  cartridge's own background and icon.
+                  cartridge's own face and icon.
                 </p>
               </div>
             </div>
@@ -440,12 +428,6 @@
               <span class="step__rule"></span>
             </div>
 
-            <p class="hint">
-              Rewrites what the cartridge says about itself — its name, its
-              artwork and the list of games. Nothing is copied, and no game
-              files are touched.
-            </p>
-
             <label class="field">
               <span class="field__label">Cartridge name</span>
               <input id="edit-title" type="text" autocomplete="off" />
@@ -468,10 +450,6 @@
               <button id="btn-refetch-art" class="btn btn--quiet" type="button">
                 Fetch fresh posters for every game
               </button>
-              <p class="hint">
-                One SteamGridDB lookup per game. Replaces a wide Steam header
-                with a real cover, which is what a cropped-looking poster is.
-              </p>
             </div>
 
             <div class="edit-actions">
@@ -546,9 +524,6 @@
             <p class="field__label">Cartridge</p>
             <ul id="drives" aria-label="Target drives"></ul>
             <p id="drives-empty" class="hint" hidden></p>
-            <button id="btn-edit" class="link" type="button" hidden>
-              Edit the cartridge already on this drive
-            </button>
             <button id="btn-unregister" class="link" type="button" hidden>
               Remove this drive from Steam's library list
             </button>
@@ -637,6 +612,20 @@
               It is stored on this machine only, next to the artwork cache.
             </p>
           </div>
+        </div>
+
+        <p class="group">Launcher</p>
+        <div class="group__body">
+          <label class="opt">
+            <input id="set-launcher-hero" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Size the launcher to the SteamGridDB hero art</span>
+              <span class="opt__hint">
+                Keeps the popup wide enough to match the background art when the
+                cartridge carries a hero image.
+              </span>
+            </span>
+          </label>
         </div>
 
         <p class="group">Defaults for a new cartridge</p>
@@ -732,6 +721,11 @@
           <!-- The icon tab is the only one that writes a file, so it is the
                only one that reports back. -->
           <p id="ico-receipt" class="hint" hidden></p>
+
+          <label class="field">
+            <span class="field__label">Or choose a file</span>
+            <button id="sgdb-use-local" class="btn btn--quiet" type="button">Choose file…</button>
+          </label>
 
           <label class="field">
             <span class="field__label">Or paste an artwork URL</span>

@@ -375,6 +375,40 @@ body.is-gamepad .pad-badge {
   display: none;
 }
 
+#meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#title-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mini-btn {
+  appearance: none;
+  border: 1px solid oklch(1 0 0 / 0.12);
+  background: oklch(0.1 0.004 65 / 0.34);
+  color: oklch(0.88 0.008 75);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 180ms linear, background 180ms linear;
+}
+
+.mini-btn:hover {
+  border-color: oklch(1 0 0 / 0.25);
+  background: oklch(0.1 0.004 65 / 0.52);
+}
+
 #game-title {
   margin: 0;
   font-size: 40px;
@@ -670,6 +704,73 @@ body.is-gamepad :focus {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 5px;
+}
+
+/* ==========================================================================
+   Picker modal
+   ========================================================================== */
+
+.picker-dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  border: 1px solid oklch(1 0 0 / 0.12);
+  border-radius: 18px;
+  background: oklch(0.112 0.004 65 / 0.98);
+  color: oklch(0.92 0.006 75);
+  box-shadow: 0 30px 70px -30px oklch(0 0 0 / 0.8);
+  padding: 0;
+}
+
+.picker-dialog::backdrop {
+  background: oklch(0 0 0 / 0.42);
+}
+
+.picker-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 14px 10px;
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.picker-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.picker-item {
+  appearance: none;
+  width: 100%;
+  display: block;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: oklch(1 0 0 / 0.04);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.picker-item:hover {
+  border-color: oklch(1 0 0 / 0.22);
+  background: oklch(1 0 0 / 0.07);
 }
 
 /* ==========================================================================

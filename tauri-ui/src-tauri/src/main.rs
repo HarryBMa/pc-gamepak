@@ -55,7 +55,7 @@ use std::process::Command;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::PageLoadEvent;
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 // --------------------------------------------------------------------------
@@ -431,8 +431,9 @@ fn get_settings() -> settings::Settings {
 /// Store the settings and hand back what was stored, so the window and the file
 /// cannot drift apart.
 #[tauri::command]
-fn set_settings(settings: settings::Settings) -> Result<settings::Settings, String> {
+fn set_settings(app: tauri::AppHandle, settings: settings::Settings) -> Result<settings::Settings, String> {
     settings::save(&settings)?;
+    apply_launcher_window_size(&app, settings.launcher_hero_window);
     Ok(settings)
 }
 
@@ -742,6 +743,18 @@ fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
     });
 }
 
+fn apply_launcher_window_size(app: &tauri::AppHandle, hero_window: bool) {
+    if let Some(window) = app.get_webview_window("main") {
+        let (width, height) = if hero_window {
+            (460.0, 260.0)
+        } else {
+            (420.0, 560.0)
+        };
+        let _ = window.set_size(LogicalSize::new(width, height));
+        let _ = window.center();
+    }
+}
+
 /// Put the launcher away while the wizard is up, and bring it back after.
 ///
 /// The popup is always_on_top, because a cartridge going in has to land over
@@ -893,7 +906,7 @@ fn main() {
                 // the resizing comment in open_wizard explicitly argues against.
                 open_wizard(app.handle(), false)?;
             } else {
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                let launcher = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("PC GamePak")
                     .inner_size(420.0, 560.0)
                     .resizable(false)
@@ -904,6 +917,8 @@ fn main() {
                     .center()
                     .visible(false)
                     .build()?;
+                apply_launcher_window_size(&app.handle(), settings::load().launcher_hero_window);
+                let _ = launcher; // keep the window alive and preserve the builder's side effects.
             }
             Ok(())
         })

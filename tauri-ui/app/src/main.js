@@ -34,9 +34,15 @@ const el = {
   placeholder: document.getElementById("cover-placeholder"),
   eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
+  titleActions: document.getElementById("title-actions"),
   title: document.getElementById("game-title"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
+  changeGame: document.getElementById("btn-change-game"),
+  changeMedia: document.getElementById("btn-change-media"),
+  picker: document.getElementById("launcher-picker"),
+  pickerTitle: document.getElementById("picker-title"),
+  pickerList: document.getElementById("picker-list"),
   play: document.getElementById("btn-play"),
   playLabel: document.querySelector("#btn-play .btn__label"),
   eject: document.getElementById("btn-eject"),
@@ -835,6 +841,45 @@ function renderSpecs(info) {
   if (list.length > 1) specRow(el.specs, "Games", String(list.length));
 }
 
+async function openPicker(kind) {
+  const list = kind === "game" ? (games() ?? []) : (await invoke("list_target_drives") ?? []);
+
+  el.pickerTitle.textContent = kind === "game" ? "Choose game" : "Choose media";
+  el.pickerList.replaceChildren();
+
+  for (const [index, item] of list.entries()) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "picker-item";
+    row.textContent = kind === "game"
+      ? (item.title || "Untitled game")
+      : `${item.label || "Unnamed media"} · ${formatBytes(item.freeBytes) || "no space reported"}`;
+
+    row.addEventListener("click", async () => {
+      if (kind === "game") {
+        selected = index;
+        const game = games()[index];
+        if (game) {
+          setGameTitle(game.title);
+          if (game.cover) crossfadeCover(game.cover);
+          setBusy(false);
+        }
+      } else {
+        toast(`${item.label || "Media"} selected`, false);
+      }
+      el.picker.close();
+    });
+
+    el.pickerList.append(row);
+  }
+
+  el.picker.showModal();
+}
+
+function closePicker() {
+  if (el.picker.open) el.picker.close();
+}
+
 function showCover(src) {
   return new Promise((resolve) => {
     el.cover.hidden = false;
@@ -943,6 +988,10 @@ const gamepad = connectGamepad({
 
 el.close.addEventListener("click", closeWindow);
 el.details.addEventListener("click", () => toggleSheet());
+el.changeGame.addEventListener("click", () => openPicker("game"));
+el.changeMedia.addEventListener("click", () => openPicker("media"));
+el.picker.addEventListener("cancel", () => closePicker());
+el.picker.querySelector("form").addEventListener("submit", (event) => { event.preventDefault(); closePicker(); });
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
 el.sheetBack.addEventListener("click", () => toggleSheet(false));
 el.pathsToggle.addEventListener("click", () => togglePaths());

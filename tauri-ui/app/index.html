@@ -77,7 +77,13 @@
              because a single game already says its name in the title. -->
         <p id="eyebrow" hidden></p>
 
-        <img id="title-logo" alt="" hidden />
+        <div id="meta-row">
+          <img id="title-logo" alt="" hidden />
+          <div id="title-actions">
+            <button id="btn-change-game" class="mini-btn" type="button">Change game</button>
+            <button id="btn-change-media" class="mini-btn" type="button">Change media</button>
+          </div>
+        </div>
         <h1 id="game-title">Reading cartridge…</h1>
 
         <!-- The only explanation of why Play is disabled, so it is announced. -->
@@ -110,6 +116,22 @@
         </div>
       </footer>
     </div>
+
+    <dialog id="launcher-picker" class="picker-dialog">
+      <form method="dialog">
+        <header class="picker-head">
+          <h2 id="picker-title">Select</h2>
+          <button id="picker-close" class="icon-btn icon-btn--close" type="submit"
+                  aria-label="Close picker">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" width="15" height="15" aria-hidden="true">
+              <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" />
+            </svg>
+          </button>
+        </header>
+        <ul id="picker-list" class="picker-list" aria-live="polite"></ul>
+      </form>
+    </dialog>
 
     <!-- Details, on request only -->
     <aside id="sheet" hidden aria-label="Cartridge details">
