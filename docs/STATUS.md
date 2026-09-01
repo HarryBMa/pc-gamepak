@@ -115,14 +115,20 @@ Ranked by how much it matters.
    enclosure. `std::fs::copy` would have reported success for every byte of it.
 
    That is the case for `verify` existing, and it is why it is now on by
-   default. It is also the open question that matters most: the enclosure resets
-   the bus on every port tried so far, so **no cartridge written through it can
-   be trusted yet**. Which of cable, bridge chip or port is at fault is not
-   settled.
+   default.
 
-   Still untested on hardware: the wizard's running panel — the throughput, the
-   countdown and the log — is wired to the progress events but has never been
-   watched through a full clean write.
+   **The cause was the cable.** With it replaced, `PLAYSTATION` was rewritten as
+   a single-game Stardew Valley cartridge — format to exFAT, copy, register with
+   Steam, verify — and the whole run logged **no bus resets and no I/O retries
+   at all**. 3833 files, all matching; `verify-cart` re-checked it afterwards
+   and agreed; the launcher opens on it. That is the first clean end-to-end
+   write this project has had, and it also confirmed the new default: the
+   request that built it never mentioned verifying and got it anyway.
+
+   Still untested on hardware: a sustained write big enough to be interesting.
+   The clean run was 0.75 GB, where the corrupt one was 107 GB, so the wizard's
+   running panel — the throughput, the countdown and the log — still has not
+   been watched through anything long.
 
    Related, and now fixed: until PR #10 nothing on Windows compiled at all —
    `gamepak-core` had no `windows-sys` dependency despite calling the Win32

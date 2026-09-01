@@ -842,3 +842,63 @@ link that is still resetting is how you get a third corrupt file.
 `PLAYSTATION` has no manifest at all — it was written before verify was on by
 default, during the 19-reset session. It is the cartridge most likely to be bad
 and the one that cannot be checked. Rewrite it.
+
+---
+
+## 2026-09-01, later — first clean end-to-end write
+
+Open issue 9 closed: **it was the cable.** With it replaced, both enclosures sit
+on ports that behave, and a full build ran without a single `UASPStor 129` reset
+or `disk 153` retry in the event log — the first time that has happened.
+
+### The run
+
+`PLAYSTATION` (3 games, 99 GB, no manifest, written during the 19-reset session)
+was rewritten as a single-game cartridge, driven by `build-cart`:
+
+```json
+{ "drivePath": "G:\\", "title": "Stardew Valley",
+  "executable": "steam://rungameid/413150", "appId": "413150",
+  "formatDrive": true, "formatFilesystem": "exfat", "formatLabel": "STARDEW",
+  "formatConfirmation": "PLAYSTATION (G:)", "copyGame": true, "writeIcon": true }
+```
+
+`verifyCopy` is deliberately absent: this run was also the test that the new
+serde default reaches the real pipeline. It did.
+
+```
+formatted: true (exfat)        gameCopied: true, 750,467,660 bytes
+registeredWithSteam: true      usedPercent: 1
+verified: "Checked all 3833 files against what was written; every one matches."
+verifiedOk: true               warnings: []
+```
+
+Then, independently, `verify-cart G:\` — 3833 files, 0.75 GB at 443 MB/s,
+"intact: every file matches the manifest."
+
+The cartridge came out with `cartridge.conf` in single-game form (no
+`[collection]` section), `.gamepak/manifest.json`, and `autorun.inf` plus
+`cover.ico` both hidden. `pc-gamepak --drive G:\` opens on it: window titled
+`PC GamePak`, 28.1 MB resident, closes cleanly on window close.
+
+### Phase status, updated
+
+| Phase | Status |
+|---|---|
+| 0 — build and unit tests | **PASS** — 194 tests, clippy clean, fmt clean |
+| 1 — prepare the NVMe | **PASS** |
+| 3 — format and copy | **PASS** — formats, copies, registers with Steam, verifies |
+| 4 — cartridge contents | **PASS** — conf, manifest, autorun and icon all correct |
+| 5 — insert detection, Play, Eject | **PARTIAL** — launcher opens on a real cartridge; insert detection and Play not yet driven |
+
+### Still open
+
+- The clean run was 0.75 GB. The write that corrupted data was 107 GB. Nothing
+  has yet been watched through a long sustained transfer on the new cable, and
+  that is where the old failure lived — so this is evidence, not proof.
+- `TOMB RAIDER` still has its two corrupt `.tiger` archives. Now that the link
+  is quiet, re-copying them from `F:\Games\Steam` should stick.
+- The format gate wants the label exactly as `format_plan` reports it, which
+  includes the drive letter — `PLAYSTATION (G:)`, not `PLAYSTATION`. The wizard
+  shows that string so it is consistent there, but anything scripting
+  `build-cart` has to know it.
