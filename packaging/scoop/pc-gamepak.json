@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/HarryBMa/pc-gamepak/releases/download/v0.1.0/pc-gamepak-0.1.0-windows-x86_64.zip",
-            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "hash": "f7208a20f470dc000396d46854f00eea3932bd185a93f3a0dcdbdf48d33a81a6",
             "extract_dir": "pc-gamepak-0.1.0-windows-x86_64"
         }
     },
@@ -15,10 +15,19 @@
         "pc-gamepak-watcher.exe"
     ],
     "notes": [
+        "The wizard works straight away, with no further setup:",
+        "",
+        "    pc-gamepak --create",
+        "",
         "The watcher is what opens a launcher when a cartridge is plugged in.",
-        "To have it start at logon, run the installer once from the extracted",
-        "folder:  powershell -ExecutionPolicy Bypass -File windows\\install.ps1",
-        "The wizard runs on its own without any of that:  pc-gamepak --create"
+        "Scoop cannot register it to start at logon, so run the installer once:",
+        "",
+        "    powershell -ExecutionPolicy Bypass -File \"$dir\\windows\\install.ps1\" -Mode Watcher",
+        "",
+        "-Mode Watcher matters: without it the script asks which mode to install",
+        "and a non-interactive shell cannot answer.",
+        "",
+        "To undo that later:  powershell -File \"$dir\\windows\\uninstall.ps1\""
     ],
     "checkver": {
         "github": "https://github.com/HarryBMa/pc-gamepak"
