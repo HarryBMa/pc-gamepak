@@ -500,6 +500,7 @@
               <p id="rail-sub" class="mono"></p>
               <button id="btn-rail-art" class="link" type="button" hidden>Replace artwork</button>
             </div>
+            <button id="btn-change-game" class="change-btn" type="button">Change</button>
           </div>
 
           <!-- The games in it, while step 1 is open -->
@@ -521,7 +522,10 @@
 
           <!-- The drive to write to -->
           <div id="rail-drives">
-            <p class="field__label">Cartridge</p>
+            <div class="rail-drives__head">
+              <p class="field__label">Cartridge</p>
+              <button id="btn-change-media" class="change-btn" type="button">Change</button>
+            </div>
             <ul id="drives" aria-label="Target drives"></ul>
             <p id="drives-empty" class="hint" hidden></p>
             <button id="btn-unregister" class="link" type="button" hidden>
@@ -562,6 +566,39 @@
       </aside>
     </div>
   </main>
+
+  <!--
+    Change game / Change media.
+
+    The rail states what is chosen; these are how it gets changed. Both are the
+    same shape on purpose — a searchable list of everything available, the
+    current choice marked — because "which game" and "which drive" are the same
+    question asked about two different kinds of thing.
+  -->
+  <dialog id="pick-dialog">
+    <form id="pick-form" method="dialog">
+      <header class="dialog-head">
+        <h3 id="pick-title">Choose a game</h3>
+        <button id="pick-close" class="icon-btn icon-btn--close" type="submit" value="cancel"
+                aria-label="Close">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" width="15" height="15" aria-hidden="true">
+            <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" />
+          </svg>
+        </button>
+      </header>
+
+      <div class="dialog-body">
+        <label class="pick-search">
+          <span class="sr-only" id="pick-search-label">Filter the list</span>
+          <input id="pick-search" type="search" autocomplete="off" spellcheck="false"
+                 aria-labelledby="pick-search-label" placeholder="Type to filter…" />
+        </label>
+        <ul id="pick-list" class="pick-list" aria-labelledby="pick-title"></ul>
+        <p id="pick-empty" class="hint" hidden></p>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="settings-dialog">
     <form id="settings-form" method="dialog">

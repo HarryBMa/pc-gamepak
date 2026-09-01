@@ -34,15 +34,11 @@ const el = {
   placeholder: document.getElementById("cover-placeholder"),
   eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
-  titleActions: document.getElementById("title-actions"),
+  coverCard: document.getElementById("cover-card"),
   title: document.getElementById("game-title"),
+  gameMeta: document.getElementById("game-meta"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
-  changeGame: document.getElementById("btn-change-game"),
-  changeMedia: document.getElementById("btn-change-media"),
-  picker: document.getElementById("launcher-picker"),
-  pickerTitle: document.getElementById("picker-title"),
-  pickerList: document.getElementById("picker-list"),
   play: document.getElementById("btn-play"),
   playLabel: document.querySelector("#btn-play .btn__label"),
   eject: document.getElementById("btn-eject"),
@@ -629,8 +625,40 @@ function select(index) {
 
   const game = list[index];
   setGameTitle(game.title);
-  if (game.cover) crossfadeCover(game.cover);
+  // With a hero the backdrop belongs to the cartridge, not to whichever game is
+  // selected, so it holds still and only the card in front of it changes. It is
+  // the cover that moves because it is the cover that is being chosen.
+  if (!el.card.classList.contains("has-hero") && game.cover) crossfadeCover(game.cover);
+  renderCoverCard();
   setBusy(false);
+}
+
+/**
+ * The cover card, and the line under the title saying where the game actually
+ * lives.
+ *
+ * Hidden when the cover is already the backdrop — showing the same image twice,
+ * once blurred behind itself, reads as a rendering fault rather than a design.
+ */
+function renderCoverCard() {
+  const game = currentGame();
+  const cover = game?.cover || cartridge?.cover || "";
+  const show = Boolean(cover) && el.card.classList.contains("has-hero");
+
+  el.coverCard.hidden = !show;
+  if (show) {
+    el.coverCard.src = cover;
+    el.coverCard.alt = `${game?.title || cartridge?.title || "This game"} cover`;
+  } else {
+    el.coverCard.removeAttribute("src");
+  }
+
+  // `holds_game` is the cartridge's answer for every game on it: it says whether
+  // this drive carries the files or merely points at an installed copy.
+  const where = cartridge?.holds_game ? "On the cartridge" : "On this PC";
+  const size = game?.sizeBytes ? formatBytes(game.sizeBytes) : "";
+  el.gameMeta.textContent = size ? `${where} · ${size}` : where;
+  el.gameMeta.hidden = false;
 }
 
 /** Bring the next game's art up behind the current one, then swap. */
@@ -820,12 +848,16 @@ async function init() {
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
   }
 
-  // A collection shows the selected game's own art; a single game may carry a
-  // wide Hero for the launcher background, with the grid as the fallback.
-  const launcherArt = isCollection()
-    ? games()[selected]?.cover || cartridge.cover
-    : cartridge.background || cartridge.cover;
+  // Two pieces of art doing two different jobs. The hero fills the window; the
+  // cover stands in front of it as a card, the size and shape of the thing you
+  // would have picked up off a shelf. A cartridge carrying no hero falls back to
+  // the way this always worked — the cover fills the window instead, and the
+  // card would only be the same image twice, so it stays hidden.
+  const hero = cartridge.background;
+  const launcherArt = hero || (isCollection() ? games()[selected]?.cover : null) || cartridge.cover;
   if (launcherArt) await showCover(launcherArt);
+  el.card.classList.toggle("has-hero", Boolean(hero));
+  renderCoverCard();
 
   setBusy(false);
   await showWindow();
@@ -839,45 +871,6 @@ function renderSpecs(info) {
   el.specs.replaceChildren();
   const list = info.games ?? [];
   if (list.length > 1) specRow(el.specs, "Games", String(list.length));
-}
-
-async function openPicker(kind) {
-  const list = kind === "game" ? (games() ?? []) : (await invoke("list_target_drives") ?? []);
-
-  el.pickerTitle.textContent = kind === "game" ? "Choose game" : "Choose media";
-  el.pickerList.replaceChildren();
-
-  for (const [index, item] of list.entries()) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "picker-item";
-    row.textContent = kind === "game"
-      ? (item.title || "Untitled game")
-      : `${item.label || "Unnamed media"} · ${formatBytes(item.freeBytes) || "no space reported"}`;
-
-    row.addEventListener("click", async () => {
-      if (kind === "game") {
-        selected = index;
-        const game = games()[index];
-        if (game) {
-          setGameTitle(game.title);
-          if (game.cover) crossfadeCover(game.cover);
-          setBusy(false);
-        }
-      } else {
-        toast(`${item.label || "Media"} selected`, false);
-      }
-      el.picker.close();
-    });
-
-    el.pickerList.append(row);
-  }
-
-  el.picker.showModal();
-}
-
-function closePicker() {
-  if (el.picker.open) el.picker.close();
 }
 
 function showCover(src) {
@@ -988,10 +981,6 @@ const gamepad = connectGamepad({
 
 el.close.addEventListener("click", closeWindow);
 el.details.addEventListener("click", () => toggleSheet());
-el.changeGame.addEventListener("click", () => openPicker("game"));
-el.changeMedia.addEventListener("click", () => openPicker("media"));
-el.picker.addEventListener("cancel", () => closePicker());
-el.picker.querySelector("form").addEventListener("submit", (event) => { event.preventDefault(); closePicker(); });
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
 el.sheetBack.addEventListener("click", () => toggleSheet(false));
 el.pathsToggle.addEventListener("click", () => togglePaths());
@@ -1075,10 +1064,12 @@ async function demoInvoke(command, args) {
           title: "God of War Collection",
           cover: "src/demo/gow-collection.jpg",
           cover_path: "D:\\collection.jpg",
+          background: "src/demo/gow-1.jpg",
+          background_path: "D:\\.gamepak\\hero.jpg",
           executable: "steam://rungameid/310970",
           drive_path: args.drivePath,
           is_bundle: true,
-          holds_game: false,
+          holds_game: true,
           games: [
             {
               title: "God of War (2018)",
@@ -1103,9 +1094,15 @@ async function demoInvoke(command, args) {
         // browser loads it directly.
         cover: "src/demo/cover.jpg",
         cover_path: "D:\\cover.jpg",
+        // `?state=nohero` drops it, because the fallback — cover fills the
+        // window, no card — is the layout every cartridge written before heroes
+        // existed still gets, and it has to keep working.
+        background: state === "nohero" ? "" : "src/demo/gow-collection.jpg",
+        background_path: "D:\\.gamepak\\hero.jpg",
         executable: state === "noexec" ? "" : "steam://rungameid/367520",
         drive_path: args.drivePath,
         is_bundle: false,
+        holds_game: true,
         games: [],
       };
     case "can_eject":

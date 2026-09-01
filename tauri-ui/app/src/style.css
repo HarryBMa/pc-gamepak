@@ -375,38 +375,66 @@ body.is-gamepad .pad-badge {
   display: none;
 }
 
-#meta-row {
+/* --- Title block: the cover as a card, against the hero behind it -------- */
+
+/* Bottom-aligned rather than centred: the cover and the title are two objects
+   standing on the same shelf, and the type reads as printed on the card's
+   baseline instead of floating beside it. */
+#title-block {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: flex-end;
+  gap: 14px;
 }
 
-#title-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+#title-text {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 2px;
 }
 
-.mini-btn {
-  appearance: none;
-  border: 1px solid oklch(1 0 0 / 0.12);
-  background: oklch(0.1 0.004 65 / 0.34);
-  color: oklch(0.88 0.008 75);
-  border-radius: 999px;
-  padding: 7px 10px;
+/* Sized to a standard cover's 2:3, so any grid image drops in without cropping.
+   The inset hairline is what separates a dark cover from the dark scrim it sits
+   on — without it the card loses its edge on exactly the artwork that needs one
+   most. */
+#cover-card {
+  flex: none;
+  display: block;
+  width: 78px;
+  height: 117px;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow:
+    0 8px 20px -6px oklch(0 0 0 / 0.85),
+    inset 0 0 0 1px oklch(1 0 0 / 0.14);
+}
+
+#cover-card[hidden] {
+  display: none;
+}
+
+/* The card takes width the title used to have, so the title gives some back. */
+#card.has-hero #game-title {
+  font-size: 31px;
+  line-height: 0.88;
+}
+
+#card.has-hero #game-title.is-long {
+  font-size: 25px;
+}
+
+/* Where the game actually lives — the one fact the launcher can state that
+   nothing else on screen implies. */
+#game-meta {
+  margin: 9px 0 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color 180ms linear, background 180ms linear;
+  color: oklch(0.7 0.008 75);
 }
 
-.mini-btn:hover {
-  border-color: oklch(1 0 0 / 0.25);
-  background: oklch(0.1 0.004 65 / 0.52);
+#game-meta[hidden] {
+  display: none;
 }
 
 #game-title {
@@ -704,73 +732,6 @@ body.is-gamepad :focus {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 5px;
-}
-
-/* ==========================================================================
-   Picker modal
-   ========================================================================== */
-
-.picker-dialog {
-  width: min(26rem, calc(100vw - 2rem));
-  border: 1px solid oklch(1 0 0 / 0.12);
-  border-radius: 18px;
-  background: oklch(0.112 0.004 65 / 0.98);
-  color: oklch(0.92 0.006 75);
-  box-shadow: 0 30px 70px -30px oklch(0 0 0 / 0.8);
-  padding: 0;
-}
-
-.picker-dialog::backdrop {
-  background: oklch(0 0 0 / 0.42);
-}
-
-.picker-dialog form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px 14px 10px;
-}
-
-.picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.picker-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.picker-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.picker-item {
-  appearance: none;
-  width: 100%;
-  display: block;
-  border: 1px solid oklch(1 0 0 / 0.08);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: oklch(1 0 0 / 0.04);
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.picker-item:hover {
-  border-color: oklch(1 0 0 / 0.22);
-  background: oklch(1 0 0 / 0.07);
 }
 
 /* ==========================================================================
@@ -1272,5 +1233,73 @@ body.is-gamepad :focus {
   #cover-img-b {
     animation: none;
     transform: scale(1.06);
+  }
+}
+
+/* ==========================================================================
+   The hero window
+
+   Opt-in, from Settings: the window takes the artwork's own 1920:620 instead of
+   the cartridge's portrait. Everything still overlays the art, but there is a
+   third of the height to do it in, so the type and the cover card come down to
+   a size that leaves the hero visible — which is the entire point of choosing
+   this shape.
+
+   Keyed off the window's aspect rather than a class, so it is right during the
+   resize as well as after it.
+   ========================================================================== */
+
+@media (min-aspect-ratio: 2 / 1) {
+  #stage {
+    padding: 0 18px 16px;
+  }
+
+  #cover-card {
+    width: 58px;
+    height: 87px;
+  }
+
+  #card.has-hero #game-title,
+  #game-title {
+    font-size: 26px;
+  }
+
+  #card.has-hero #game-title.is-long,
+  #game-title.is-long {
+    font-size: 21px;
+  }
+
+  #game-meta {
+    margin-top: 6px;
+  }
+
+  #button-row {
+    margin-top: 12px;
+  }
+
+  .btn {
+    height: 42px;
+  }
+
+  /* The rail would eat a window this short. A collection keeps its list, but as
+     a single scrolling row rather than a stack of full-width rows. */
+  #game-list {
+    flex-direction: row;
+    overflow-x: auto;
+    max-height: none;
+  }
+
+  .game-row {
+    flex: 0 0 auto;
+  }
+
+  .game-row__meta {
+    display: none;
+  }
+
+  /* The bottom scrim is sized for a tall window; over 310px it would cover the
+     whole hero and there would be nothing left to look at. */
+  #scrim-bottom {
+    height: 78%;
   }
 }

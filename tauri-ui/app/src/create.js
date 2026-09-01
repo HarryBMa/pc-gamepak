@@ -165,6 +165,15 @@ const el = {
   editSave: $("edit-save"),
   editStatus: $("edit-status"),
 
+  changeGame: $("btn-change-game"),
+  changeMedia: $("btn-change-media"),
+  pickDialog: $("pick-dialog"),
+  pickForm: $("pick-form"),
+  pickTitle: $("pick-title"),
+  pickSearch: $("pick-search"),
+  pickList: $("pick-list"),
+  pickEmpty: $("pick-empty"),
+
   settingsDialog: $("settings-dialog"),
   sources: $("sources"),
   scanAge: $("scan-age"),
@@ -784,6 +793,120 @@ function renderDrives() {
     el.drivesEmpty.textContent =
       "No removable drive found. Plug a cartridge in, then press Rescan.";
   }
+}
+
+/* ==========================================================================
+   Change game / Change media
+
+   One dialog, two jobs. The rail says what is chosen; this is how it is
+   changed, without the list of everything installed having to sit on screen
+   for the whole of the rest of the job.
+
+   `pick` holds what the open dialog is choosing between and what to do when a
+   row is clicked, so the rendering below never has to ask which mode it is in.
+   ========================================================================== */
+
+let pick = null;
+
+/** Rows currently worth showing, given what has been typed. */
+function pickRows() {
+  const query = el.pickSearch.value.trim().toLowerCase();
+  if (!query) return pick.items;
+  return pick.items.filter((item) => pick.text(item).toLowerCase().includes(query));
+}
+
+function renderPickList() {
+  const rows = pickRows();
+  el.pickList.replaceChildren();
+
+  for (const item of rows) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pick-item";
+    // A radio rather than an option: exactly one of these is the current
+    // answer, and the list exists to move that answer somewhere else.
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", String(pick.isCurrent(item)));
+
+    const name = document.createElement("span");
+    name.className = "pick-item__name";
+    name.textContent = pick.name(item);
+
+    const meta = document.createElement("span");
+    meta.className = "pick-item__meta";
+    meta.textContent = pick.meta(item);
+
+    btn.append(name, meta);
+    btn.addEventListener("click", () => {
+      pick.choose(item);
+      el.pickDialog.close();
+    });
+
+    li.append(btn);
+    el.pickList.append(li);
+  }
+
+  el.pickEmpty.hidden = rows.length > 0;
+  if (rows.length === 0) el.pickEmpty.textContent = pick.empty;
+}
+
+function openPick(config) {
+  pick = config;
+  el.pickTitle.textContent = config.title;
+  el.pickSearch.value = "";
+  el.pickSearch.placeholder = config.placeholder;
+  renderPickList();
+  el.pickDialog.showModal();
+  // The list is long and the keyboard is already where the filtering happens.
+  el.pickSearch.focus();
+}
+
+/**
+ * Every installed game, whichever launcher found it.
+ *
+ * Ticking here is the same tick as the list in step 1 — `toggle` is the one
+ * path that adds or removes a game — so choosing from this dialog and choosing
+ * from the list behave identically, including what it does to a multicartridge.
+ */
+function openGamePicker() {
+  openPick({
+    title: "Choose a game",
+    placeholder: "Filter installed games…",
+    empty: "Nothing matches. Every launcher this machine knows about has been scanned.",
+    items: library,
+    text: (game) => `${game.name} ${game.source || game.library || ""}`,
+    name: (game) => game.name,
+    meta: (game) => {
+      const size = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "not installed";
+      const source = game.source || game.library || "";
+      return source ? `${source} · ${size}` : size;
+    },
+    isCurrent: (game) => picked.some((p) => p.id === game.id),
+    choose: (game) => {
+      // Picking the game that is already picked should not silently untick it —
+      // from in here that reads as the dialog having done nothing.
+      if (!picked.some((p) => p.id === game.id)) toggle(game, true);
+    },
+  });
+}
+
+/** Every drive, card or disc that can be written to. */
+function openMediaPicker() {
+  openPick({
+    title: "Choose the media",
+    placeholder: "Filter drives…",
+    empty: "No removable drive found. Plug one in, then press Rescan.",
+    items: drives,
+    text: (drive) => `${drive.label || ""} ${drive.path}`,
+    name: (drive) => drive.label || drive.path,
+    meta: (drive) =>
+      drive.hasCartridge
+        ? `${formatBytes(drive.freeBytes)} free · already has a cartridge`
+        : `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`,
+    isCurrent: (drive) => drive.path === selectedDrive,
+    choose: (drive) => selectDrive(drive),
+  });
 }
 
 async function selectDrive(drive) {
@@ -2164,6 +2287,20 @@ async function saveEdits() {
    ========================================================================== */
 
 el.search.addEventListener("input", renderGames);
+
+el.changeGame.addEventListener("click", openGamePicker);
+el.changeMedia.addEventListener("click", openMediaPicker);
+el.pickSearch.addEventListener("input", () => renderPickList());
+// The form is method="dialog", so a stray Enter in the filter would submit and
+// close it. Enter should take the first row that is still showing instead.
+el.pickForm.addEventListener("submit", (event) => {
+  if (event.submitter?.id === "pick-close") return;
+  event.preventDefault();
+  const first = pickRows()[0];
+  if (!first) return;
+  pick.choose(first);
+  el.pickDialog.close();
+});
 el.btnCustom.addEventListener("click", enterManual);
 el.btnCustomBack.addEventListener("click", () => {
   manual = null;

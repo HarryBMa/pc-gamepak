@@ -743,12 +743,26 @@ fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
     });
 }
 
+/// The launcher's two shapes.
+///
+/// The default is the cartridge: portrait, the proportions of the thing in your
+/// hand, and it crops a hero to fill.
+///
+/// The hero window is the artwork's own shape instead. SteamGridDB serves heroes
+/// at 1920×620 (and 3840×1240, 1600×650) — all of them 1920:620, so half of the
+/// base size is an exact match and still leaves room under the art for the title
+/// and the buttons that sit over it. Sizing this by eye is what produced the
+/// previous 460×260: that is 16:9, and the 460 came from `460x215`, which is a
+/// *grid* dimension in sgdb.rs rather than a hero one.
+const CARTRIDGE_WINDOW: (f64, f64) = (420.0, 560.0);
+const HERO_WINDOW: (f64, f64) = (960.0, 310.0);
+
 fn apply_launcher_window_size(app: &tauri::AppHandle, hero_window: bool) {
     if let Some(window) = app.get_webview_window("main") {
         let (width, height) = if hero_window {
-            (460.0, 260.0)
+            HERO_WINDOW
         } else {
-            (420.0, 560.0)
+            CARTRIDGE_WINDOW
         };
         let _ = window.set_size(LogicalSize::new(width, height));
         let _ = window.center();
