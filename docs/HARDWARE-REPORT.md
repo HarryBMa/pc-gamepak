@@ -902,3 +902,60 @@ The cartridge came out with `cartridge.conf` in single-game form (no
   includes the drive letter — `PLAYSTATION (G:)`, not `PLAYSTATION`. The wizard
   shows that string so it is consistent there, but anything scripting
   `build-cart` has to know it.
+
+---
+
+## 2026-09-01, later still — the repair created a new corruption
+
+Reopening Open issue 9. The previous entry closed it as "it was the cable". That
+was too fast: it was the cable *for the port G: is on*. The other enclosure is
+still destroying data.
+
+### What was done
+
+The two corrupt archives on `TOMB RAIDER` were replaced from
+`F:\Games\Steam\steamapps\common`, 4 GB total, at 6.7 s and 3.4 s. Sizes matched
+the manifest before and after.
+
+### What the re-verify found
+
+```
+read 107.43 GB in 181s (594 MB/s)
+1 problems:
+  1 corrupt
+  steamapps/common/Shadow of the Tomb Raider/bigfile.005.tiger
+```
+
+The two repaired files now pass. **`bigfile.005.tiger` did not, and it passed
+three hours earlier** — the 17:17 verify reported exactly two bad files and this
+was not one of them. `verify()` walks every file in the manifest, so it was not
+skipped.
+
+Checked before drawing conclusions:
+
+- Two SHA-256 reads of the file agree, so the bytes on the drive are stable and
+  this is not a read artefact.
+- Its hash differs from the source file on `F:`, so the cartridge copy really is
+  wrong rather than the manifest being stale.
+- The event log has `UASPStor 129` plus three `disk 153` retries at 19:23:53,
+  inside the window where the repair copy and verify ran.
+
+So writing 4 GB to this enclosure corrupted 2 GB of a file that was not being
+written to. The plausible mechanism is a reset landing mid-write and damaging
+the exFAT allocation, so freshly allocated clusters overlapped an existing
+file's chain — which is worse than a bad byte, because it means a write to a
+cartridge can damage a game that was already on it and verified.
+
+### Where each drive sits
+
+| Drive | Port | Controller | Behaviour |
+|---|---|---|---|
+| G: `STARDEW` | `Port_#0001.Hub_#0004` | AMD chipset | clean write, clean verify, no resets |
+| D: `TOMB RAIDER` | `Port_#0001.Hub_#0007` | ASMedia ASM4242 | reset during a 4 GB copy, one new corrupt file |
+
+### Not done, deliberately
+
+`bigfile.005.tiger` was left corrupt. Copying it would mean another write
+through the same enclosure, and the last one is what caused this. The next step
+is to move that enclosure to a chipset port — or swap the enclosure — and only
+then rewrite the cartridge whole rather than patching files into it.

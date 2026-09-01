@@ -117,18 +117,32 @@ Ranked by how much it matters.
    That is the case for `verify` existing, and it is why it is now on by
    default.
 
-   **The cause was the cable.** With it replaced, `PLAYSTATION` was rewritten as
-   a single-game Stardew Valley cartridge — format to exFAT, copy, register with
-   Steam, verify — and the whole run logged **no bus resets and no I/O retries
-   at all**. 3833 files, all matching; `verify-cart` re-checked it afterwards
-   and agreed; the launcher opens on it. That is the first clean end-to-end
-   write this project has had, and it also confirmed the new default: the
-   request that built it never mentioned verifying and got it anyway.
+   **One path is now proven good, and one is still actively corrupting data.**
 
-   Still untested on hardware: a sustained write big enough to be interesting.
-   The clean run was 0.75 GB, where the corrupt one was 107 GB, so the wizard's
-   running panel — the throughput, the countdown and the log — still has not
-   been watched through anything long.
+   On the AMD chipset port, `PLAYSTATION` was rewritten as a single-game Stardew
+   Valley cartridge — format to exFAT, copy, register with Steam, verify — and
+   the run logged no bus resets and no I/O retries at all. 3833 files, all
+   matching; `verify-cart` agreed afterwards; the launcher opens on it. First
+   clean end-to-end write this project has had. It also confirmed the new
+   default: the request that built it never mentioned verifying and got it
+   anyway.
+
+   The Tomb Raider enclosure, on the ASMedia port, is a different story. Its two
+   corrupt archives were replaced from source and both now verify — but the same
+   pass found **a third file corrupt that had been intact three hours earlier**,
+   and a `UASPStor` reset is logged inside the window where that copy ran. The
+   new file is stably wrong on the drive and differs from its source, so this is
+   fresh damage, not a misread. Writing 4 GB to that enclosure appears to have
+   destroyed 2 GB of an unrelated file.
+
+   So: do not conclude the cable fixed it. The cable fixed *a* port. Nothing has
+   yet distinguished the enclosure from the port it is on, and until something
+   does, that enclosure should not be written to.
+
+   Still untested: a sustained write big enough to be interesting. The clean run
+   was 0.75 GB and the corrupt one 107 GB, so the wizard's running panel — the
+   throughput, the countdown, the log — still has not been watched through
+   anything long.
 
    Related, and now fixed: until PR #10 nothing on Windows compiled at all —
    `gamepak-core` had no `windows-sys` dependency despite calling the Win32
