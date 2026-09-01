@@ -38,9 +38,8 @@ const el = {
   close: $("btn-close"),
 
   phases: {
-    games: $("step-games"),
+    build: $("step-build"),
     custom: $("step-custom"),
-    name: $("step-name"),
     options: $("step-options"),
     running: $("step-running"),
   },
@@ -67,7 +66,6 @@ const el = {
   // Name it
   collectionCover: $("collection-cover"),
   collectionCoverImg: $("collection-cover-img"),
-  btnCollectionCover: $("btn-collection-cover"),
   btnInheritCover: $("btn-inherit-cover"),
   collectionTitle: $("collection-title"),
   collectionNameHint: $("collection-name-hint"),
@@ -129,17 +127,11 @@ const el = {
   railExplorerIcon: $("rail-explorer-icon"),
   railExplorerName: $("rail-explorer-name"),
   railExplorerFree: $("rail-explorer-free"),
-  railTitle: $("rail-title"),
-  railSub: $("rail-sub"),
-  btnRailArt: $("btn-rail-art"),
-  railGames: $("rail-games"),
-  railGameList: $("rail-game-list"),
   railSpace: $("rail-space"),
   railDriveLabel: $("rail-drive-label"),
   railDriveFill: $("rail-drive-fill"),
   railBar: $("rail-bar"),
   railBarHint: $("rail-bar-hint"),
-  railDrives: $("rail-drives"),
   drives: $("drives"),
   drivesEmpty: $("drives-empty"),
   btnUnregister: $("btn-unregister"),
@@ -179,9 +171,25 @@ const el = {
   pickDialog: $("pick-dialog"),
   pickForm: $("pick-form"),
   pickTitle: $("pick-title"),
-  pickSearch: $("pick-search"),
-  pickList: $("pick-list"),
-  pickEmpty: $("pick-empty"),
+  pickGames: $("pick-games"),
+  pickMedia: $("pick-media"),
+
+  buildGamePlate: $("build-game-plate"),
+  buildGameCover: $("build-game-cover"),
+  buildGameTitle: $("build-game-title"),
+  buildGameMeta: $("build-game-meta"),
+  buildGameHint: $("build-game-hint"),
+  buildName: $("build-name"),
+  buildMediaTitle: $("build-media-title"),
+  buildMediaMeta: $("build-media-meta"),
+  optCopySize: $("opt-copy-size"),
+  artSlots: $("art-slots"),
+  slotLogo: $("slot-logo"),
+  slotLogoImg: $("slot-logo-img"),
+  slotIcon: $("slot-icon"),
+  slotIconImg: $("slot-icon-img"),
+  writtenWhere: $("written-where"),
+  writtenList: $("written-list"),
 
   settingsDialog: $("settings-dialog"),
   sources: $("sources"),
@@ -253,7 +261,7 @@ let editing = null;
 let activeTab = "create";
 
 /** Which phase the left column is showing. */
-let phase = "games";
+let phase = "build";
 
 /* ==========================================================================
    Small helpers
@@ -809,120 +817,34 @@ function renderDrives() {
 /* ==========================================================================
    Change game / Change media
 
-   One dialog, two jobs. The rail says what is chosen; this is how it is
-   changed, without the list of everything installed having to sit on screen
-   for the whole of the rest of the job.
-
-   `pick` holds what the open dialog is choosing between and what to do when a
-   row is clicked, so the rendering below never has to ask which mode it is in.
+   The library and the drive list did not move into a new widget — they moved
+   into a dialog. Same markup, same renderers, same ticking, so multi-select,
+   search, "Enter it by hand" and the drag order all behave exactly as they did
+   when this list was step 1.
    ========================================================================== */
 
-let pick = null;
-
-/** Rows currently worth showing, given what has been typed. */
-function pickRows() {
-  const query = el.pickSearch.value.trim().toLowerCase();
-  if (!query) return pick.items;
-  return pick.items.filter((item) => pick.text(item).toLowerCase().includes(query));
-}
-
-function renderPickList() {
-  const rows = pickRows();
-  el.pickList.replaceChildren();
-
-  for (const item of rows) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "pick-item";
-    // A radio rather than an option: exactly one of these is the current
-    // answer, and the list exists to move that answer somewhere else.
-    btn.setAttribute("role", "radio");
-    btn.setAttribute("aria-checked", String(pick.isCurrent(item)));
-
-    const name = document.createElement("span");
-    name.className = "pick-item__name";
-    name.textContent = pick.name(item);
-
-    const meta = document.createElement("span");
-    meta.className = "pick-item__meta";
-    meta.textContent = pick.meta(item);
-
-    btn.append(name, meta);
-    btn.addEventListener("click", () => {
-      pick.choose(item);
-      el.pickDialog.close();
-    });
-
-    li.append(btn);
-    el.pickList.append(li);
-  }
-
-  el.pickEmpty.hidden = rows.length > 0;
-  if (rows.length === 0) el.pickEmpty.textContent = pick.empty;
-}
-
-function openPick(config) {
-  pick = config;
-  el.pickTitle.textContent = config.title;
-  el.pickSearch.value = "";
-  el.pickSearch.placeholder = config.placeholder;
-  renderPickList();
+function openPick(kind) {
+  const games = kind === "game";
+  el.pickTitle.textContent = games ? "Choose a game" : "Choose the media";
+  el.pickGames.hidden = !games;
+  el.pickMedia.hidden = games;
   el.pickDialog.showModal();
-  // The list is long and the keyboard is already where the filtering happens.
-  el.pickSearch.focus();
+  if (games) el.search.focus();
 }
 
-/**
- * Every installed game, whichever launcher found it.
- *
- * Ticking here is the same tick as the list in step 1 — `toggle` is the one
- * path that adds or removes a game — so choosing from this dialog and choosing
- * from the list behave identically, including what it does to a multicartridge.
- */
 function openGamePicker() {
-  openPick({
-    title: "Choose a game",
-    placeholder: "Filter installed games…",
-    empty: "Nothing matches. Every launcher this machine knows about has been scanned.",
-    items: library,
-    text: (game) => `${game.name} ${game.source || game.library || ""}`,
-    name: (game) => game.name,
-    meta: (game) => {
-      const size = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "not installed";
-      const source = game.source || game.library || "";
-      return source ? `${source} · ${size}` : size;
-    },
-    isCurrent: (game) => picked.some((p) => p.id === game.id),
-    choose: (game) => {
-      // Picking the game that is already picked should not silently untick it —
-      // from in here that reads as the dialog having done nothing.
-      if (!picked.some((p) => p.id === game.id)) toggle(game, true);
-    },
-  });
+  openPick("game");
 }
 
-/** Every drive, card or disc that can be written to. */
 function openMediaPicker() {
-  openPick({
-    title: "Choose the media",
-    placeholder: "Filter drives…",
-    empty: "No removable drive found. Plug one in, then press Rescan.",
-    items: drives,
-    text: (drive) => `${drive.label || ""} ${drive.path}`,
-    name: (drive) => drive.label || drive.path,
-    meta: (drive) =>
-      drive.hasCartridge
-        ? `${formatBytes(drive.freeBytes)} free · already has a cartridge`
-        : `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`,
-    isCurrent: (drive) => drive.path === selectedDrive,
-    choose: (drive) => selectDrive(drive),
-  });
+  openPick("media");
 }
 
 async function selectDrive(drive) {
   selectedDrive = drive.path;
   renderDrives();
+  // One drive is the whole answer, so the dialog has nothing left to ask.
+  if (el.pickDialog.open && !el.pickMedia.hidden) el.pickDialog.close();
 
   formatPlan = null;
   try {
@@ -1213,14 +1135,12 @@ function refreshRail() {
     el.barText.textContent = editing?.title ? `Edit ${editing.title}` : "Edit cartridge";
     el.railEmpty.hidden = true;
     el.railBody.hidden = true;
-    el.railDrives.hidden = true;
     return;
   }
 
   const has = picked.length > 0 || Boolean(manual);
   el.railEmpty.hidden = has;
   el.railBody.hidden = !has;
-  el.railDrives.hidden = phase === "running";
 
   if (!has) {
     refreshCreateButton();
@@ -1238,43 +1158,13 @@ function refreshRail() {
       ? "Create multicartridge"
       : "Create cartridge";
 
-  el.railTitle.textContent = cartridgeTitle() || "Nothing yet";
-
-  // A collection has no art of its own until it is given some.
+  // The rail shows what the cartridge will look like. What it *is* — the game,
+  // the drive, the artwork — is stated by the cards in the left column, so
+  // repeating any of it here would be two places to keep in step.
   const coverSrc = art.cover?.preview ?? (collection ? null : picked[0]?.cover);
   renderRailLauncher(coverSrc);
 
-  const bits = [];
-  if (!collection && picked[0]) {
-    if (picked[0].sizeOnDisk) bits.push(formatBytes(picked[0].sizeOnDisk));
-    if (picked[0].source) bits.push(picked[0].source);
-  } else if (collection) {
-    // Only name a drive once one has been chosen — before that the collection
-    // has a name and nothing else, and saying otherwise is an invention.
-    if (selectedDrive) {
-      const label = el.optFormat.checked ? el.formatLabel.value.trim() : driveLabel();
-      if (label) bits.push(label);
-      bits.push(filesystemLabel(filesystem()));
-    } else {
-      bits.push(`${picked.length} games`);
-    }
-  } else if (manual?.folder) {
-    bits.push(formatBytes(manual.folder.sizeBytes));
-  }
-  el.railSub.textContent = bits.join(" · ");
-  el.btnRailArt.hidden = collection || !picked[0];
-  el.btnRailArt.textContent = art.cover ? "Change artwork" : "Replace artwork";
-
-  // "Use Hollow Knight's" — the link has to name what it would borrow from.
-  const first = picked[0];
-  el.btnInheritCover.textContent = first ? `Use ${first.name}'s` : "Use the first game's";
-  el.btnInheritCover.hidden = !first;
-
-  // The games in it, while the library is open.
-  const showGames = collection && phase === "games";
-  el.railGames.hidden = !showGames;
-  if (showGames) renderRailGames();
-
+  renderBuild();
   refreshSpace();
   refreshPlan();
   refreshCreateButton();
@@ -1371,27 +1261,104 @@ function shortPath(path) {
   return last || trimmed || "?";
 }
 
-function renderRailGames() {
-  el.railGameList.replaceChildren();
-  for (const game of picked) {
-    const li = document.createElement("li");
-    li.className = "rail-game";
+/**
+ * The build screen: what is chosen, on one page.
+ *
+ * Every card here is a statement of the current answer with the way to change
+ * it beside it. Nothing is a step, so nothing has to be finished before the
+ * next thing can be looked at — which is the point of the rebuild.
+ */
+function renderBuild() {
+  const collection = isCollection();
+  const first = picked[0];
 
-    const cover = document.createElement("img");
-    cover.className = "rail-game__cover";
-    cover.alt = "";
-    if (game.cover) cover.src = safeSrc(game.cover);
+  // --- Game -------------------------------------------------------------
+  const coverSrc = art.cover?.preview ?? (collection ? null : first?.cover);
+  setPlate(el.buildGamePlate, el.buildGameCover, coverSrc);
 
-    const name = document.createElement("span");
-    name.className = "rail-game__name";
-    name.textContent = game.name;
+  if (manual) {
+    el.buildGameTitle.textContent = manual.title || "Entered by hand";
+    el.buildGameMeta.textContent = manual.folder
+      ? `By hand · ${formatBytes(manual.folder.sizeBytes)}`
+      : "By hand";
+  } else if (collection) {
+    el.buildGameTitle.textContent = cartridgeTitle() || `${picked.length} games`;
+    el.buildGameMeta.textContent = `${picked.length} games · ${formatBytes(totalBytes())}`;
+  } else if (first) {
+    el.buildGameTitle.textContent = first.name;
+    const bits = [];
+    if (first.source) bits.push(first.source);
+    bits.push(first.sizeOnDisk ? formatBytes(first.sizeOnDisk) : "not installed");
+    el.buildGameMeta.textContent = bits.join(" · ");
+  } else {
+    el.buildGameTitle.textContent = "No game chosen";
+    el.buildGameMeta.textContent = "";
+  }
 
-    const size = document.createElement("span");
-    size.className = "rail-game__size";
-    size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "—";
+  el.buildGameHint.hidden = picked.length > 0 || Boolean(manual);
 
-    li.append(cover, name, size);
-    el.railGameList.append(li);
+  // Naming and ordering only mean anything with more than one game on it.
+  el.buildName.hidden = !collection;
+  if (collection) {
+    renderCollectionHint();
+    renderOrder();
+  }
+
+  // --- Media ------------------------------------------------------------
+  const drive = drives.find((d) => d.path === selectedDrive);
+  if (drive) {
+    el.buildMediaTitle.textContent = drive.label || drive.path;
+    const bits = [`${formatBytes(drive.freeBytes)} free`, filesystemLabel(filesystem())];
+    if (drive.hasCartridge) bits.push("has a cartridge");
+    el.buildMediaMeta.textContent = bits.join(" · ");
+  } else {
+    el.buildMediaTitle.textContent = "No cartridge chosen";
+    el.buildMediaMeta.textContent = "Any drive, card or disc works.";
+  }
+
+  el.optCopySize.textContent = el.optCopy.checked && totalBytes() ? formatBytes(totalBytes()) : "";
+
+  // --- Artwork ----------------------------------------------------------
+  setPlate(el.collectionCover, el.collectionCoverImg, coverSrc);
+  setPlate(el.slotLogo, el.slotLogoImg, art.logo?.preview);
+  setPlate(el.slotIcon, el.slotIconImg, art.icon?.preview ?? coverSrc);
+  el.btnInheritCover.textContent = first ? `Use ${first.name}'s artwork` : "";
+  el.btnInheritCover.hidden = !collection || !first || Boolean(art.cover);
+
+  renderWritten();
+}
+
+/**
+ * What actually lands on the drive.
+ *
+ * The wizard's one genuinely opaque moment is the gap between pressing Write
+ * and finding out what it did. This is that answer, before the fact.
+ */
+function renderWritten() {
+  const drive = drives.find((d) => d.path === selectedDrive);
+  el.writtenWhere.textContent = drive ? shortPath(drive.path) : "the cartridge";
+
+  const rows = [["cartridge.conf", "what to launch, and how"]];
+  if (el.optIcon?.checked) {
+    rows.push(["autorun.inf", "the drive's name in Explorer"]);
+    rows.push(["autorun.ico", "from the icon slot"]);
+  }
+  rows.push([".gamepak\\", "cover.jpg · logo.png"]);
+  if (el.optCopy.checked && totalBytes()) {
+    const where = picked.some((g) => g.source === "Steam") ? "steamapps\\common\\" : "Games\\";
+    rows.push([where, `the game${picked.length > 1 ? "s" : ""}, ${formatBytes(totalBytes())}`]);
+  }
+  if (el.optVerify?.checked && el.optCopy.checked) {
+    rows.push([".gamepak\\manifest.json", "a checksum for every file written"]);
+  }
+
+  el.writtenList.replaceChildren();
+  for (const [name, note] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = name;
+    const dd = document.createElement("dd");
+    dd.textContent = note;
+    el.writtenList.append(dt, dd);
   }
 }
 
@@ -1472,20 +1439,6 @@ function refreshCreateButton() {
   const collection = isCollection();
   const reason = blockingReason();
   const ready = reason === "";
-
-  // In the library phase a collection is named before it is written. That
-  // needs no drive and no options, so the button leads there as soon as there
-  // is more than one game — the cartridge is chosen on the way.
-  const needsNaming = collection && phase === "games";
-
-  if (needsNaming) {
-    el.btnOptions.hidden = true;
-    el.create.disabled = false;
-    el.createLabel.textContent = "Name the collection";
-    el.readyMessage.textContent = `Name it, or write it as "${picked.length} games".`;
-    el.readyMessage.className = "";
-    return;
-  }
 
   el.btnOptions.hidden = !ready || phase === "options";
   el.create.disabled = !ready;
@@ -1683,18 +1636,6 @@ function buildRequest() {
 
 async function write() {
   if (building || el.create.disabled) return;
-
-  // From the library, a collection goes to be named rather than written.
-  if (isCollection() && phase === "games") {
-    renderOrder();
-    renderCollectionHint();
-    showPhase("name");
-    refreshCreateButton();
-    // Not awaited: the step is usable while the posters arrive, and the list
-    // redraws itself when they do.
-    fillGameCovers();
-    return;
-  }
 
   building = true;
   measuredRate = null;
@@ -2382,21 +2323,27 @@ el.search.addEventListener("input", renderGames);
 
 el.changeGame.addEventListener("click", openGamePicker);
 el.changeMedia.addEventListener("click", openMediaPicker);
-el.pickSearch.addEventListener("input", () => renderPickList());
-// The form is method="dialog", so a stray Enter in the filter would submit and
-// close it. Enter should take the first row that is still showing instead.
+// method="dialog" means a stray Enter in the search box would close the dialog
+// mid-selection, which is the opposite of what Enter means in a filter.
 el.pickForm.addEventListener("submit", (event) => {
-  if (event.submitter?.id === "pick-close") return;
-  event.preventDefault();
-  const first = pickRows()[0];
-  if (!first) return;
-  pick.choose(first);
-  el.pickDialog.close();
+  if (event.submitter?.id !== "pick-close") event.preventDefault();
 });
-el.btnCustom.addEventListener("click", enterManual);
+// Entering a game by hand is an answer to "which game", so the dialog that
+// asked has done its job.
+el.btnCustom.addEventListener("click", () => {
+  if (el.pickDialog.open) el.pickDialog.close();
+  enterManual();
+});
+
+// Each slot opens the artwork picker on its own kind. 8a's "click one to change
+// it" — the slot is the control, not a label beside one.
+el.artSlots.addEventListener("click", (event) => {
+  const slot = event.target.closest(".art-slot");
+  if (slot) openArtwork(slot.dataset.slot);
+});
 el.btnCustomBack.addEventListener("click", () => {
   manual = null;
-  showPhase("games");
+  showPhase("build");
   renderTickCount();
   refreshRail();
 });
@@ -2421,7 +2368,6 @@ el.customExec.addEventListener("input", () => {
 });
 el.btnCustomCover.addEventListener("click", () => pickCoverFile("cover"));
 
-el.btnCollectionCover.addEventListener("click", () => openArtwork("cover"));
 el.sgdbUseLocal.addEventListener("click", () => pickCoverFile(artTarget));
 el.btnInheritCover.addEventListener("click", async () => {
   const first = picked[0];
@@ -2437,7 +2383,6 @@ el.btnInheritCover.addEventListener("click", async () => {
     // nothing cached for it either
   }
 });
-el.btnRailArt.addEventListener("click", () => openArtwork("cover"));
 
 el.optCopy.addEventListener("change", () => {
   copyTouched = true;
@@ -2470,7 +2415,7 @@ el.btnOptions.addEventListener("click", () => {
   refreshOptions();
 });
 el.btnOptionsBack.addEventListener("click", () => {
-  showPhase(isCollection() ? "name" : manual ? "custom" : "games");
+  showPhase(manual ? "custom" : "build");
 });
 el.create.addEventListener("click", write);
 el.tabCreate.addEventListener("click", () => showTab("create"));
@@ -2613,7 +2558,7 @@ async function start() {
   await refreshLibrary();
   await refreshDrives();
   refreshOptions();
-  showPhase("games");
+  showPhase("build");
 }
 
 /* ==========================================================================

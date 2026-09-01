@@ -178,6 +178,15 @@
   min-height: 0;
 }
 
+/* `display` on an id beats the browser's own [hidden] rule, so the panel that
+   is not open has to be told to go away in as many words. Without this the Edit
+   panel renders underneath Create, which it has been doing unnoticed because
+   the left column scrolls and nobody scrolled. */
+#panel-create[hidden],
+#panel-edit[hidden] {
+  display: none;
+}
+
 #panel-edit {
   padding: 20px 20px 18px;
   overflow-y: auto;
@@ -665,39 +674,9 @@
    ========================================================================== */
 
 #custom-body,
-#name-body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 154px 1fr;
-  gap: 22px;
-  align-items: stretch;
-}
-
 #custom-art .plate,
-#name-art .plate {
-  border-radius: 6px;
-  box-shadow:
-    inset 0 0 0 1px oklch(0 0 0 / 0.6),
-    0 10px 26px -12px oklch(0 0 0 / 0.85);
-}
-
 #custom-art .btn,
-#name-art .btn {
-  width: 100%;
-  margin-top: 9px;
-  justify-content: center;
-}
-
 #custom-fields,
-#name-fields {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
 /* Ranked: what a person is most likely to have meant, first. */
 #exe-choices {
   list-style: none;
@@ -1270,15 +1249,6 @@
   display: none;
 }
 
-/* The cover plate that used to sit here is now the launcher preview below, so
-   this row is just the name and the way to change it. */
-#rail-id {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 13px;
-  align-items: center;
-}
-
 /* --- The launcher preview ----------------------------------------------- */
 
 #rail-launcher {
@@ -1556,87 +1526,6 @@
   border: 0;
 }
 
-#rail-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-  font-stretch: 102%;
-  line-height: 1.04;
-  letter-spacing: -0.015em;
-  text-wrap: balance;
-}
-
-#rail-sub {
-  margin: 6px 0 0;
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  color: oklch(0.62 0.008 75);
-}
-
-#btn-rail-art {
-  margin-top: 9px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-/* --- The games in it ---------------------------------------------------- */
-
-#rail-games {
-  margin-top: 15px;
-}
-
-#rail-game-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 188px;
-  overflow-y: auto;
-}
-
-.rail-game {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px 7px 7px;
-  border: 1px solid oklch(1 0 0 / 0.08);
-  border-radius: 7px;
-  background: oklch(0 0 0 / 0.3);
-}
-
-.rail-game__cover {
-  flex: none;
-  width: 26px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: 3px;
-  background: repeating-linear-gradient(
-    135deg,
-    oklch(0.2 0.005 65) 0 5px,
-    oklch(0.17 0.005 65) 5px 10px
-  );
-}
-
-.rail-game__name {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rail-game__size {
-  flex: none;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  color: oklch(0.66 0.008 75);
-}
-
 /* --- What it costs on the drive ----------------------------------------- */
 
 #rail-space {
@@ -1696,18 +1585,6 @@
   background: var(--danger) !important;
 }
 
-/* --- The drive ---------------------------------------------------------- */
-
-#rail-drives {
-  margin-top: 17px;
-  padding-top: 15px;
-  border-top: 1px solid oklch(1 0 0 / 0.07);
-}
-
-#rail-drives[hidden] {
-  display: none;
-}
-
 #drives {
   list-style: none;
   margin: 0;
@@ -1764,12 +1641,6 @@
 /* A drive that already holds a cartridge: not an error, but worth saying. */
 .drive__warn {
   color: color-mix(in oklch, var(--accent) 80%, var(--ink));
-}
-
-#rail-drives .link {
-  display: block;
-  margin-top: 9px;
-  font-size: 11px;
 }
 
 /* --- The plan ----------------------------------------------------------- */
@@ -2395,4 +2266,251 @@ dialog form {
   border-radius: 5px;
   background-size: cover;
   background-position: center;
+}
+
+/* ==========================================================================
+   The build screen
+
+   One page: what game, what it goes on, what it looks like, what gets written.
+   Each group is a label and a card, and each card states the current answer
+   with the way to change it sitting next to it — so nothing has to be finished
+   before the next thing can be looked at.
+   ========================================================================== */
+
+#step-build {
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.build-group {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Same trap as the panels: a class that sets display outranks [hidden]. */
+.build-group[hidden] {
+  display: none;
+}
+
+.build-label {
+  margin: 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: oklch(0.6 0.008 75);
+}
+
+.build-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.build-label-row .hint {
+  margin: 0;
+}
+
+.build-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  background: oklch(0 0 0 / 0.26);
+}
+
+/* Nothing chosen yet is a gap to fill, not a thing that exists — so the border
+   is the dashed one an empty slot has everywhere else in this window. */
+#build-game:has(#build-game-title:empty),
+#step-build:not(.has-game) #build-game {
+  border-style: dashed;
+  border-color: oklch(1 0 0 / 0.17);
+  background: oklch(0 0 0 / 0.2);
+}
+
+#build-game-plate {
+  flex: none;
+  width: 42px;
+  height: 63px;
+  border-radius: 5px;
+}
+
+#build-media-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: oklch(1 0 0 / 0.06);
+  color: oklch(0.82 0.008 75);
+}
+
+.build-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.build-card__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  font-stretch: 92%;
+  letter-spacing: -0.012em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.build-card__meta {
+  margin: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: oklch(0.62 0.008 75);
+}
+
+/* The copy toggle sits with Media because it is a question about the drive:
+   does the game go on it, or does the cartridge point at an installed copy. */
+.opt--inline {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: oklch(0 0 0 / 0.16);
+}
+
+#opt-copy-size {
+  flex: none;
+  font-size: 11px;
+  color: oklch(0.8 0.008 75);
+}
+
+/* --- Artwork slots ------------------------------------------------------- */
+
+#art-slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+}
+
+.art-slot {
+  appearance: none;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border-radius: 9px;
+  border: 1px solid oklch(1 0 0 / 0.1);
+  background: oklch(0 0 0 / 0.26);
+  cursor: pointer;
+  transition: border-color 160ms linear, background 160ms linear;
+}
+
+.art-slot:hover {
+  border-color: oklch(1 0 0 / 0.22);
+  background: oklch(0 0 0 / 0.34);
+}
+
+.art-slot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.art-slot__art {
+  display: block;
+  position: relative;
+  height: 52px;
+  background: oklch(0 0 0 / 0.32);
+}
+
+/* A logo is usually pale and usually transparent, so it needs something behind
+   it that is neither. */
+.art-slot__art--check {
+  background: repeating-conic-gradient(
+      oklch(0.22 0.004 65) 0% 25%,
+      oklch(0.17 0.004 65) 0% 50%
+    )
+    0 0 / 12px 12px;
+}
+
+.art-slot__art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.art-slot__art img[hidden] {
+  display: none;
+}
+
+.art-slot__name {
+  display: block;
+  padding: 7px 9px 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.art-slot__file {
+  display: block;
+  padding: 2px 9px 8px;
+  font-size: 8.5px;
+  color: oklch(0.6 0.008 75);
+}
+
+/* --- Written to ---------------------------------------------------------- */
+
+#written-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 5px 12px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+#written-list dt {
+  color: oklch(0.92 0.008 75);
+}
+
+#written-list dd {
+  margin: 0;
+  color: oklch(0.56 0.008 75);
+}
+
+/* --- The picker's two panes ---------------------------------------------- */
+
+#pick-dialog {
+  width: min(560px, 92vw);
+}
+
+#pick-games .search {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+#pick-games #tick-count {
+  flex: none;
+  padding-left: 12px;
+  font-size: 10px;
+  color: oklch(0.6 0.008 75);
+  white-space: nowrap;
+}
+
+#pick-games #games-wrap,
+#pick-media {
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
 }
