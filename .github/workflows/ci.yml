@@ -108,10 +108,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      # linux/ only. This used to glob ./*.sh as well, for the gamepak-linux.sh
+      # menu wrapper the README once pointed at — which was never written, so
+      # the glob matched nothing, bash -n was handed the literal pattern, and
+      # this job was red on main for reasons unrelated to any script in it.
       - name: Syntax
-        run: for f in ./*.sh linux/*.sh; do bash -n "$f"; done
+        run: for f in linux/*.sh; do bash -n "$f"; done
       # error-level only for now: the installer scripts predate this workflow and
       # have not been through shellcheck yet. Tighten to --severity=warning once
       # they have.
       - name: shellcheck
-        run: shellcheck --severity=error ./*.sh linux/*.sh
+        run: shellcheck --severity=error linux/*.sh

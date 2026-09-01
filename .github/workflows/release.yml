@@ -52,7 +52,10 @@ jobs:
           cargo build --release --manifest-path watcher/Cargo.toml
           cp watcher/target/release/pc-gamepak-watcher "$staging/"
           cp -r linux "$staging/"
-          cp gamepak-linux.sh cartridge.conf.example README.md LICENSE "$staging/" 2>/dev/null || true
+          # No `|| true` here on purpose: it used to cover for gamepak-linux.sh,
+          # a menu wrapper that was never written, and in doing so would have
+          # hidden a missing README or LICENSE just as quietly.
+          cp cartridge.conf.example README.md LICENSE "$staging/"
           tar -czf "${staging}.tar.gz" "$staging"
           sha256sum "${staging}.tar.gz" > "${staging}.tar.gz.sha256"
 
@@ -87,7 +90,10 @@ jobs:
           Copy-Item tauri-ui/src-tauri/target/release/pc-gamepak.exe $staging
           Copy-Item watcher/target/release/pc-gamepak-watcher.exe $staging
           Copy-Item -Recurse windows $staging
-          Copy-Item gamepak-windows.ps1, cartridge.conf.example, README.md, LICENSE $staging
+          # gamepak-windows.ps1 was listed here and has never existed. Actions
+          # runs pwsh with $ErrorActionPreference='Stop', so this one line failed
+          # the whole windows job and the tag produced no Windows artefact.
+          Copy-Item cartridge.conf.example, README.md, LICENSE $staging
           Compress-Archive -Path $staging -DestinationPath "$staging.zip"
           (Get-FileHash "$staging.zip" -Algorithm SHA256).Hash.ToLower() + "  $staging.zip" |
             Out-File -Encoding ascii "$staging.zip.sha256"

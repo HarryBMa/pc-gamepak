@@ -42,8 +42,23 @@ Write-Host ""
 $InstallFolder = Join-Path $env:LOCALAPPDATA "PC-GamePak"
 $RepoRoot      = Split-Path -Parent $PSScriptRoot
 
-$WatcherSource  = Join-Path $RepoRoot "watcher\target\release\pc-gamepak-watcher.exe"
-$LauncherSource = Join-Path $RepoRoot "tauri-ui\src-tauri\target\release\pc-gamepak.exe"
+# Two layouts reach this script. In a clone the binaries are still in their
+# cargo target directories; in a release zip - which is what WinGet and Scoop
+# unpack - they sit at the root, next to this windows\ folder. Checking the
+# package layout first means a package manager's user never sees the "build the
+# binaries first" message, which they cannot act on and which used to be the
+# only thing this script would say to them.
+function Find-Binary {
+    param([string]$Name, [string]$BuiltPath)
+    $packaged = Join-Path $RepoRoot $Name
+    if (Test-Path $packaged) { return $packaged }
+    return $BuiltPath
+}
+
+$WatcherSource = Find-Binary "pc-gamepak-watcher.exe" `
+    (Join-Path $RepoRoot "watcher\target\release\pc-gamepak-watcher.exe")
+$LauncherSource = Find-Binary "pc-gamepak.exe" `
+    (Join-Path $RepoRoot "tauri-ui\src-tauri\target\release\pc-gamepak.exe")
 
 $WatcherTarget  = Join-Path $InstallFolder "pc-gamepak-watcher.exe"
 $LauncherTarget = Join-Path $InstallFolder "pc-gamepak.exe"
@@ -165,16 +180,17 @@ if (-not (Test-Path $WatcherSource))  { $Missing += $WatcherSource }
 if (-not (Test-Path $LauncherSource)) { $Missing += $LauncherSource }
 
 if ($Missing.Count -gt 0) {
-    Write-Host "Build the binaries first:" -ForegroundColor Yellow
+    Write-Host "Cannot find the binaries." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  cd watcher"
-    Write-Host "  cargo build --release"
+    Write-Host "In an unpacked release they belong next to the windows folder."
+    Write-Host "If any are missing there, the download is incomplete - fetch it again."
     Write-Host ""
-    Write-Host "  cd ..\tauri-ui"
-    Write-Host "  npm install"
-    Write-Host "  npm run build"
+    Write-Host "In a clone, build them first:"
     Write-Host ""
-    Write-Host "Missing:" -ForegroundColor Yellow
+    Write-Host "  cargo build --release --manifest-path watcher\Cargo.toml"
+    Write-Host "  cargo build --release --manifest-path tauri-ui\src-tauri\Cargo.toml"
+    Write-Host ""
+    Write-Host "Looked for:" -ForegroundColor Yellow
     $Missing | ForEach-Object { Write-Host "  $_" }
     exit 1
 }
