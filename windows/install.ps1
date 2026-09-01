@@ -13,6 +13,21 @@
 # Experimental AutoPlay support is available as an opt-in registry hook that is
 # best effort only: Windows can suppress or ignore it depending on policy,
 # device type, and OEM shell behavior.
+#
+# Run it with no arguments for the menu, or pass -Mode to skip it:
+#
+#   powershell -ExecutionPolicy Bypass -File windows\install.ps1 -Mode Watcher
+#
+# -Mode is what makes this usable from a package manager. Scoop and WinGet
+# unpack the binaries but neither registers a logon task, so their notes send
+# the user here - and `Read-Host` fails outright under -NonInteractive, which
+# is how anything scripted runs it.
+
+[CmdletBinding()]
+param(
+    [ValidateSet("Watcher", "AutoPlay")]
+    [string]$Mode
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -165,28 +180,52 @@ if ($Missing.Count -gt 0) {
 }
 
 ########################################
-# Menu
+# Mode
 ########################################
 
-Write-Host "Choose an install mode:"
-Write-Host "  1) Standard watcher (default)"
-Write-Host "  2) Experimental AutoPlay handler"
-Write-Host "  3) Cancel"
-$Choice = Read-Host "Enter choice [1-3]"
-
-switch ($Choice) {
-    "1" {
-        Install-StandardWatcher -InstallPath $InstallFolder -WatcherExe $WatcherSource -LauncherExe $LauncherSource -Task $TaskName
+# Asked for only when it was not passed, and only when there is someone to ask.
+# A non-interactive host cannot answer, so it takes the default rather than
+# failing on a prompt nobody will ever see.
+if (-not $Mode) {
+    if ($Host.UI.RawUI -and -not [Environment]::UserInteractive) {
+        Write-Host "Not running interactively; installing the standard watcher."
+        $Mode = "Watcher"
     }
-    "2" {
+    else {
+        Write-Host "Choose an install mode:"
+        Write-Host "  1) Standard watcher (default)"
+        Write-Host "  2) Experimental AutoPlay handler"
+        Write-Host "  3) Cancel"
+
+        try {
+            $Choice = Read-Host "Enter choice [1-3]"
+        }
+        catch {
+            # -NonInteractive: there is no console to read from.
+            Write-Host "No console to read from; installing the standard watcher."
+            $Choice = "1"
+        }
+
+        switch ($Choice) {
+            "1" { $Mode = "Watcher" }
+            "2" { $Mode = "AutoPlay" }
+            "3" {
+                Write-Host "Install cancelled."
+                exit 0
+            }
+            default {
+                Write-Host "Invalid choice. Defaulting to Standard watcher."
+                $Mode = "Watcher"
+            }
+        }
+    }
+}
+
+switch ($Mode) {
+    "AutoPlay" {
         Install-ExperimentalAutoplay -LauncherExe $LauncherTarget -InstallPath $InstallFolder
     }
-    "3" {
-        Write-Host "Install cancelled."
-        exit 0
-    }
     default {
-        Write-Host "Invalid choice. Defaulting to Standard watcher."
         Install-StandardWatcher -InstallPath $InstallFolder -WatcherExe $WatcherSource -LauncherExe $LauncherSource -Task $TaskName
     }
 }

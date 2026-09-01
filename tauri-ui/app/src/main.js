@@ -621,8 +621,7 @@ function select(index) {
   }
 
   const game = list[index];
-  el.title.textContent = game.title || "Unknown game";
-  el.title.classList.toggle("is-long", (game.title ?? "").length > 15);
+  setGameTitle(game.title);
   if (game.cover) crossfadeCover(game.cover);
   setBusy(false);
 }
@@ -716,19 +715,31 @@ function fail(headline, detail) {
   toast(`${detail} Close this window, reconnect the cartridge, and try again.`, true);
 }
 
-function renderTitle(title, logo) {
+/** The name printed under the mark. A collection repoints it on every pick. */
+function setGameTitle(title) {
   const safeTitle = title || "Unknown game";
-  const hasLogo = Boolean(logo && String(logo).startsWith("data:image/"));
-
   el.title.textContent = safeTitle;
   el.title.classList.toggle("is-long", safeTitle.length > 15);
+}
+
+/**
+ * Print the cartridge's mark and the name under it.
+ *
+ * `logoOf` is what separates a single game from a collection. A single game's
+ * logo *is* its title, so it stands in for the heading rather than repeating
+ * the name underneath itself — that is what `null` means. A collection's mark
+ * names the collection, so the heading below it has to stay: it is the only
+ * thing that says which game the rail has picked.
+ */
+function renderTitle(title, logo, logoOf = null) {
+  setGameTitle(title);
 
   if (!el.titleLogo) return;
-  if (hasLogo) {
+  if (logo && String(logo).startsWith("data:image/")) {
     el.titleLogo.src = logo;
-    el.titleLogo.alt = `${safeTitle} logo`;
+    el.titleLogo.alt = `${logoOf ?? title ?? "Unknown game"} logo`;
     el.titleLogo.hidden = false;
-    el.stage?.classList.add("has-logo");
+    el.stage?.classList.toggle("has-logo", logoOf === null);
     return;
   }
 
@@ -770,24 +781,29 @@ async function init() {
   }
   if (!ejectable) el.eject.hidden = true;
 
-  renderTitle(cartridge.title, cartridge.logo);
+  // A collection's mark names the collection, so the heading under it stays
+  // free to name whichever game the rail has picked.
+  const collected = isCollection();
+  renderTitle(
+    collected ? games()[0]?.title ?? cartridge.title : cartridge.title,
+    cartridge.logo,
+    collected ? cartridge.title || "Collection" : null,
+  );
   renderIdentity(cartridge);
   renderSpecs(cartridge);
   renderPaths(cartridge);
 
   // A collection: the cartridge's own name goes above, the rail picks which
   // game the one Play acts on, and the title becomes the selected game.
-  if (isCollection()) {
+  if (collected) {
     el.card.classList.add("is-collection");
-    el.eyebrow.hidden = false;
-    el.eyebrow.textContent = cartridge.title || "Collection";
+    // The mark already prints the collection's name. The eyebrow only stands in
+    // when there is no mark to print it.
+    const marked = !el.titleLogo.hidden;
+    el.eyebrow.hidden = marked;
+    if (!marked) el.eyebrow.textContent = cartridge.title || "Collection";
     el.gameList.hidden = false;
     renderRail(games());
-    const first = games()[0];
-    if (first) {
-      el.title.textContent = first.title || "Unknown game";
-      el.title.classList.toggle("is-long", (first.title ?? "").length > 15);
-    }
   }
 
   if (!playable()) {

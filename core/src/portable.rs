@@ -227,6 +227,68 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
     }
 }
 
+/// Whether `dir` holds something that could be a game, looking no more than
+/// `max_depth` levels down and stopping at the first hit.
+///
+/// `find_executables` answers this properly, but it walks four levels and
+/// ranks everything it finds. A folder scan asks this question of every
+/// directory on a disk, so it needs an answer that costs a few `read_dir`
+/// calls rather than a full walk of each one.
+pub fn holds_launchable(dir: &Path, max_depth: usize) -> bool {
+    probe(dir, 0, max_depth)
+}
+
+fn probe(dir: &Path, depth: usize, max_depth: usize) -> bool {
+    if depth > max_depth {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+
+    // Files first, directories after: a game's binary is far more often at the
+    // top of its folder than buried, so checking files as they come avoids
+    // descending at all in the common case.
+    let mut subdirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+
+        if kind.is_dir() {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_lowercase();
+            if !NOISE_DIRS.contains(&name.as_str()) {
+                subdirs.push(path);
+            }
+            continue;
+        }
+        if !kind.is_file() || !is_launchable(&path) {
+            continue;
+        }
+        // `is_launchable` accepts an extensionless file because that is how a
+        // Linux build ships. On Windows that would make every folder holding a
+        // LICENSE or a README look like a game, so there it must have one.
+        if cfg!(windows) && path.extension().is_none() {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_lowercase();
+        if !NOISE.iter().any(|noise| stem.starts_with(noise)) {
+            return true;
+        }
+    }
+
+    subdirs.iter().any(|sub| probe(sub, depth + 1, max_depth))
+}
+
 /// Total size of a game folder, for the space check before copying.
 pub fn tree_size_of(path: &Path) -> u64 {
     crate::steamlib::tree_size(path)

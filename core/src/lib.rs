@@ -17,6 +17,7 @@ pub mod cartridge;
 pub mod create;
 pub mod drives;
 pub mod edit;
+pub mod folders;
 pub mod format;
 pub mod health;
 pub mod playnite;

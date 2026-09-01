@@ -6,11 +6,12 @@
 //! what makes a cartridge show up in Explorer as "HOLLOW KNIGHT" with its cover
 //! art instead of "Removable Disk (D:)".
 //!
-//! Explorer only accepts `.ico`, `.bmp`, `.exe` or `.dll` for `icon=`, not JPEG.
-//! Rather than pull in an image decoder to convert Steam's JPEG covers, this
-//! takes the one no-dependency route that exists: an `.ico` may *contain* a PNG
-//! verbatim (Vista and later), so a small enough PNG can be wrapped in an icon
-//! container by writing a 22-byte header in front of it.
+//! Explorer only accepts `.ico`, `.bmp`, `.exe` or `.dll` for `icon=`, not the
+//! PNG or JPEG that SteamGridDB serves, so whatever art is chosen has to be
+//! converted here. An `.ico` may *contain* PNGs verbatim (Vista and later), so
+//! the container itself is a 6-byte header plus 16 bytes per image and needs no
+//! encoder of its own: `image` decodes and resizes the source, and everything
+//! below assembles the file by hand.
 
 use std::path::Path;
 
@@ -59,42 +60,133 @@ pub fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     (width > 0 && height > 0).then_some((width, height))
 }
 
+/// The sizes Explorer asks for, smallest first.
+///
+/// A container holding only 256px is legal, and it is what an unresized icon
+/// produced - but then the shell downscales it for the drive list, which is
+/// where SteamGridDB icons turned to mush. Resizing each size properly here
+/// costs a few kilobytes and fixes that.
+const ICON_SIZES: [u32; 4] = [16, 32, 48, 256];
+
 /// Wrap a PNG in a single-image `.ico` container.
 ///
 /// Returns `None` when the PNG is too large to describe in an icon directory
 /// entry, or is not a PNG at all.
 pub fn ico_from_png(png: &[u8]) -> Option<Vec<u8>> {
     let (width, height) = png_dimensions(png)?;
-    if width > MAX_ICON_EDGE || height > MAX_ICON_EDGE {
+    ico_from_pngs(&[(width, height, png.to_vec())])
+}
+
+/// Convert any PNG or JPEG into a multi-size `.ico`.
+///
+/// This is what a downloaded icon goes through. SteamGridDB serves icons at
+/// whatever size the uploader had, commonly 512px, which is past what an icon
+/// directory entry can even describe - so before this existed every downloaded
+/// icon was silently dropped and the cartridge kept Explorer's default.
+///
+/// Sizes above the source are skipped rather than upscaled: inventing detail
+/// looks worse than letting the shell stretch the largest size on offer.
+pub fn ico_from_image(bytes: &[u8]) -> Option<Vec<u8>> {
+    let source = image::load_from_memory(bytes).ok()?.into_rgba8();
+    let edge = source.width().max(source.height());
+    if edge == 0 {
         return None;
     }
 
-    let mut out = Vec::with_capacity(png.len() + 22);
+    let mut sizes: Vec<u32> = ICON_SIZES.iter().copied().filter(|s| *s <= edge).collect();
+    // Art smaller than the smallest icon still gets one, scaled up: a 12px
+    // source with no sizes at all would otherwise convert to nothing.
+    if sizes.is_empty() {
+        sizes.push(ICON_SIZES[0]);
+    }
 
-    // ICONDIR: reserved, type 1 (icon), one image.
+    let frames: Vec<(u32, u32, Vec<u8>)> = sizes
+        .into_iter()
+        .map(|size| square_png(&source, size).map(|png| (size, size, png)))
+        .collect::<Option<_>>()?;
+
+    ico_from_pngs(&frames)
+}
+
+/// Resize onto a transparent square and encode as PNG.
+///
+/// Fit rather than fill: a source that is not square keeps its proportions and
+/// sits in the middle, because an icon stretched to square reads as a mistake.
+fn square_png(source: &image::RgbaImage, size: u32) -> Option<Vec<u8>> {
+    use image::ImageEncoder;
+
+    let edge = f64::from(source.width().max(source.height()));
+    let scale =
+        |side: u32| ((f64::from(side) * f64::from(size) / edge).round() as u32).clamp(1, size);
+    let scaled = image::imageops::resize(
+        source,
+        scale(source.width()),
+        scale(source.height()),
+        image::imageops::FilterType::Lanczos3,
+    );
+
+    let mut canvas = image::RgbaImage::new(size, size);
+    image::imageops::overlay(
+        &mut canvas,
+        &scaled,
+        i64::from(size - scaled.width()) / 2,
+        i64::from(size - scaled.height()) / 2,
+    );
+
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(&canvas, size, size, image::ExtendedColorType::Rgba8)
+        .ok()?;
+    Some(png)
+}
+
+/// Assemble PNG frames into one `.ico` container.
+///
+/// Every frame is stored verbatim; the header is the whole format here.
+fn ico_from_pngs(frames: &[(u32, u32, Vec<u8>)]) -> Option<Vec<u8>> {
+    if frames.is_empty() || frames.len() > u16::MAX as usize {
+        return None;
+    }
+    if frames
+        .iter()
+        .any(|(width, height, _)| *width > MAX_ICON_EDGE || *height > MAX_ICON_EDGE)
+    {
+        return None;
+    }
+
+    let mut out = Vec::new();
+
+    // ICONDIR: reserved, type 1 (icon), how many images follow.
     out.extend_from_slice(&0u16.to_le_bytes());
     out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&(frames.len() as u16).to_le_bytes());
 
-    // ICONDIRENTRY. 256 is encoded as 0.
-    out.push(if width == MAX_ICON_EDGE {
-        0
-    } else {
-        width as u8
-    });
-    out.push(if height == MAX_ICON_EDGE {
-        0
-    } else {
-        height as u8
-    });
-    out.push(0); // palette count: 0 for non-palettised
-    out.push(0); // reserved
-    out.extend_from_slice(&1u16.to_le_bytes()); // colour planes
-    out.extend_from_slice(&32u16.to_le_bytes()); // bits per pixel
-    out.extend_from_slice(&(png.len() as u32).to_le_bytes());
-    out.extend_from_slice(&22u32.to_le_bytes()); // offset: straight after the header
+    // An ICONDIRENTRY each, then the images, so the first offset clears them all.
+    let mut offset = 6 + 16 * frames.len() as u32;
+    for (width, height, png) in frames {
+        // 256 is encoded as 0.
+        out.push(if *width == MAX_ICON_EDGE {
+            0
+        } else {
+            *width as u8
+        });
+        out.push(if *height == MAX_ICON_EDGE {
+            0
+        } else {
+            *height as u8
+        });
+        out.push(0); // palette count: 0 for non-palettised
+        out.push(0); // reserved
+        out.extend_from_slice(&1u16.to_le_bytes()); // colour planes
+        out.extend_from_slice(&32u16.to_le_bytes()); // bits per pixel
+        out.extend_from_slice(&(png.len() as u32).to_le_bytes());
+        out.extend_from_slice(&offset.to_le_bytes());
+        offset += png.len() as u32;
+    }
 
-    out.extend_from_slice(png);
+    for (_, _, png) in frames {
+        out.extend_from_slice(png);
+    }
     Some(out)
 }
 
@@ -109,37 +201,130 @@ pub fn write_autorun(
 ) -> std::io::Result<Option<String>> {
     let icon = cover.and_then(|path| make_icon(root, path));
     let contents = render_autorun(label, icon.as_deref());
-    std::fs::write(root.join("autorun.inf"), contents)?;
+    let path = root.join("autorun.inf");
+    unprotect(&path);
+    std::fs::write(&path, contents)?;
+    // Explorer reads this file for the drive's icon only when it is marked
+    // hidden and system. Written without them it is simply ignored, and a
+    // cartridge with a perfectly good cover.ico still comes up as a generic
+    // drive — which is what happened to every cartridge built before this.
+    protect(&path, true);
     Ok(icon)
 }
 
+/// Mark a file hidden, and system too when Explorer requires it.
+///
+/// Hiding also keeps both files out of the way on a drive someone is using for
+/// something else, which is what the visible clutter was.
+#[cfg(windows)]
+fn protect(path: &Path, system: bool) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_SYSTEM,
+    };
+
+    let mut attributes = FILE_ATTRIBUTE_HIDDEN;
+    if system {
+        attributes |= FILE_ATTRIBUTE_SYSTEM;
+    }
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    // Best effort: a drive that will not take the attribute still gets the
+    // file, and the cartridge is worth finishing either way.
+    unsafe { SetFileAttributesW(wide.as_ptr(), attributes) };
+}
+
+/// Clear the attributes `protect` sets, so the file can be overwritten.
+///
+/// `File::create` on Windows fails with access denied when the file it would
+/// truncate is hidden and the new handle does not claim to be, so rebuilding a
+/// cartridge over an existing one has to undo this first.
+#[cfg(windows)]
+fn unprotect(path: &Path) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{SetFileAttributesW, FILE_ATTRIBUTE_NORMAL};
+
+    if !path.exists() {
+        return;
+    }
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    unsafe { SetFileAttributesW(wide.as_ptr(), FILE_ATTRIBUTE_NORMAL) };
+}
+
+#[cfg(not(windows))]
+fn protect(_path: &Path, _system: bool) {}
+
+#[cfg(not(windows))]
+fn unprotect(_path: &Path) {}
+
 /// Produce `cover.ico` on the cartridge if we can, and return its name.
 fn make_icon(root: &Path, cover: &Path) -> Option<String> {
-    // An .ico supplied by the user is used as-is.
-    if cover
-        .extension()
-        .and_then(|e| e.to_str())?
-        .eq_ignore_ascii_case("ico")
-    {
-        let destination = root.join("cover.ico");
-        if cover != destination {
-            std::fs::copy(cover, &destination).ok()?;
-        }
-        return Some("cover.ico".to_string());
-    }
-
-    // Otherwise the only conversion available without an image decoder is
-    // wrapping a small PNG. Steam's covers are 600x900 JPEGs, so this usually
-    // declines and the cartridge simply keeps Explorer's default icon.
     let bytes = std::fs::read(cover).ok()?;
-    let ico = ico_from_png(&bytes)?;
-    std::fs::write(root.join("cover.ico"), ico).ok()?;
+
+    // What the file *is*, never what it is called. SteamGridDB serves real .ico
+    // files, and they arrive through a cache that names everything it does not
+    // recognise `.jpg` — so an extension check sent an icon that needed nothing
+    // done to it down the decode path, where it failed and the cartridge ended
+    // up with no icon at all.
+    let ico = if is_ico(&bytes) {
+        bytes
+    } else {
+        // Anything else is decoded and resized into a proper multi-size icon. A
+        // 600x900 Steam grid converts too - it is letterboxed into the square
+        // rather than refused, which beats no drive icon at all.
+        ico_from_image(&bytes)?
+    };
+
+    let path = root.join("cover.ico");
+    unprotect(&path);
+    std::fs::write(&path, ico).ok()?;
+    // Hidden, but not system: Explorer only insists on that for autorun.inf,
+    // and the icon is just a file the cartridge would rather not show.
+    protect(&path, false);
     Some("cover.ico".to_string())
+}
+
+/// Does this start with an ICONDIR: reserved 0, type 1 (icon), one image or more?
+pub fn is_ico(bytes: &[u8]) -> bool {
+    bytes.len() >= 6 && bytes[0..4] == [0, 0, 1, 0] && u16::from_le_bytes([bytes[4], bytes[5]]) > 0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn autorun_is_hidden_and_system_so_explorer_reads_it() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_SYSTEM,
+        };
+
+        let scratch = crate::testutil::Scratch::new("autorun-attrs");
+        write_autorun(scratch.path(), "Tomb Raider", None).unwrap();
+
+        let attributes = std::fs::metadata(scratch.join("autorun.inf"))
+            .unwrap()
+            .file_attributes();
+        // Without both of these Explorer ignores the file and the cartridge
+        // shows the generic drive icon, however good its cover.ico is.
+        assert!(attributes & FILE_ATTRIBUTE_HIDDEN != 0, "not hidden");
+        assert!(attributes & FILE_ATTRIBUTE_SYSTEM != 0, "not system");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_cartridge_can_be_rebuilt_over_a_hidden_autorun() {
+        // Truncating a hidden file with a handle that does not claim to be
+        // hidden fails with access denied, so writing the attributes without
+        // clearing them first would break every rebuild after the first.
+        let scratch = crate::testutil::Scratch::new("autorun-rebuild");
+        write_autorun(scratch.path(), "First", None).unwrap();
+        write_autorun(scratch.path(), "Second", None).unwrap();
+
+        let written = std::fs::read_to_string(scratch.join("autorun.inf")).unwrap();
+        assert!(written.contains("label=Second"), "{written}");
+    }
 
     #[test]
     fn renders_label_and_icon_with_crlf() {
@@ -226,10 +411,118 @@ mod tests {
 
     #[test]
     fn declines_art_it_cannot_describe() {
-        // Steam's covers are 600x900, so this is the common case.
+        // The verbatim wrap only ever fit an already-small PNG.
         assert_eq!(ico_from_png(&fake_png(600, 900)), None);
         assert_eq!(ico_from_png(&fake_png(257, 100)), None);
         assert_eq!(ico_from_png(b"jpeg bytes"), None);
+    }
+
+    #[test]
+    fn converts_art_the_verbatim_wrap_refuses() {
+        // A 512px icon is what SteamGridDB actually serves, and the wrap above
+        // declines every one of them. This is the path that has to take it.
+        let source = real_png(512, 512);
+        assert_eq!(ico_from_png(&source), None, "too big to wrap");
+
+        let ico = ico_from_image(&source).expect("512px converts");
+        assert_eq!(icon_sizes(&ico), vec![16, 32, 48, 256]);
+    }
+
+    #[test]
+    fn converts_a_jpeg_too() {
+        let ico = ico_from_image(&real_jpeg(300, 300)).expect("a JPEG converts");
+        assert_eq!(icon_sizes(&ico), vec![16, 32, 48, 256]);
+    }
+
+    #[test]
+    fn never_upscales_past_the_source() {
+        // 256 would be invented detail on a 64px source, so it is not offered.
+        assert_eq!(icon_sizes_of(&real_png(64, 64)), vec![16, 32, 48]);
+        assert_eq!(icon_sizes_of(&real_png(20, 20)), vec![16]);
+        // Below every size there is still one icon rather than none.
+        assert_eq!(icon_sizes_of(&real_png(8, 8)), vec![16]);
+    }
+
+    #[test]
+    fn a_wide_source_keeps_its_proportions() {
+        // Every frame is a square container; the art inside is letterboxed.
+        let ico = ico_from_image(&real_png(600, 900)).expect("a grid converts");
+        assert_eq!(icon_sizes(&ico), vec![16, 32, 48, 256]);
+    }
+
+    #[test]
+    fn an_ico_is_recognised_by_its_bytes_and_not_its_name() {
+        // What SteamGridDB's icons tab serves. It reached the cartridge named
+        // `icon.jpg`, and trusting that name is what lost the drive its icon.
+        let ico = ico_from_image(&real_png(64, 64)).unwrap();
+        assert!(is_ico(&ico));
+
+        // Nothing else is one.
+        assert!(!is_ico(&real_png(64, 64)));
+        assert!(!is_ico(&real_jpeg(64, 64)));
+        assert!(!is_ico(&[]));
+        assert!(!is_ico(&[0, 0, 1, 0]), "a header with no images");
+        assert!(!is_ico(&[0, 0, 1, 0, 0, 0]), "a header claiming none");
+        assert!(!is_ico(&[0, 0, 2, 0, 1, 0]), "type 2 is a cursor");
+    }
+
+    #[test]
+    fn an_ico_is_written_through_untouched_whatever_it_is_called() {
+        let scratch = crate::testutil::Scratch::new("ico-passthrough");
+
+        // Real .ico files hold BMP frames, not PNG, so re-encoding one would
+        // mean decoding a format this crate does not read. It is copied whole.
+        let source = ico_from_image(&real_png(300, 300)).unwrap();
+        let misnamed = scratch.join("icon.jpg");
+        std::fs::write(&misnamed, &source).unwrap();
+
+        assert_eq!(
+            write_autorun(scratch.path(), "ICO", Some(&misnamed)).unwrap(),
+            Some("cover.ico".to_string())
+        );
+        assert_eq!(std::fs::read(scratch.join("cover.ico")).unwrap(), source);
+    }
+
+    #[test]
+    fn refuses_what_it_cannot_decode() {
+        assert_eq!(ico_from_image(b"not an image"), None);
+        assert_eq!(ico_from_image(&[]), None);
+    }
+
+    /// Every frame the container advertises, in order. 0 in the entry means 256.
+    fn icon_sizes(ico: &[u8]) -> Vec<u32> {
+        let count = u16::from_le_bytes([ico[4], ico[5]]) as usize;
+        (0..count)
+            .map(|i| match ico[6 + i * 16] {
+                0 => 256,
+                edge => u32::from(edge),
+            })
+            .collect()
+    }
+
+    fn icon_sizes_of(png: &[u8]) -> Vec<u32> {
+        icon_sizes(&ico_from_image(png).expect("converts"))
+    }
+
+    /// A real, decodable PNG - the fake below only carries a header.
+    fn real_png(width: u32, height: u32) -> Vec<u8> {
+        encode(width, height, image::ImageFormat::Png)
+    }
+
+    fn real_jpeg(width: u32, height: u32) -> Vec<u8> {
+        encode(width, height, image::ImageFormat::Jpeg)
+    }
+
+    fn encode(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+        let image = image::RgbaImage::from_fn(width, height, |x, y| {
+            image::Rgba([(x % 256) as u8, (y % 256) as u8, 128, 255])
+        });
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image)
+            .into_rgb8()
+            .write_to(&mut out, format)
+            .expect("encodes");
+        out.into_inner()
     }
 
     #[test]
@@ -242,24 +535,34 @@ mod tests {
         assert!(text.contains("label=PLAIN"));
         assert!(!text.contains("icon="));
 
-        // A PNG small enough to wrap.
+        // A PNG cover.
         let png_path = scratch.join("art.png");
-        std::fs::write(&png_path, fake_png(64, 64)).unwrap();
+        std::fs::write(&png_path, real_png(512, 512)).unwrap();
         assert_eq!(
-            write_autorun(scratch.path(), "WRAPPED", Some(&png_path)).unwrap(),
+            write_autorun(scratch.path(), "CONVERTED", Some(&png_path)).unwrap(),
             Some("cover.ico".to_string())
         );
         assert!(scratch.join("cover.ico").is_file());
 
-        // A JPEG cover: autorun still written, no icon key.
+        // A JPEG cover converts as well; this is the case that used to leave
+        // the cartridge with Explorer's default icon.
         let jpg_path = scratch.join("art.jpg");
-        std::fs::write(&jpg_path, b"\xff\xd8\xff\xe0 not really a jpeg").unwrap();
+        std::fs::write(&jpg_path, real_jpeg(600, 900)).unwrap();
         assert_eq!(
             write_autorun(scratch.path(), "JPEG", Some(&jpg_path)).unwrap(),
-            None
+            Some("cover.ico".to_string())
         );
         let text = std::fs::read_to_string(scratch.join("autorun.inf")).unwrap();
         assert!(text.contains("label=JPEG"));
+        assert!(text.contains("icon=cover.ico"));
+
+        // Art that is not an image at all: autorun still written, no icon key.
+        let junk_path = scratch.join("art.bin");
+        std::fs::write(&junk_path, b"not an image").unwrap();
+        assert_eq!(
+            write_autorun(scratch.path(), "JUNK", Some(&junk_path)).unwrap(),
+            None
+        );
     }
 
     /// A PNG header with real dimensions; the pixel data is irrelevant here.

@@ -18,7 +18,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::drives::{self, TargetDrive};
-use crate::{autorun, format, health, playnite, portable, sgdb, steam, steamlib, trim, verify};
+use crate::{
+    autorun, folders, format, health, playnite, portable, settings, sgdb, steam, steamlib, trim,
+    verify,
+};
 
 /// Past this, a DRAM-less drive behind a USB bridge has little room for its
 /// garbage collector to work in. Matches health.rs, which says the same thing
@@ -46,6 +49,9 @@ const ALLOWED_SCHEMES: [&str; 8] = [
 pub enum Library {
     Steam,
     Playnite,
+    /// Found by scanning a folder root. Its `id` is the game's own path, since
+    /// there is no launcher holding an identifier for it.
+    Folder,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -262,6 +268,13 @@ pub struct CartridgeResult {
     pub trim: Option<String>,
     /// What came of the integrity check, when one was asked for.
     pub verified: Option<String>,
+    /// Whether that check passed, when one was asked for.
+    ///
+    /// Separate from `verified` because that is prose: both a pass and a
+    /// failure produce `Some(message)`, so the only way to tell them apart was
+    /// to match on the wording. Anything acting on the outcome rather than
+    /// showing it to a person needs a field it can branch on.
+    pub verified_ok: Option<bool>,
     /// True when Steam was closed to get at its library list.
     pub steam_closed: bool,
     /// True when a stale entry for this drive was taken out of that list.
@@ -298,6 +311,21 @@ pub fn list_games(playnite_root_override: Option<&str>) -> Result<GameList, Stri
             );
         }
         Err(e) => problems.push(e),
+    }
+
+    // Scanned folders go last, and lose every name collision. A game a launcher
+    // knows about is better described by the launcher: it has an id, cover art
+    // and a launch command, where a folder has only its own name.
+    let mut known: Vec<String> = out.iter().map(|g| g.name.to_lowercase()).collect();
+    for game in folder_games() {
+        // Two roots can hold the same game — a copy kept on a second drive, or
+        // one already written to a cartridge. Same name, different path, so the
+        // path-level deduplication in `folders` cannot see it.
+        let name = game.name.to_lowercase();
+        if !known.contains(&name) {
+            known.push(name);
+            out.push(game);
+        }
     }
 
     if out.is_empty() {
@@ -360,6 +388,139 @@ fn playnite_games(playnite_root_override: Option<&str>) -> Result<Vec<GameInfo>,
         .collect())
 }
 
+/// The roots to scan: whatever the user chose, else what this machine looks
+/// like it has.
+pub fn folder_roots() -> Vec<PathBuf> {
+    let configured = settings::load().game_folder_roots;
+    if configured.is_empty() {
+        return folders::default_roots();
+    }
+    configured.into_iter().map(PathBuf::from).collect()
+}
+
+/// What the artwork picker files a folder game's cover under.
+///
+/// The picker keys on the game's displayed name, and a folder game's name is
+/// its folder name, so that is what has to be looked up here — keying this on
+/// the path instead would never find anything the picker had saved.
+fn folder_artwork_key(id: &str) -> String {
+    Path::new(id)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// A folder name, as something worth searching a store for.
+///
+/// Folders get named by whoever packaged the game: `DeadIsland2`,
+/// `LEGOStarWarsTSS`, `God of War - Ragnarok`. Putting the word boundaries back
+/// is the difference between a hit and nothing at all.
+pub fn search_query_for(name: &str) -> String {
+    search_query(name)
+}
+
+fn search_query(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::with_capacity(name.len() + 8);
+
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '_' || c == '-' || c == '.' {
+            out.push(' ');
+            continue;
+        }
+        if i > 0 {
+            let previous = chars[i - 1];
+            let next = chars.get(i + 1).copied();
+            // "DeadIsland" and "Island2": a new word starts wherever the kind
+            // of character changes going up.
+            let starts_word = (previous.is_lowercase() || previous.is_ascii_digit())
+                && c.is_uppercase()
+                || previous.is_alphabetic() && c.is_ascii_digit()
+                // "LEGOStar": the end of an acronym is the capital *before* the
+                // first lowercase one, not the first capital.
+                || previous.is_uppercase()
+                    && c.is_uppercase()
+                    && next.is_some_and(|n| n.is_lowercase());
+            if starts_word && !previous.is_whitespace() {
+                out.push(' ');
+            }
+        }
+        out.push(c);
+    }
+
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Fetch a cover from SteamGridDB for a game no launcher has art for.
+///
+/// Reached only when the local lookup came back empty, and only for a game the
+/// user has actually picked — the library list never calls this, so opening the
+/// wizard with fifty scanned games does not fire fifty requests.
+///
+/// Does nothing at all unless the lookup is switched on and keyed: SteamGridDB
+/// refuses unauthenticated requests, so on a default install this returns
+/// before touching the network.
+///
+/// The result is filed under the same key and name the artwork picker uses, so
+/// each game is fetched once and a cover chosen by hand later replaces it.
+fn autofetch_cover(key: &str) -> Option<PathBuf> {
+    settings::load().steamgriddb_key()?;
+
+    // The folder name is the only title there is, and it is often not the
+    // store's. `search_query` puts the spaces back; the raw name is tried after
+    // it in case the folder was named properly and the split made it worse. No
+    // match is not an error: a game SteamGridDB has never heard of simply stays
+    // without a cover.
+    let query = search_query(key);
+    let game = sgdb::search_games(&query)
+        .ok()
+        .and_then(|found| found.into_iter().next())
+        .or_else(|| {
+            (query != key)
+                .then(|| sgdb::search_games(key).ok())
+                .flatten()
+                .and_then(|found| found.into_iter().next())
+        })?;
+    let art = sgdb::get_artwork(game.id, sgdb::ArtworkType::Cover)
+        .ok()?
+        .into_iter()
+        .next()?;
+    // "grid" is what the picker calls a cover when it names a cache file, and
+    // the two have to agree or each would re-download what the other has.
+    let path = sgdb::download_artwork(&art.url, &format!("{key}-grid")).ok()?;
+    sgdb::remember_last_used(key, &path).ok()?;
+    Some(path)
+}
+
+/// Games found by scanning folders, as list entries.
+///
+/// Unlike Steam and Playnite this never fails: a root that has gone away, or
+/// that cannot be read, contributes nothing and is not worth a problem line —
+/// the defaults deliberately include roots that may not exist.
+fn folder_games() -> Vec<GameInfo> {
+    folders::scan(&folder_roots())
+        .into_iter()
+        .map(|game| {
+            let id = game.path.to_string_lossy().to_string();
+            GameInfo {
+                // Nothing on disk says which file to run, and working it out
+                // costs a walk per game. `portable` already picks at copy time,
+                // so the answer is left until the game is actually chosen.
+                executable: String::new(),
+                // No launcher cache to draw on, so the only cover a folder game
+                // can have is one already fetched from SteamGridDB for it.
+                has_cover: sgdb::last_used_artwork(&folder_artwork_key(&id)).is_some(),
+                can_copy: true,
+                size_on_disk: portable::tree_size_of(&game.path),
+                name: game.name,
+                library: Library::Folder,
+                source: game.source,
+                id,
+            }
+        })
+        .collect()
+}
+
 fn steam_games() -> Result<Vec<GameInfo>, String> {
     let root = steam::steam_root().ok_or_else(|| {
         "Could not find a Steam installation. Set STEAM_ROOT if it is somewhere unusual."
@@ -413,6 +574,14 @@ pub fn game_cover(library: Library, id: &str) -> String {
                     .and_then(|c| playnite::resolve_cover(&root, &c))
             })
             .or_else(|| sgdb::last_used_artwork(&format!("playnite:{id}"))),
+        // A folder game has no launcher cache behind it, so SteamGridDB is the
+        // only place a cover can come from. What was picked or fetched before
+        // wins; failing that one is fetched now, if the user has switched the
+        // lookup on.
+        Library::Folder => {
+            let key = folder_artwork_key(id);
+            sgdb::last_used_artwork(&key).or_else(|| autofetch_cover(&key))
+        }
     };
 
     path.and_then(|p| read_as_data_uri(&p)).unwrap_or_default()
@@ -464,6 +633,7 @@ pub fn create_cartridge(
         used_percent: 0,
         trim: None,
         verified: None,
+        verified_ok: None,
         steam_closed: false,
         steam_entry_removed: false,
         warnings: Vec::new(),
@@ -608,6 +778,7 @@ pub fn create_cartridge(
                 game.cover_source.as_deref(),
                 game.app_id.as_deref(),
                 game.playnite_id.as_deref(),
+                game.source_dir.as_deref(),
             ) {
                 Ok(Some(path)) => path,
                 Ok(None) => continue,
@@ -633,6 +804,7 @@ pub fn create_cartridge(
                 .or(request.cover_source.as_deref()),
             None,
             None,
+            None,
         ) {
             Ok(found) => found,
             Err(e) => {
@@ -646,6 +818,7 @@ pub fn create_cartridge(
                 first.cover_source.as_deref(),
                 first.app_id.as_deref(),
                 first.playnite_id.as_deref(),
+                first.source_dir.as_deref(),
             )
             .ok()
             .flatten()
@@ -734,6 +907,28 @@ pub fn create_cartridge(
                 Err(e) => warnings.push(format!("autorun.inf was not written: {e}")),
             }
         }
+
+        sweep_stale_art(
+            &root,
+            entries
+                .iter()
+                .filter_map(|(_, _, cover)| cover.as_deref())
+                .chain(
+                    [
+                        &collection_cover,
+                        &collection_icon,
+                        &collection_background,
+                        &collection_logo,
+                    ]
+                    .into_iter()
+                    .filter_map(|path| path.as_ref()?.file_name()?.to_str()),
+                )
+                .chain(result.icon.as_deref())
+                // With the drive icon turned off, autorun.inf is not rewritten
+                // either - so an existing cover.ico is still the one it names.
+                .chain((!request.write_icon).then_some("cover.ico")),
+            &mut warnings,
+        );
 
         if !result.cover_written {
             warnings.push(
@@ -864,9 +1059,9 @@ pub fn create_cartridge(
                 result.icon = icon;
                 if autorun_source.is_some() && result.icon.is_none() {
                     warnings.push(
-                        "Explorer needs an .ico for a custom drive icon and the cover is a JPEG, \
-                     so the drive keeps its default icon. Drop a cover.ico on the cartridge \
-                     to change that."
+                        "The chosen artwork could not be read as an image, so no drive icon \
+                     was made and the cartridge keeps Explorer's default. A PNG, a JPEG or \
+                     an .ico all convert."
                             .to_string(),
                     );
                 }
@@ -874,6 +1069,23 @@ pub fn create_cartridge(
             Err(e) => warnings.push(format!("autorun.inf was not written: {e}")),
         }
     }
+
+    sweep_stale_art(
+        &root,
+        [
+            &cover_destination,
+            &icon_destination,
+            &background_destination,
+            &logo_destination,
+        ]
+        .into_iter()
+        .filter_map(file_name)
+        .chain(result.icon.as_deref())
+        // With the drive icon turned off, autorun.inf is not rewritten either -
+        // so an existing cover.ico is still the one it names.
+        .chain((!request.write_icon).then_some("cover.ico")),
+        &mut warnings,
+    );
 
     if !result.cover_written {
         warnings.push(
@@ -898,6 +1110,82 @@ pub fn create_cartridge(
 /// Releases freed blocks if asked, then reports how full the drive ended up —
 /// which matters more here than on an internal disk, because a DRAM-less drive
 /// behind a USB bridge has no host memory to lean on and needs the room.
+/// Delete art at the root that this write no longer refers to.
+///
+/// Every write lays art down under a fixed set of stems and rewrites
+/// `cartridge.conf` from scratch, so anything left from an earlier write is
+/// unreferenced the moment the new conf lands: `cover_3.jpg` from when the
+/// collection had four games, or a `logo.png` shadowed by the `logo.jpg`
+/// chosen since. Left alone it is dead weight, and worse, it makes the root
+/// read as if the cartridge still carries art it has stopped using.
+///
+/// `keep` is every filename the new conf and autorun.inf point at.
+fn sweep_stale_art<'a>(
+    root: &Path,
+    keep: impl Iterator<Item = &'a str>,
+    warnings: &mut Vec<String>,
+) {
+    let keep: std::collections::HashSet<String> = keep.map(str::to_lowercase).collect();
+
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if keep.contains(&name.to_lowercase()) {
+            continue;
+        }
+        let path = entry.path();
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !is_art_stem(&stem.to_lowercase()) {
+            continue;
+        }
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
+            continue;
+        }
+        if let Err(e) = std::fs::remove_file(&path) {
+            warnings.push(format!("Stale artwork {name} was left behind: {e}"));
+        }
+    }
+}
+
+/// Is this a name the writer itself lays art down under?
+///
+/// The sweep only ever touches these, so a file the owner put on the cartridge
+/// by hand is never deleted by a rewrite.
+fn is_art_stem(stem: &str) -> bool {
+    matches!(
+        stem,
+        "collection" | "cover" | "icon" | "background" | "logo"
+    ) || stem
+        .strip_prefix("cover_")
+        .is_some_and(|index| !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// The entries of the previous manifest that still describe this cartridge.
+///
+/// The manifest is a record of the whole cartridge, not of the last write.
+/// Adding a game to a cartridge only copies that game, so saving `written`
+/// alone would drop every game already there from the record; removing one
+/// would leave its files listed forever. Both are fixed by carrying the old
+/// entries forward, minus anything that has gone or has just been rewritten.
+fn carried_manifest(root: &Path, written: &[verify::FileDigest]) -> Vec<verify::FileDigest> {
+    let Some(previous) = verify::read_manifest(root) else {
+        return Vec::new();
+    };
+    let rewritten: std::collections::HashSet<&str> =
+        written.iter().map(|file| file.path.as_str()).collect();
+
+    previous
+        .files
+        .into_iter()
+        .filter(|file| !rewritten.contains(file.path.as_str()))
+        .filter(|file| root.join(&file.path).is_file())
+        .collect()
+}
+
 fn finish(
     request: &CartridgeRequest,
     root: &Path,
@@ -906,7 +1194,13 @@ fn finish(
     warnings: &mut Vec<String>,
     progress: &mut dyn FnMut(Progress),
 ) {
+    // Whatever happens below, the record has to match the cartridge afterwards.
+    let carried = carried_manifest(root, &written);
+
     if request.verify_copy && !written.is_empty() {
+        // Only the files just written are read back: the rest were checked when
+        // they were copied, and re-reading the whole cartridge on every write
+        // would make adding one small game cost a full-drive verify.
         let manifest = verify::Manifest { files: written };
         let total = manifest.total_bytes();
 
@@ -931,9 +1225,12 @@ fn finish(
             result.verified = Some(format!(
                 "Checked all {files} files against what was written; every one matches."
             ));
+            result.verified_ok = Some(true);
             // Left on the cartridge so it can be checked again later, on a
             // machine that no longer has the original.
-            if let Err(e) = verify::write_manifest(root, &manifest) {
+            let mut files = carried;
+            files.extend(manifest.files);
+            if let Err(e) = verify::write_manifest(root, &verify::Manifest { files }) {
                 warnings.push(format!("The file list was not saved to the cartridge: {e}"));
             }
         } else {
@@ -956,7 +1253,18 @@ fn finish(
                 named.join("; ")
             );
             result.verified = Some(message.clone());
+            result.verified_ok = Some(false);
             warnings.push(message);
+        }
+    } else if let Some(previous) = verify::read_manifest(root) {
+        // Nothing was copied, so there is nothing to check — but files may have
+        // gone since, and a record naming games the cartridge no longer holds
+        // is worse than a shorter one.
+        if previous.files.len() != carried.len() {
+            let manifest = verify::Manifest { files: carried };
+            if let Err(e) = verify::write_manifest(root, &manifest) {
+                warnings.push(format!("The file list was not brought up to date: {e}"));
+            }
         }
     }
 
@@ -1559,6 +1867,7 @@ fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<PathBuf
         request.cover_source.as_deref(),
         request.app_id.as_deref(),
         request.playnite_id.as_deref(),
+        request.source_dir.as_deref(),
     )?
     else {
         return Ok(None);
@@ -1576,6 +1885,7 @@ fn cover_source(
     chosen: Option<&str>,
     app_id: Option<&str>,
     playnite_id: Option<&str>,
+    source_dir: Option<&str>,
 ) -> Result<Option<PathBuf>, String> {
     if let Some(path) = chosen.map(str::trim).filter(|p| !p.is_empty()) {
         return Ok(Some(PathBuf::from(path)));
@@ -1595,6 +1905,14 @@ fn cover_source(
             .and_then(|g| g.cover)
             .and_then(|c| playnite::resolve_cover(&root_dir, &c));
         return Ok(found.or_else(|| sgdb::last_used_artwork(&format!("playnite:{playnite_id}"))));
+    }
+    // A scanned folder game. No launcher cache to fall back on, so this is the
+    // same lookup-then-fetch the wizard does when the game is picked — without
+    // it a folder game's cover would show in the wizard and be missing from the
+    // cartridge, because the wizard only passes a path for art chosen by hand.
+    if let Some(dir) = source_dir.map(str::trim).filter(|d| !d.is_empty()) {
+        let key = folder_artwork_key(dir);
+        return Ok(sgdb::last_used_artwork(&key).or_else(|| autofetch_cover(&key)));
     }
     Ok(None)
 }
@@ -1883,6 +2201,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_packed_folder_name_becomes_something_searchable() {
+        // Every one of these is a real folder name that found nothing on
+        // SteamGridDB until the word boundaries were put back.
+        assert_eq!(search_query("DeadIsland2"), "Dead Island 2");
+        assert_eq!(search_query("HogwartsLegacy"), "Hogwarts Legacy");
+        assert_eq!(search_query("DyingLight"), "Dying Light");
+        // The end of an acronym is the capital before the first lowercase one.
+        assert_eq!(search_query("LEGOStarWarsTSS"), "LEGO Star Wars TSS");
+        // Separators are word boundaries too.
+        assert_eq!(search_query("God of War - Ragnarok"), "God of War Ragnarok");
+        assert_eq!(search_query("Black_Myth-Wukong"), "Black Myth Wukong");
+    }
+
+    #[test]
+    fn a_name_that_is_already_a_title_is_left_alone() {
+        assert_eq!(search_query("Ghost of Tsushima DC"), "Ghost of Tsushima DC");
+        assert_eq!(
+            search_query("XCOM 2 War of the Chosen"),
+            "XCOM 2 War of the Chosen"
+        );
+        // An all-caps title is not an acronym run to be broken up.
+        assert_eq!(search_query("DEATHLOOP"), "DEATHLOOP");
+    }
+
+    #[test]
+    fn a_folder_game_is_filed_under_its_folder_name() {
+        // The artwork picker keys on the displayed name, so the lookup has to
+        // reduce the path back to exactly that or it would never find what the
+        // picker saved.
+        assert_eq!(
+            folder_artwork_key(r"F:\Games\Epic\HogwartsLegacy"),
+            "HogwartsLegacy"
+        );
+    }
+
+    #[test]
     fn sanitises_values_that_would_corrupt_the_file() {
         assert_eq!(
             sanitize_conf_value("Doom\nexecutable=evil.exe"),
@@ -2133,12 +2487,24 @@ mod tests {
     fn a_chosen_cover_beats_the_libraries() {
         // Nothing is looked up when the wizard supplied a path, so this holds
         // on a machine with neither Steam nor Playnite installed.
-        let chosen = cover_source(Some("/pictures/gow.png"), Some("1593500"), None).unwrap();
+        let chosen = cover_source(Some("/pictures/gow.png"), Some("1593500"), None, None).unwrap();
+        assert_eq!(chosen, Some(PathBuf::from("/pictures/gow.png")));
+
+        // A folder game's own path loses to one chosen by hand too.
+        let chosen = cover_source(
+            Some("/pictures/gow.png"),
+            None,
+            None,
+            Some(r"B:\Games\God of War"),
+        )
+        .unwrap();
         assert_eq!(chosen, Some(PathBuf::from("/pictures/gow.png")));
 
         // Blank counts as unset rather than as a path.
-        assert!(cover_source(Some("   "), None, None).unwrap().is_none());
-        assert!(cover_source(None, None, None).unwrap().is_none());
+        assert!(cover_source(Some("   "), None, None, None)
+            .unwrap()
+            .is_none());
+        assert!(cover_source(None, None, None, None).unwrap().is_none());
     }
 
     #[test]
@@ -2311,5 +2677,126 @@ mod tests {
                 );
             }
         }
+    }
+    #[test]
+    fn the_sweep_only_claims_names_the_writer_lays_down() {
+        for ours in [
+            "collection",
+            "cover",
+            "icon",
+            "background",
+            "logo",
+            "cover_0",
+            "cover_12",
+        ] {
+            assert!(is_art_stem(ours), "{ours}");
+        }
+        // Anything else on the cartridge belongs to whoever put it there.
+        for theirs in [
+            "cover_",
+            "cover_a",
+            "covers",
+            "screenshot",
+            "readme",
+            "manual_1",
+            "",
+        ] {
+            assert!(!is_art_stem(theirs), "{theirs}");
+        }
+    }
+
+    #[test]
+    fn a_rewrite_clears_art_it_no_longer_refers_to() {
+        let scratch = crate::testutil::Scratch::new("sweep");
+        let root = scratch.path();
+
+        for name in [
+            // Still referred to by the new conf.
+            "collection.png",
+            "cover_0.jpg",
+            "cover.ico",
+            // Left over: a fourth game that is gone, and a logo whose
+            // replacement was chosen in a different format.
+            "cover_3.jpg",
+            "logo.png",
+            // Never the writer's to delete.
+            "cartridge.conf",
+            "screenshot.png",
+            "cover_notes.txt",
+        ] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        std::fs::create_dir(root.join("icon.d")).unwrap();
+
+        let mut warnings = Vec::new();
+        sweep_stale_art(
+            root,
+            ["collection.png", "cover_0.jpg", "cover.ico", "logo.jpg"].into_iter(),
+            &mut warnings,
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        for kept in [
+            "collection.png",
+            "cover_0.jpg",
+            "cover.ico",
+            "cartridge.conf",
+            "screenshot.png",
+            "cover_notes.txt",
+        ] {
+            assert!(root.join(kept).is_file(), "{kept} was swept");
+        }
+        assert!(!root.join("cover_3.jpg").exists(), "a stale cover survived");
+        assert!(!root.join("logo.png").exists(), "a shadowed logo survived");
+        // A directory that happens to share a stem is not a file to remove.
+        assert!(root.join("icon.d").is_dir());
+    }
+
+    #[test]
+    fn the_file_list_survives_adding_a_game_and_forgets_a_removed_one() {
+        let scratch = crate::testutil::Scratch::new("manifest-carry");
+        let root = scratch.path();
+
+        let digest = |path: &str, crc: u32| verify::FileDigest {
+            path: path.to_string(),
+            bytes: 1,
+            crc,
+        };
+
+        // What an earlier write left: two games, and one cover that is about to
+        // be replaced.
+        for path in ["hollow/game.exe", "tunic/game.exe"] {
+            let file = root.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(&file, b"x").unwrap();
+        }
+        verify::write_manifest(
+            root,
+            &verify::Manifest {
+                files: vec![
+                    digest("hollow/game.exe", 1),
+                    digest("tunic/game.exe", 2),
+                    digest("gone/game.exe", 3),
+                ],
+            },
+        )
+        .unwrap();
+
+        // This write only copied Tunic again, so only Tunic is in `written`.
+        let carried = carried_manifest(root, &[digest("tunic/game.exe", 9)]);
+        let paths: Vec<&str> = carried.iter().map(|f| f.path.as_str()).collect();
+
+        // Hollow Knight is still on the cartridge and stays in the record even
+        // though this write never touched it.
+        assert_eq!(paths, vec!["hollow/game.exe"]);
+        // Tunic is left to the fresh digest, and the deleted game is dropped.
+        assert!(!paths.contains(&"tunic/game.exe"));
+        assert!(!paths.contains(&"gone/game.exe"));
+    }
+
+    #[test]
+    fn a_cartridge_with_no_file_list_carries_nothing() {
+        let scratch = crate::testutil::Scratch::new("manifest-none");
+        assert!(carried_manifest(scratch.path(), &[]).is_empty());
     }
 }

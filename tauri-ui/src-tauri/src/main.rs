@@ -213,6 +213,11 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
         .chain(std::iter::once(0))
         .collect();
 
+    // Which step ran out of attempts, so the failure can name a cause instead
+    // of an exit code. These three fail for different reasons and only one of
+    // them is the user's to fix.
+    let mut stalled_at = Stalled::Opening;
+
     for attempt in 0..ATTEMPTS {
         if attempt > 0 {
             std::thread::sleep(RETRY_DELAY);
@@ -231,6 +236,7 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
         };
 
         if handle == INVALID_HANDLE_VALUE {
+            stalled_at = Stalled::Opening;
             continue;
         }
 
@@ -250,6 +256,8 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
         };
 
         if locked == 0 {
+            // Almost always a program holding a file open on the cartridge.
+            stalled_at = Stalled::Locking;
             unsafe { CloseHandle(handle) };
             continue;
         }
@@ -272,9 +280,52 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
         if dismounted != 0 {
             return Ok(());
         }
+        stalled_at = Stalled::Dismounting;
     }
 
-    eject_windows_mountvol(drive_path)
+    // `mountvol /P` is a second opinion, not a stronger one: it needs the same
+    // exclusive access. When it fails too, the reason is the one recorded above.
+    eject_windows_mountvol(drive_path).map_err(|_| stalled_at.describe(drive_path))
+}
+
+/// How far the eject got before it ran out of attempts.
+#[cfg(target_os = "windows")]
+enum Stalled {
+    /// The volume would not open at all.
+    Opening,
+    /// It opened, but would not lock — something else has a file open on it.
+    Locking,
+    /// It locked, and Windows still would not dismount it.
+    Dismounting,
+}
+
+#[cfg(target_os = "windows")]
+impl Stalled {
+    /// What to tell the user.
+    ///
+    /// The old message was the exit code of the fallback, which named the tool
+    /// that failed and nothing a user could do about it. Locking is by far the
+    /// common case and it has an obvious fix, so it is worth spelling out —
+    /// Steam in particular holds the cartridge open the moment the wizard adds
+    /// it as a library.
+    fn describe(&self, drive_path: &str) -> String {
+        let drive = drive_path.trim_end_matches(['\\', '/']);
+        match self {
+            Stalled::Locking => format!(
+                "Something is still using {drive}. Close Steam and any window or game \
+                 open on the cartridge, then press Eject again."
+            ),
+            Stalled::Opening => format!(
+                "{drive} could not be opened for ejecting. If the cartridge has already \
+                 been unplugged there is nothing left to do; otherwise reconnect it and \
+                 try again."
+            ),
+            Stalled::Dismounting => format!(
+                "Windows would not unmount {drive}. Eject it from the notification area \
+                 instead, or unplug it once the drive light has settled."
+            ),
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]

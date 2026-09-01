@@ -275,6 +275,29 @@ function safeSrc(src) {
   return "";
 }
 
+/** The only hosts the CSP will load an image from. */
+const ARTWORK_HOST = /^([\w-]+\.)*steamgriddb\.com$/;
+
+/**
+ * A thumbnail in the artwork picker, which is the one remote image on the page.
+ *
+ * Deliberately not part of `safeSrc`: everything else here is a data: URI from
+ * Rust or a file sitting beside this one, and widening that guard to let an
+ * https URL through would let one into every img on the page. The picker sent
+ * its thumbnails through `safeSrc` anyway, which refused every one of them —
+ * so the results grid was a wall of blank tiles with only "600×900" underneath,
+ * and the artwork was picked without ever being seen.
+ */
+function safeRemoteSrc(src) {
+  let url;
+  try {
+    url = new URL(String(src ?? ""));
+  } catch {
+    return "";
+  }
+  return url.protocol === "https:" && ARTWORK_HOST.test(url.hostname) ? url.href : "";
+}
+
 /** Put art into a .plate, or take it away. */
 function setPlate(plate, img, src) {
   const safe = safeSrc(src);
@@ -1368,6 +1391,9 @@ function buildRequest() {
         executable: g.executable,
         appId: g.library === "steam" ? g.id : null,
         playniteId: g.library === "playnite" ? g.id : null,
+        // A scanned game has no launcher behind it, so its id *is* its folder.
+        // The backend copies that folder and works out what to run inside it.
+        sourceDir: g.library === "folder" ? g.id : null,
         coverSource: g.coverSource ?? null,
       })),
     };
@@ -1396,6 +1422,7 @@ function buildRequest() {
     executable: game.executable,
     appId: game.library === "steam" ? game.id : null,
     playniteId: game.library === "playnite" ? game.id : null,
+    sourceDir: game.library === "folder" ? game.id : null,
     coverSource: art.cover?.path ?? null,
     iconSource: art.icon?.path ?? null,
     backgroundSource: art.background?.path ?? null,
@@ -1647,7 +1674,8 @@ function renderArtwork(list) {
 
     const img = document.createElement("img");
     img.alt = "";
-    img.src = safeSrc(item.thumb) || safeSrc(item.url);
+    img.loading = "lazy";
+    img.src = safeRemoteSrc(item.thumb) || safeRemoteSrc(item.url);
     const meta = document.createElement("span");
     meta.className = "art-card__meta";
     meta.textContent = item.width && item.height ? `${item.width}×${item.height}` : "SteamGridDB";
@@ -1674,7 +1702,7 @@ async function chooseArtwork(item, btn) {
       const name = String(got.path).split(/[/\\]/).pop();
       el.icoReceipt.hidden = false;
       el.icoReceipt.textContent =
-        `${name} — 16, 32, 48 and 256 px, written to the cartridge root as autorun.ico.`;
+        `${name} — converted to cover.ico at the cartridge root, at every size Explorer asks for.`;
     }
 
     refreshPreview();

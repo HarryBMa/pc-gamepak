@@ -140,6 +140,10 @@ fn ext_from_url(url: &str) -> &'static str {
         "webp"
     } else if trimmed.ends_with(".bmp") {
         "bmp"
+    } else if trimmed.ends_with(".ico") {
+        // The icons tab serves plenty of these, and calling one `.jpg` on the
+        // way in is how a perfectly good icon reached the cartridge unusable.
+        "ico"
     } else {
         "jpg"
     }
@@ -258,6 +262,10 @@ fn mime_from_ext(path: &Path) -> &'static str {
         "png" => "image/png",
         "webp" => "image/webp",
         "bmp" => "image/bmp",
+        // The icons tab serves these, and the wizard previews whatever was
+        // picked - so getting this wrong is a chosen icon that shows as a
+        // broken image in the preview it was chosen from.
+        "ico" => "image/vnd.microsoft.icon",
         _ => "image/jpeg",
     }
 }
@@ -370,7 +378,11 @@ fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
 /// envelope lets the caller carry on. For an image it is a real failure, and
 /// handing back a JSON envelope pretending to be a picture would only move the
 /// error somewhere harder to read.
-fn get_with_retry(url: &str, key: Option<&str>, not_found_is_empty: bool) -> Result<Vec<u8>, String> {
+fn get_with_retry(
+    url: &str,
+    key: Option<&str>,
+    not_found_is_empty: bool,
+) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_secs(15))
@@ -576,6 +588,7 @@ mod tests {
         let err = api_key_from(&Settings {
             steamgriddb_enabled: true,
             steamgriddb_api_key: String::new(),
+            ..Settings::default()
         })
         .unwrap_err();
         assert!(err.contains("API key"), "{err}");
@@ -584,6 +597,7 @@ mod tests {
             api_key_from(&Settings {
                 steamgriddb_enabled: true,
                 steamgriddb_api_key: "abc123".into(),
+                ..Settings::default()
             }),
             Ok("abc123".to_string())
         );

@@ -21,6 +21,13 @@ pub struct Settings {
     /// A personal SteamGridDB API key. Their v2 API refuses unauthenticated
     /// requests, so the integration does nothing useful without one.
     pub steamgriddb_api_key: String,
+    /// Folders to scan for games that no launcher knows about.
+    ///
+    /// Empty means "whatever `folders::default_roots` finds", which is the
+    /// state every install starts in. It is only written once the user edits
+    /// the list, so a new launcher directory appearing on disk is picked up
+    /// without anyone having to re-run anything.
+    pub game_folder_roots: Vec<String>,
 }
 
 impl Settings {
@@ -114,6 +121,7 @@ mod tests {
         let chosen = Settings {
             steamgriddb_enabled: true,
             steamgriddb_api_key: "  abc123  ".to_string(),
+            ..Settings::default()
         };
         save_to(&path, &chosen).unwrap();
 
@@ -128,12 +136,14 @@ mod tests {
         let off = Settings {
             steamgriddb_enabled: false,
             steamgriddb_api_key: "abc123".to_string(),
+            ..Settings::default()
         };
         assert!(off.steamgriddb_key().is_none());
 
         let on_but_unkeyed = Settings {
             steamgriddb_enabled: true,
             steamgriddb_api_key: "   ".to_string(),
+            ..Settings::default()
         };
         assert!(on_but_unkeyed.steamgriddb_key().is_none());
     }
