@@ -748,3 +748,97 @@ Your call.
 | 8 — tags without a reader | Not started |
 | 9 — tuning, edit, controller, headroom | Not started |
 | 10 — report | In progress (this file) |
+
+---
+
+## 2026-09-01 — two cartridges written, one verified, corruption found
+
+First real read-back of a cartridge written by this code. It failed, which is
+the most useful result the check could have produced.
+
+### The cartridges
+
+| Drive | Label | Written | Contents |
+|---|---|---|---|
+| Disk 4 | `PLAYSTATION` (G:) | 2026-09-01 10:31 | 3 games, exFAT, 119.22 GB |
+| Disk 5 | `TOMB RAIDER` (D:) | 2026-08-31 20:00 | 10 games, 107.43 GB, exFAT |
+
+Both in Realtek RTL9210B-CG USB enclosures. **Both enclosures report the same
+serial, `1342925150003`** — worth knowing before anything identifies a cartridge
+by drive serial.
+
+### The verify
+
+`verify-cart D:\` — 107.43 GB in 256 s, 420 MB/s (CRC-32 is the bottleneck, not
+the link; the raw read runs at ~800 MB/s).
+
+```
+2 problems:
+  2 corrupt
+
+  steamapps/common/Shadow of the Tomb Raider/bigfile.000.tiger
+  steamapps/common/Tomb Raider/bigfile.002.tiger
+```
+
+Both are ~2 GB game archives, both the right length, both the wrong CRC-32.
+Seven files on that cartridge are ~2 GB `.tiger` archives and exactly two are
+bad; nothing small was touched. That is a link failing under sustained transfer,
+not random bit rot.
+
+Hashed each corrupt file twice with SHA-256: identical across reads. The bytes
+on the drive are stable, so this is not a read artefact — the data was written
+wrong on 2026-08-31 and has been wrong since. `copy_and_digest` sums the source
+as it passes, so the manifest CRC describes what was read off `F:`; the mismatch
+is on the write side. Sources for both files are still in
+`F:\Games\Steam\steamapps\common`, so a repair is a two-file re-copy.
+
+### What the event log recorded
+
+The 2026-09-01 write to `PLAYSTATION`:
+
+```
+10:32:05  UASPStor 129  Reset to device \Device\RaidPort9 issued
+   ... 19 resets, roughly one every 20 s, for 7 minutes ...
+10:39:59  disk 51  x6   error on \Device\Harddisk5\DR6 during a paging operation
+```
+
+Plus dozens of `disk 153` I/O retries throughout. The verify run four minutes
+ago logged five more resets on a *different* port at 796 MB/s. So the enclosure
+resets the bus on every port tried, just at different rates.
+
+### Ports
+
+Chased a "the drive is dead" symptom that was neither the drive nor, in the end,
+a single cause:
+
+| Port | Controller | Result |
+|---|---|---|
+| `Port_#0002.Hub_#0007` | ASMedia ASM4242 USB4 (`VEN_1B21&DEV_2426`) | 37 MB/s, two `VID_0000&PID_0002` Code 43 ghosts, port-path instance IDs |
+| `Port_#0001.Hub_#0007` | same controller | 796 MB/s |
+| `Port_#0001.Hub_#0004` | AMD chipset (`VEN_1022&DEV_43FD`) | 805 MB/s, no resets logged |
+
+So `Port_#0002` is genuinely bad, and the controller is not — an earlier reading
+that blamed the ASM4242 was wrong. Note a device that fails its descriptor
+request produces **no volume at all**, so the watcher sees nothing and the user
+gets silence rather than an error. Worth surfacing.
+
+Host is now a Gigabyte X870E AORUS ELITE WIFI7, BIOS FB1 (2026-05-21) — the
+ASUS-subsystem device IDs elsewhere in this log are from the previous board.
+
+### Changed as a result
+
+- `verify` is **on by default** (`settings.rs`, `create.js`, and the serde
+  default on `CartridgeRequest::verify_copy`, so JSON requests get it too).
+- `core/src/bin/verify-cart.rs` added: re-check a cartridge on demand.
+
+### Open issue 9 — the enclosure resets the bus on every port
+
+Not settled: cable, RTL9210B-CG bridge, or the drive. Order to try — swap the
+cable first (it is the variable that differs between the two enclosures; the
+`PLAYSTATION` unit logged no resets today), re-run `verify-cart`, and only
+re-copy the two corrupt files once the resets stop. Writing 4 GB back through a
+link that is still resetting is how you get a third corrupt file.
+
+`PLAYSTATION` has no manifest at all — it was written before verify was on by
+default, during the 19-reset session. It is the cartridge most likely to be bad
+and the one that cannot be checked. Rewrite it.

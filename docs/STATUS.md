@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 170 tests
+### `core/` — `gamepak-core`, 194 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -26,7 +26,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `steamlib` | Copies a Steam game onto a cartridge and registers the drive as a Steam library, so Steam plays from the cartridge. Also unregisters one, and asks a running Steam to shut down so those edits survive its exit. |
 | `trim` | Tells the drive which blocks it no longer has to keep. Treats "this enclosure will not" as a fact, not a failure. |
 | `tuning` | The Windows settings worth changing per cartridge, the commands they run, and their exact opposites. |
-| `verify` | CRC-32, taken as each file is copied and checked by reading the cartridge back. Leaves a manifest so the same check can be run later without the original. |
+| `verify` | CRC-32, taken as each file is copied and checked by reading the cartridge back. **On by default** since it caught real corruption on the first cartridge ever checked on hardware. Leaves a manifest so the same check can be run later without the original; `verify-cart` is the command that does it. |
 | `autorun` | Writes `autorun.inf` so Explorer shows the game's name and icon; builds a PNG-in-ICO when the cover allows it. |
 
 ### `tauri-ui/` — one binary, two windows
@@ -78,6 +78,15 @@ udev rule plus two systemd template units on Linux; two binaries and a logon tas
 on Windows. Both installers uninstall cleanly, including names from before the
 project was called PC GamePak.
 
+### `core/src/bin/` — the wizard's job without the wizard
+
+Two small commands over the same `gamepak-core`, for the cases a GUI is the
+wrong shape. `build-cart plan|build <request.json>` builds a cartridge from a
+JSON `CartridgeRequest`, so eleven cartridges are eleven files rather than an
+evening of clicking; `plan` is the default because formatting is not undoable.
+`verify-cart <root>` re-checks a cartridge against its manifest and touches
+nothing.
+
 ### Everything else
 
 CI on every push (core, watcher, launcher, frontend, shell), a release workflow
@@ -90,12 +99,30 @@ Ranked by how much it matters.
 
 1. **A tagged release.** Everything downstream — AUR, WinGet, Scoop — points at
    artefacts that do not exist yet. Nothing else on this list unblocks as much.
-2. **Nobody has run this on real hardware.** Every path is unit-tested and the
-   frontend is screenshotted and driven in a headless browser against sample
-   data, but no cartridge has been written by this code on a real drive. That is
-   the next real milestone, not a feature. In particular the wizard's running
-   panel — the throughput, the countdown and the log — is wired to the progress
-   events but has never seen a real one arrive over time.
+2. **Real hardware, partly answered — and the answer was not clean.** Two
+   cartridges have now been written by this code on real drives:
+
+   | Cartridge | Written | Verified |
+   |---|---|---|
+   | `TOMB RAIDER` — 10 games, 107.43 GB | 2026-08-31 | **2 files corrupt** |
+   | `PLAYSTATION` — 3 games | 2026-09-01 | no manifest — cannot be checked |
+
+   The Tomb Raider cartridge was read back on 2026-09-01 at 420 MB/s and two
+   2 GB `.tiger` archives came back the right length with the wrong CRC-32.
+   Repeated reads return the same bytes, so the corruption is on the drive, not
+   in the read — the bytes never landed. Windows logged 19 `UASPStor` bus resets
+   during that write and five more during the verify, on a Realtek RTL9210B-CG
+   enclosure. `std::fs::copy` would have reported success for every byte of it.
+
+   That is the case for `verify` existing, and it is why it is now on by
+   default. It is also the open question that matters most: the enclosure resets
+   the bus on every port tried so far, so **no cartridge written through it can
+   be trusted yet**. Which of cable, bridge chip or port is at fault is not
+   settled.
+
+   Still untested on hardware: the wizard's running panel — the throughput, the
+   countdown and the log — is wired to the progress events but has never been
+   watched through a full clean write.
 
    Related, and now fixed: until PR #10 nothing on Windows compiled at all —
    `gamepak-core` had no `windows-sys` dependency despite calling the Win32
@@ -108,9 +135,12 @@ Ranked by how much it matters.
 5. **Programming a tag from the wizard.** A virtual cartridge is a directory
    made by hand; the wizard has no step for it, and nothing writes NDEF onto the
    tag so that it would work on another PC.
-6. **Verifying a cartridge you already have.** The manifest is written and
-   checked at copy time, but nothing yet re-checks a cartridge on demand — the
-   pieces are all in `verify`, it needs a command and a button.
+6. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
+   reads `.gamepak/manifest.json`, re-reads every file it names and reports what
+   does not match; it is read-only and exits non-zero when a cartridge is bad.
+   That is the command. It still needs a button: nothing in the launcher or the
+   wizard offers to check a cartridge that is sitting in front of you, which is
+   where someone would actually look for it.
 7. **Windows code signing.** Unsigned means SmartScreen on every download.
 8. **macOS** is not supported at all — no watcher, no installer, no icons.
 9. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README

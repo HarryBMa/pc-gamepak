@@ -6,10 +6,13 @@
 //! every byte the kernel accepted, and a truncated or flipped-bit game shows up
 //! later as a crash on a level you have not played yet.
 //!
-//! So the wizard can check its own work. Each file is summed as it is copied —
+//! So the wizard checks its own work. Each file is summed as it is copied —
 //! CRC-32 costs nothing next to a USB write — and then the cartridge is read
-//! back and the sums compared. That is one extra pass over the drive, which is
-//! why it is opt-in.
+//! back and the sums compared. That is one extra pass over the drive, and it is
+//! on by default, because the first cartridge ever checked on real hardware
+//! failed: two 2 GB archives out of 107 GB, both the right length, both with
+//! different contents, written through a bridge that was resetting the bus
+//! every twenty seconds. The copy reported success for all of it.
 //!
 //! **This is an integrity check, not a signature.** CRC-32 is the right tool for
 //! "did this survive the cable", the same job it does in zip and gzip, and the

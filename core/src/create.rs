@@ -185,9 +185,14 @@ pub struct CartridgeRequest {
     #[serde(default)]
     pub close_steam: bool,
     /// Read the cartridge back after copying and check every file against the
-    /// sum taken as it was written. One extra pass over the drive, so it is
-    /// asked for rather than assumed.
-    #[serde(default)]
+    /// sum taken as it was written. One extra pass over the drive, and assumed
+    /// rather than asked for: a request that says nothing about verifying gets
+    /// it, because the failure it catches is silent and permanent.
+    ///
+    /// Note this is the *serde* default, so a hand-written JSON request that
+    /// omits the field verifies. The derived `Default` still leaves it false;
+    /// that one exists for tests, which set the field when they mean it.
+    #[serde(default = "default_true")]
     pub verify_copy: bool,
     /// Ask the drive to release freed blocks once everything is written.
     ///
@@ -2388,6 +2393,23 @@ mod tests {
 
         let err = check_source_dir(&format!("{system}\\System32")).unwrap_err();
         assert!(err.contains("inside Windows itself"), "{err}");
+    }
+
+    #[test]
+    fn a_request_that_says_nothing_about_verifying_still_verifies() {
+        // The failure verifying catches is silent: right length, wrong bytes,
+        // and a copy that reported success. Anything driving this by JSON —
+        // build-cart, a script — gets the check without having to know to ask.
+        let required =
+            r#""drivePath":"/mnt/cart","title":"Tunic","executable":"Games/Tunic/TUNIC.exe""#;
+
+        let quiet: CartridgeRequest = serde_json::from_str(&format!("{{{required}}}")).unwrap();
+        assert!(quiet.verify_copy);
+
+        // Still a real switch, not a constant.
+        let off: CartridgeRequest =
+            serde_json::from_str(&format!(r#"{{{required},"verifyCopy":false}}"#)).unwrap();
+        assert!(!off.verify_copy);
     }
 
     #[test]

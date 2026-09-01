@@ -39,6 +39,12 @@ pub struct Settings {
     /// `exfat` or `btrfs`.
     pub default_filesystem: String,
     /// Read the cartridge back and check it against what was written.
+    ///
+    /// On by default. The first two cartridges written on real hardware were
+    /// checked, and one of them had two 2 GB archives that arrived with the
+    /// right length and the wrong contents — a USB bridge dropping the link
+    /// under a sustained write. Nothing else would have caught that until the
+    /// game crashed on a level the user had not reached yet.
     pub default_verify: bool,
     /// Write `autorun.inf` and `cover.ico` so Explorer names the drive.
     pub default_icon: bool,
@@ -61,7 +67,9 @@ impl Default for Settings {
             steamgriddb_api_key: String::new(),
             game_folder_roots: Vec::new(),
             default_filesystem: "exfat".to_string(),
-            default_verify: false,
+            // Costs a read pass over the drive and is worth it: the alternative
+            // is finding out from a crash months later.
+            default_verify: true,
             // A cartridge that does not name itself in Explorer is half a
             // cartridge, and ejecting is what you were going to do anyway.
             default_icon: true,
@@ -182,7 +190,10 @@ mod tests {
 
         let chosen = Settings {
             default_filesystem: "btrfs".to_string(),
-            default_verify: true,
+            // Every value here is the opposite of the default, so a field that
+            // is silently dropped shows up as a mismatch rather than passing by
+            // coincidence.
+            default_verify: false,
             default_icon: false,
             default_eject: false,
             default_register_steam: false,
@@ -200,10 +211,11 @@ mod tests {
         assert!(fresh.default_icon, "a cartridge should name itself");
         assert!(fresh.default_eject);
         assert!(fresh.default_register_steam);
-        // The two that cost something: one erases a drive, the other doubles
-        // the write time. Neither happens unless it is asked for.
+        // Formatting erases a drive, so it never happens unless it is asked
+        // for. Verifying only costs time, and the time buys the one guarantee
+        // nothing else on a cartridge provides.
         assert!(!fresh.default_format);
-        assert!(!fresh.default_verify);
+        assert!(fresh.default_verify, "a copy should check its own work");
     }
 
     #[test]

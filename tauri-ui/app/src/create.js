@@ -227,7 +227,7 @@ let settings = {
   steamgriddbEnabled: false,
   steamgriddbApiKey: "",
   defaultFilesystem: "exfat",
-  defaultVerify: false,
+  defaultVerify: true,
   defaultIcon: true,
   defaultEject: true,
 };
