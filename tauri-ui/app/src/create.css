@@ -1449,18 +1449,25 @@
   color: oklch(0.74 0.008 75);
 }
 
-/* One band per game, so it is visible which one is taking the room. */
+/* One band per game, so it is visible which one is taking the room.
+   A grid rather than a flex row, and the *tracks* are what move: the bands are
+   siblings that have to push each other along, so a transform would overlap
+   them instead, and animating each child's own width runs a layout pass per
+   band. One property on the container does the same job once.
+
+   The tracks are percentages of the whole drive and are not stretched, so the
+   gap at the end is the free space — which is the thing the bar is for. A
+   browser that will not interpolate grid-template-columns snaps to the new
+   sizes, which is exactly what no transition would have done. */
 #rail-bar {
-  display: flex;
+  display: grid;
+  justify-content: start;
   gap: 2px;
   height: 6px;
   border-radius: 3px;
   background: oklch(0 0 0 / 0.5);
   overflow: hidden;
-}
-
-#rail-bar div {
-  transition: width 200ms linear;
+  transition: grid-template-columns 200ms linear;
 }
 
 /* Over the drive's capacity: the bar says so before the button refuses. */

@@ -1313,15 +1313,20 @@ function refreshSpace() {
 
   el.railBar.replaceChildren();
   el.railBar.classList.toggle("is-over", size > capacity);
+  // The band widths are the grid's track sizes, set in one go on the container,
+  // so the transition has a single property to interpolate rather than one per
+  // band. The bands themselves carry only their colour.
+  const tracks = [];
   list.forEach((game, index) => {
     const bytes = game.sizeOnDisk || game.folder?.sizeBytes || 0;
+    tracks.push(`${Math.max(1, (bytes / drive.totalBytes) * 100)}%`);
     const band = document.createElement("div");
-    band.style.width = `${Math.max(1, (bytes / drive.totalBytes) * 100)}%`;
     // Each band a step further round the accent's hue, so they read as one
     // family rather than a chart.
     band.style.background = `color-mix(in oklch, var(--accent) ${100 - index * 12}%, oklch(0.5 0.12 20))`;
     el.railBar.append(band);
   });
+  el.railBar.style.gridTemplateColumns = tracks.join(" ");
 
   el.railBarHint.hidden = list.length < 2;
 }
