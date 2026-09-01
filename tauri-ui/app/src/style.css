@@ -375,53 +375,6 @@ body.is-gamepad .pad-badge {
   display: none;
 }
 
-/* --- Title block: the cover as a card, against the hero behind it -------- */
-
-/* Bottom-aligned rather than centred: the cover and the title are two objects
-   standing on the same shelf, and the type reads as printed on the card's
-   baseline instead of floating beside it. */
-#title-block {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-}
-
-#title-text {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 2px;
-}
-
-/* Sized to a standard cover's 2:3, so any grid image drops in without cropping.
-   The inset hairline is what separates a dark cover from the dark scrim it sits
-   on — without it the card loses its edge on exactly the artwork that needs one
-   most. */
-#cover-card {
-  flex: none;
-  display: block;
-  width: 78px;
-  height: 117px;
-  object-fit: cover;
-  border-radius: 6px;
-  box-shadow:
-    0 8px 20px -6px oklch(0 0 0 / 0.85),
-    inset 0 0 0 1px oklch(1 0 0 / 0.14);
-}
-
-#cover-card[hidden] {
-  display: none;
-}
-
-/* The card takes width the title used to have, so the title gives some back. */
-#card.has-hero #game-title {
-  font-size: 31px;
-  line-height: 0.88;
-}
-
-#card.has-hero #game-title.is-long {
-  font-size: 25px;
-}
-
 /* Where the game actually lives — the one fact the launcher can state that
    nothing else on screen implies. */
 #game-meta {
@@ -1233,73 +1186,5 @@ body.is-gamepad :focus {
   #cover-img-b {
     animation: none;
     transform: scale(1.06);
-  }
-}
-
-/* ==========================================================================
-   The hero window
-
-   Opt-in, from Settings: the window takes the artwork's own 1920:620 instead of
-   the cartridge's portrait. Everything still overlays the art, but there is a
-   third of the height to do it in, so the type and the cover card come down to
-   a size that leaves the hero visible — which is the entire point of choosing
-   this shape.
-
-   Keyed off the window's aspect rather than a class, so it is right during the
-   resize as well as after it.
-   ========================================================================== */
-
-@media (min-aspect-ratio: 2 / 1) {
-  #stage {
-    padding: 0 18px 16px;
-  }
-
-  #cover-card {
-    width: 58px;
-    height: 87px;
-  }
-
-  #card.has-hero #game-title,
-  #game-title {
-    font-size: 26px;
-  }
-
-  #card.has-hero #game-title.is-long,
-  #game-title.is-long {
-    font-size: 21px;
-  }
-
-  #game-meta {
-    margin-top: 6px;
-  }
-
-  #button-row {
-    margin-top: 12px;
-  }
-
-  .btn {
-    height: 42px;
-  }
-
-  /* The rail would eat a window this short. A collection keeps its list, but as
-     a single scrolling row rather than a stack of full-width rows. */
-  #game-list {
-    flex-direction: row;
-    overflow-x: auto;
-    max-height: none;
-  }
-
-  .game-row {
-    flex: 0 0 auto;
-  }
-
-  .game-row__meta {
-    display: none;
-  }
-
-  /* The bottom scrim is sized for a tall window; over 310px it would cover the
-     whole hero and there would be nothing left to look at. */
-  #scrim-bottom {
-    height: 78%;
   }
 }

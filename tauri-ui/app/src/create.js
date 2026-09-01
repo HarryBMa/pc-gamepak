@@ -235,7 +235,6 @@ let copyTouched = false;
 let settings = {
   steamgriddbEnabled: false,
   steamgriddbApiKey: "",
-  launcherHeroWindow: false,
   defaultFilesystem: "exfat",
   defaultVerify: true,
   defaultIcon: true,
@@ -1963,9 +1962,6 @@ function applySettings() {
   el.setEject.checked = settings.defaultEject !== false;
   el.setRegisterSteam.checked = settings.defaultRegisterSteam !== false;
   el.setFormat.checked = Boolean(settings.defaultFormat);
-  if (document.getElementById("set-launcher-hero")) {
-    document.getElementById("set-launcher-hero").checked = Boolean(settings.launcherHeroWindow);
-  }
 }
 
 /**
@@ -2115,7 +2111,6 @@ async function saveSettings() {
       settings: {
         steamgriddbEnabled: el.setSgdb.checked,
         steamgriddbApiKey: el.setSgdbKey.value.trim(),
-        launcherHeroWindow: document.getElementById("set-launcher-hero")?.checked ?? false,
         defaultFilesystem: el.setFilesystem.value,
         defaultVerify: el.setVerify.checked,
         defaultIcon: el.setIcon.checked,
@@ -2562,7 +2557,7 @@ async function demoInvoke(command, args) {
       ] };
     case "get_settings":
       // The preview mirrors a fresh install: offline until switched on.
-      return { steamgriddbEnabled: false, steamgriddbApiKey: "", launcherHeroWindow: false };
+      return { steamgriddbEnabled: false, steamgriddbApiKey: "" };
     case "set_settings":
       return args.settings;
     case "suggest_collection_name": {

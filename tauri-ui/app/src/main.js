@@ -34,7 +34,6 @@ const el = {
   placeholder: document.getElementById("cover-placeholder"),
   eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
-  coverCard: document.getElementById("cover-card"),
   title: document.getElementById("game-title"),
   gameMeta: document.getElementById("game-meta"),
   stage: document.getElementById("stage"),
@@ -625,36 +624,20 @@ function select(index) {
 
   const game = list[index];
   setGameTitle(game.title);
-  // With a hero the backdrop belongs to the cartridge, not to whichever game is
-  // selected, so it holds still and only the card in front of it changes. It is
-  // the cover that moves because it is the cover that is being chosen.
-  if (!el.card.classList.contains("has-hero") && game.cover) crossfadeCover(game.cover);
-  renderCoverCard();
+  if (game.cover) crossfadeCover(game.cover);
+  renderGameMeta();
   setBusy(false);
 }
 
 /**
- * The cover card, and the line under the title saying where the game actually
- * lives.
+ * The line under the title saying where the game actually lives.
  *
- * Hidden when the cover is already the backdrop — showing the same image twice,
- * once blurred behind itself, reads as a rendering fault rather than a design.
+ * `holds_game` is the cartridge's answer for every game on it: whether this
+ * drive carries the files, or is a key pointing at an installed copy. It is the
+ * one fact the launcher can state that nothing else on screen implies.
  */
-function renderCoverCard() {
+function renderGameMeta() {
   const game = currentGame();
-  const cover = game?.cover || cartridge?.cover || "";
-  const show = Boolean(cover) && el.card.classList.contains("has-hero");
-
-  el.coverCard.hidden = !show;
-  if (show) {
-    el.coverCard.src = cover;
-    el.coverCard.alt = `${game?.title || cartridge?.title || "This game"} cover`;
-  } else {
-    el.coverCard.removeAttribute("src");
-  }
-
-  // `holds_game` is the cartridge's answer for every game on it: it says whether
-  // this drive carries the files or merely points at an installed copy.
   const where = cartridge?.holds_game ? "On the cartridge" : "On this PC";
   const size = game?.sizeBytes ? formatBytes(game.sizeBytes) : "";
   el.gameMeta.textContent = size ? `${where} · ${size}` : where;
@@ -848,16 +831,14 @@ async function init() {
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
   }
 
-  // Two pieces of art doing two different jobs. The hero fills the window; the
-  // cover stands in front of it as a card, the size and shape of the thing you
-  // would have picked up off a shelf. A cartridge carrying no hero falls back to
-  // the way this always worked — the cover fills the window instead, and the
-  // card would only be the same image twice, so it stays hidden.
-  const hero = cartridge.background;
-  const launcherArt = hero || (isCollection() ? games()[selected]?.cover : null) || cartridge.cover;
+  // The grid is the launcher's art. A hero was tried here and taken back out:
+  // it wants a window three times as wide as a cartridge is, and the cover has
+  // to be reduced to a card in front of it to leave any of it visible, which is
+  // two pictures competing in a 420px window. The grid fills it, the logo prints
+  // over it, and the icon is Explorer's business rather than this window's.
+  const launcherArt = (isCollection() ? games()[selected]?.cover : null) || cartridge.cover;
   if (launcherArt) await showCover(launcherArt);
-  el.card.classList.toggle("has-hero", Boolean(hero));
-  renderCoverCard();
+  renderGameMeta();
 
   setBusy(false);
   await showWindow();
@@ -1064,8 +1045,6 @@ async function demoInvoke(command, args) {
           title: "God of War Collection",
           cover: "src/demo/gow-collection.jpg",
           cover_path: "D:\\collection.jpg",
-          background: "src/demo/gow-1.jpg",
-          background_path: "D:\\.gamepak\\hero.jpg",
           executable: "steam://rungameid/310970",
           drive_path: args.drivePath,
           is_bundle: true,
@@ -1094,11 +1073,6 @@ async function demoInvoke(command, args) {
         // browser loads it directly.
         cover: "src/demo/cover.jpg",
         cover_path: "D:\\cover.jpg",
-        // `?state=nohero` drops it, because the fallback — cover fills the
-        // window, no card — is the layout every cartridge written before heroes
-        // existed still gets, and it has to keep working.
-        background: state === "nohero" ? "" : "src/demo/gow-collection.jpg",
-        background_path: "D:\\.gamepak\\hero.jpg",
         executable: state === "noexec" ? "" : "steam://rungameid/367520",
         drive_path: args.drivePath,
         is_bundle: false,

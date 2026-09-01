@@ -55,7 +55,7 @@ use std::process::Command;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::PageLoadEvent;
-use tauri::{Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 // --------------------------------------------------------------------------
@@ -431,9 +431,8 @@ fn get_settings() -> settings::Settings {
 /// Store the settings and hand back what was stored, so the window and the file
 /// cannot drift apart.
 #[tauri::command]
-fn set_settings(app: tauri::AppHandle, settings: settings::Settings) -> Result<settings::Settings, String> {
+fn set_settings(settings: settings::Settings) -> Result<settings::Settings, String> {
     settings::save(&settings)?;
-    apply_launcher_window_size(&app, settings.launcher_hero_window);
     Ok(settings)
 }
 
@@ -743,32 +742,6 @@ fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
     });
 }
 
-/// The launcher's two shapes.
-///
-/// The default is the cartridge: portrait, the proportions of the thing in your
-/// hand, and it crops a hero to fill.
-///
-/// The hero window is the artwork's own shape instead. SteamGridDB serves heroes
-/// at 1920×620 (and 3840×1240, 1600×650) — all of them 1920:620, so half of the
-/// base size is an exact match and still leaves room under the art for the title
-/// and the buttons that sit over it. Sizing this by eye is what produced the
-/// previous 460×260: that is 16:9, and the 460 came from `460x215`, which is a
-/// *grid* dimension in sgdb.rs rather than a hero one.
-const CARTRIDGE_WINDOW: (f64, f64) = (420.0, 560.0);
-const HERO_WINDOW: (f64, f64) = (960.0, 310.0);
-
-fn apply_launcher_window_size(app: &tauri::AppHandle, hero_window: bool) {
-    if let Some(window) = app.get_webview_window("main") {
-        let (width, height) = if hero_window {
-            HERO_WINDOW
-        } else {
-            CARTRIDGE_WINDOW
-        };
-        let _ = window.set_size(LogicalSize::new(width, height));
-        let _ = window.center();
-    }
-}
-
 /// Put the launcher away while the wizard is up, and bring it back after.
 ///
 /// The popup is always_on_top, because a cartridge going in has to land over
@@ -931,7 +904,6 @@ fn main() {
                     .center()
                     .visible(false)
                     .build()?;
-                apply_launcher_window_size(&app.handle(), settings::load().launcher_hero_window);
                 let _ = launcher; // keep the window alive and preserve the builder's side effects.
             }
             Ok(())
