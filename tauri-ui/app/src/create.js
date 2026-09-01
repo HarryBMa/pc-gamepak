@@ -1348,7 +1348,7 @@ function onProgress(p) {
   if (p.totalBytes > 0) {
     el.progressFill.classList.remove("is-indeterminate");
     const pct = Math.min(100, (p.doneBytes / p.totalBytes) * 100);
-    el.progressFill.style.width = `${pct}%`;
+    el.progressFill.style.transform = `scaleX(${pct / 100})`;
     el.progressTrack.setAttribute("aria-valuenow", pct.toFixed(0));
     el.progressTrack.setAttribute(
       "aria-valuetext",
@@ -1367,7 +1367,9 @@ function onProgress(p) {
       el.remaining.textContent = clock(left);
     }
   } else {
-    // Steps without a byte count still need to look alive.
+    // Steps without a byte count still need to look alive. The inline scale
+    // has to go, or it would sit under the sweep's own transform.
+    el.progressFill.style.transform = "";
     el.progressFill.classList.add("is-indeterminate");
     el.progressTrack.removeAttribute("aria-valuenow");
     el.progressTrack.setAttribute("aria-valuetext", p.message);
@@ -1485,6 +1487,7 @@ async function write() {
   el.remaining.textContent = "—";
   el.rate.textContent = "";
   el.currentFile.textContent = "";
+  el.progressFill.style.transform = "";
   el.progressFill.classList.add("is-indeterminate");
   renderLog(planForRun, 0);
   showPhase("running");
@@ -1499,7 +1502,7 @@ async function write() {
     doneSteps = planForRun.length;
     renderLog(planForRun, doneSteps);
     el.progressFill.classList.remove("is-indeterminate");
-    el.progressFill.style.width = "100%";
+    el.progressFill.style.transform = "scaleX(1)";
 
     const drive = drives.find((d) => d.path === selectedDrive);
     const parts = [`Cartridge written to ${drive ? drive.label : selectedDrive}.`];

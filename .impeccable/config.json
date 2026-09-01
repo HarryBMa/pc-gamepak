@@ -29,6 +29,15 @@
         ],
         "createdAt": "2026-09-01T15:07:01.326Z",
         "reason": "Launcher art elements are filled at runtime with data: URIs read in Rust; CSP default-src 'self' forbids the webview loading files, so they ship src-less and hidden by design (PRODUCT.md security model)."
+      },
+      {
+        "rule": "layout-transition",
+        "value": "width 200ms linear",
+        "files": [
+          "tauri-ui/app/src/create.css"
+        ],
+        "createdAt": "2026-09-01T15:20:25.326Z",
+        "reason": "#rail-bar bands are flex siblings whose widths set each other's positions; scaleX cannot reposition a sibling, so there is no transform equivalent. They change on selection, not per frame. The one bar that does move continuously, #progress-fill, was converted to transform instead of ignored."
       }
     ]
   }

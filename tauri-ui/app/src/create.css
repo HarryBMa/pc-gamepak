@@ -1085,16 +1085,23 @@
   overflow: hidden;
 }
 
+/* Scaled rather than widened. This is the one bar that moves continuously —
+   every progress event over a copy that can run for minutes — and animating
+   width relayouts the track on each one. */
 #progress-fill {
   height: 100%;
-  width: 0%;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
   background: var(--accent);
-  transition: width 200ms linear;
+  transition: transform 200ms linear;
 }
 
-/* A step with no byte count still needs to look alive. */
+/* A step with no byte count still needs to look alive. The sweep's keyframes
+   replace the transform entirely, which is why the identity scale here matters
+   only when the animation is off. */
 #progress-fill.is-indeterminate {
-  width: 100%;
+  transform: scaleX(1);
   animation: sweep 1100ms ease-in-out infinite;
 }
 
