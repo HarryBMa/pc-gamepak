@@ -1238,12 +1238,15 @@ function renderRailExplorer() {
 
   const label = el.optFormat.checked ? el.formatLabel.value.trim() : driveLabel();
   const name = label || cartridgeTitle() || "Cartridge";
-  // On Linux the mount point is named after the label, so appending it prints
-  // the same word twice — "CINDER (CINDER)". The path is only worth saying when
-  // it says something the name does not, which on Windows it always does.
+  // The path is only worth appending when it says something the name does not.
+  // It usually does not: on Windows `drive.label` is already "STARDEW (G:)", and
+  // on Linux the mount point is named after the label, so a naive append gives
+  // "STARDEW (G:) (G:)" or "CINDER (CINDER)".
   const where = shortPath(drive.path);
-  el.railExplorerName.textContent =
-    where.toLowerCase() === name.toLowerCase() ? name : `${name} (${where})`;
+  const said =
+    name.toLowerCase() === where.toLowerCase() ||
+    name.toLowerCase().endsWith(`(${where.toLowerCase()})`);
+  el.railExplorerName.textContent = said ? name : `${name} (${where})`;
   el.railExplorerFree.textContent = `${formatBytes(drive.freeBytes)} free`;
 }
 

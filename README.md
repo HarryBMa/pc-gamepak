@@ -23,7 +23,7 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](#working-on-it)
 [![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8B8?logo=tauri&logoColor=white)](#working-on-it)
 
-<img width="420" alt="The cartridge launcher: cover art filling the window, the game title, and a wide Play button beside an eject icon" src="docs/launcher.png" />
+<img width="420" alt="The cartridge launcher showing Stardew Valley: the cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="docs/launcher.png" />
 
 </div>
 
@@ -108,7 +108,7 @@ The window is 420 × 560 — the 3:4 of a cover — and the artwork fills it. Th
 window is the slot and the cover is the cartridge seated in it: press Eject and
 the whole face rides out, leaving the empty slot behind.
 
-<img width="420" alt="The launcher showing Cinder &amp; Salt: cover art filling the window, the title, and a wide Play button beside an eject icon" src="docs/launcher.png" />
+<img width="420" alt="The launcher showing Stardew Valley: cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="docs/launcher.png" />
 <img width="420" alt="The details sheet: link speed and free space as two large figures, above a folded Show file paths disclosure" src="docs/launcher-details.png" />
 
 The accent colour is sampled from the cover art at load, so the Play button
@@ -178,7 +178,7 @@ Run the installer menu and choose **Create a cartridge**, or start it directly:
 pc-gamepak --create
 ```
 
-<img width="760" alt="The create-cartridge wizard: a searchable game list with tick boxes on the left, and a rail on the right showing the cartridge being built, the drive picker and Write" src="docs/wizard.png" />
+<img width="760" alt="The create-cartridge wizard: one screen with Game, Media, Artwork and Written to as four groups down the left, each stating what is chosen with a Change button beside it, and a rail on the right previewing the launcher the cartridge will open" src="docs/wizard.png" />
 
 The wizard lists everything installed. **Playnite** is read first when present —
 one list covering Steam, GOG, Epic, Xbox, Ubisoft, itch and emulators — and
@@ -198,10 +198,26 @@ can point the wizard at the right directory.
 > it once before using the wizard. Any extension that writes a `library.json` or
 > `games.json` file will work.
 
-Tick a game, pick the drive, choose what goes on it, press Write. Selection is
-always multiple — the header counts what is ticked and adds up its size, and the
-rail on the right titles itself **Cartridge** or **Multicartridge** to match.
-There is no mode to enter.
+Pick a game, pick the media, press Write. It is **one screen**: Game, Media,
+Artwork and what gets written, each stating what is currently chosen with a
+**Change** beside it — so nothing has to be finished before the next thing can
+be looked at, and there is no step to go back to.
+
+**Change** opens the library as a dialog, and it is a real list with tick boxes:
+selection is always multiple, so ticking a second game is all it takes. The rail
+on the right titles itself **Cartridge** or **Multicartridge** to match. There is
+no mode to enter.
+
+<img width="760" alt="Choose the media: a dialog listing every removable drive with its free space, and a note against each one that already holds a cartridge" src="docs/wizard-media.png" />
+
+Media is the same dialog asking the same kind of question. Every removable drive
+is listed with the room on it, and one that already holds a cartridge says so
+before you overwrite it.
+
+The rail is a **live preview of the launcher** this cartridge will open — the
+cover behind, the logo or the title over it, Play in the colour sampled from the
+art. It is the only place that answers the question a thumbnail cannot: whether
+the title is still readable on the picture you just chose.
 
 ### Collections
 
@@ -212,8 +228,8 @@ which one is taking the room:
 <img width="760" alt="The wizard with three games ticked: the rail titled Multicartridge with a three-game list and a space bar split into one band per game" src="docs/wizard-bundle.png" />
 
 A collection is the one thing in a library with no artwork of its own, so a
-second step appears for the two things the wizard cannot work out — what to call
-it, and what it should look like:
+**Name and order** group appears on the same screen for the two things the wizard
+cannot work out — what to call it, and what it should look like:
 
 - **The name** is suggested from what the games share — *God of War* and *God of
   War Ragnarök* give *God of War Collection* — and can be typed over. The drive
@@ -329,13 +345,14 @@ artwork…** opens the desktop's own file dialog and copies whatever you point a
 
 ### Formatting erases the drive
 
-<img width="760" alt="The wizard's third step with formatting enabled: options grouped by what they touch, the destructive one alone under its own heading, and a field asking you to type the drive's current name before Write will run" src="docs/wizard-format.png" />
+<img width="760" alt="Every option with formatting enabled: options grouped by what they touch, with the destructive one alone under its own heading" src="docs/wizard-format.png" />
 
-Formatting is opt-in per cartridge and gated four ways: the target must be on
+Formatting is opt-in per cartridge and gated three ways: the target must be on
 the removable-drive allowlist the wizard re-derives itself, it must not be the
-system drive, you must type the drive's **current** name back exactly, and
-Write stays disabled until you have. The backend re-checks all of it — it never
-trusts the window's idea of where to write.
+system drive, and it must have been asked for explicitly. All three are checked
+in the backend, which re-derives them rather than trusting the window's idea of
+where to write, and the plan on screen names the drive and what is on it before
+anything runs.
 
 ### Which filesystem
 
