@@ -451,6 +451,53 @@ fn search_query(name: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Ask SteamGridDB for a portrait cover for `title`.
+///
+/// The one way in from outside this module. Returns nothing when the lookup is
+/// switched off, unkeyed, or the game is unknown to them.
+pub fn fetch_cover_for(title: &str) -> Option<PathBuf> {
+    let title = title.trim();
+    if title.is_empty() {
+        return None;
+    }
+    autofetch_cover(title)
+}
+
+/// Is this picture the shape of a cover?
+///
+/// A cover is 3:4 and the launcher's whole layout is built on it. Steam's cache
+/// does not always hold one: `find_cover` falls back to `header.jpg`, which is
+/// 460×215, and SteamGridDB's grid type serves that shape too. Anything wider
+/// than it is tall is not a cover, whatever it is called.
+///
+/// Only the header is read — `image_dimensions` stops before the pixels — so
+/// this costs a file open per game, not a decode.
+fn is_portrait(path: &Path) -> bool {
+    match image::image_dimensions(path) {
+        Ok((width, height)) => height > width,
+        // Unreadable or a format the decoder does not know: assume it is fine
+        // rather than throw away art that may be perfectly good.
+        Err(_) => true,
+    }
+}
+
+/// The art to use for a game, preferring a real cover over a wide header.
+///
+/// `found` is whatever the launcher's own caches produced. When that turns out
+/// to be landscape, SteamGridDB is asked for a portrait one under `title` —
+/// which is also where a replacement is remembered, so it is fetched once.
+/// Without a key, or without a match, the wide picture is kept: the launcher
+/// letterboxes it rather than cropping, and some art beats none.
+fn prefer_portrait(found: Option<PathBuf>, title: &str) -> Option<PathBuf> {
+    let found = found?;
+    if is_portrait(&found) || title.trim().is_empty() {
+        return Some(found);
+    }
+    autofetch_cover(title.trim())
+        .filter(|replacement| is_portrait(replacement))
+        .or(Some(found))
+}
+
 /// Fetch a cover from SteamGridDB for a game no launcher has art for.
 ///
 /// Reached only when the local lookup came back empty, and only for a game the
@@ -779,6 +826,7 @@ pub fn create_cartridge(
                 game.app_id.as_deref(),
                 game.playnite_id.as_deref(),
                 game.source_dir.as_deref(),
+                &entry.0,
             ) {
                 Ok(Some(path)) => path,
                 Ok(None) => continue,
@@ -805,6 +853,7 @@ pub fn create_cartridge(
             None,
             None,
             None,
+            "",
         ) {
             Ok(found) => found,
             Err(e) => {
@@ -819,6 +868,7 @@ pub fn create_cartridge(
                 first.app_id.as_deref(),
                 first.playnite_id.as_deref(),
                 first.source_dir.as_deref(),
+                &first.title,
             )
             .ok()
             .flatten()
@@ -1868,6 +1918,7 @@ fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<PathBuf
         request.app_id.as_deref(),
         request.playnite_id.as_deref(),
         request.source_dir.as_deref(),
+        &request.title,
     )?
     else {
         return Ok(None);
@@ -1886,13 +1937,16 @@ fn cover_source(
     app_id: Option<&str>,
     playnite_id: Option<&str>,
     source_dir: Option<&str>,
+    title: &str,
 ) -> Result<Option<PathBuf>, String> {
     if let Some(path) = chosen.map(str::trim).filter(|p| !p.is_empty()) {
+        // Chosen by hand, so it is right by definition — whatever shape it is.
         return Ok(Some(PathBuf::from(path)));
     }
     if let Some(app_id) = app_id.filter(|id| is_numeric(id)) {
         let local = steam::steam_root().and_then(|root| steam::find_cover(&root, app_id));
-        return Ok(local.or_else(|| sgdb::last_used_artwork(&format!("steam:{app_id}"))));
+        let found = local.or_else(|| sgdb::last_used_artwork(&format!("steam:{app_id}")));
+        return Ok(prefer_portrait(found, title));
     }
     if let Some(playnite_id) = playnite_id {
         let root_dir = playnite::playnite_root()
@@ -1904,7 +1958,8 @@ fn cover_source(
             .find(|g| g.id == playnite_id)
             .and_then(|g| g.cover)
             .and_then(|c| playnite::resolve_cover(&root_dir, &c));
-        return Ok(found.or_else(|| sgdb::last_used_artwork(&format!("playnite:{playnite_id}"))));
+        let found = found.or_else(|| sgdb::last_used_artwork(&format!("playnite:{playnite_id}")));
+        return Ok(prefer_portrait(found, title));
     }
     // A scanned folder game. No launcher cache to fall back on, so this is the
     // same lookup-then-fetch the wizard does when the game is picked — without
@@ -2487,7 +2542,8 @@ mod tests {
     fn a_chosen_cover_beats_the_libraries() {
         // Nothing is looked up when the wizard supplied a path, so this holds
         // on a machine with neither Steam nor Playnite installed.
-        let chosen = cover_source(Some("/pictures/gow.png"), Some("1593500"), None, None).unwrap();
+        let chosen =
+            cover_source(Some("/pictures/gow.png"), Some("1593500"), None, None, "").unwrap();
         assert_eq!(chosen, Some(PathBuf::from("/pictures/gow.png")));
 
         // A folder game's own path loses to one chosen by hand too.
@@ -2496,15 +2552,16 @@ mod tests {
             None,
             None,
             Some(r"B:\Games\God of War"),
+            "God of War",
         )
         .unwrap();
         assert_eq!(chosen, Some(PathBuf::from("/pictures/gow.png")));
 
         // Blank counts as unset rather than as a path.
-        assert!(cover_source(Some("   "), None, None, None)
+        assert!(cover_source(Some("   "), None, None, None, "")
             .unwrap()
             .is_none());
-        assert!(cover_source(None, None, None, None).unwrap().is_none());
+        assert!(cover_source(None, None, None, None, "").unwrap().is_none());
     }
 
     #[test]

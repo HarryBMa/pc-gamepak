@@ -298,6 +298,15 @@ mod windows_impl {
                 continue;
             }
 
+            // FIXED is far too wide on its own: every internal data disk
+            // reports it, so the list offered a 2 TB game library beside the
+            // cartridges, with nothing but a typed label between it and mkfs.
+            // What actually separates a cartridge from an internal disk is the
+            // bus it hangs off, so ask the device rather than the volume.
+            if kind == DRIVE_FIXED && !is_usb_attached(letter) {
+                continue;
+            }
+
             // Never offer the volume Windows itself booted from.
             if is_system_drive(letter) {
                 continue;
@@ -331,6 +340,80 @@ mod windows_impl {
     }
 
     /// The drive holding Windows, from %SystemDrive% (e.g. "C:").
+    /// Is the disk behind this volume attached over USB?
+    ///
+    /// `GetDriveTypeW` describes the *volume* and calls a USB-C NVMe enclosure
+    /// FIXED, exactly like the internal disk holding the game library. Only the
+    /// device knows which bus it is on, so this opens the volume and asks it.
+    ///
+    /// Opening with no access rights is deliberate: it is enough for a query
+    /// IOCTL and needs no elevation, where any real access right would prompt.
+    /// Anything that cannot be opened or does not answer is treated as not USB,
+    /// so a drive is left out of the list rather than offered up to a format.
+    fn is_usb_attached(letter: char) -> bool {
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::Storage::FileSystem::{
+            CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        };
+        use windows_sys::Win32::System::Ioctl::{
+            PropertyStandardQuery, StorageDeviceProperty, IOCTL_STORAGE_QUERY_PROPERTY,
+            STORAGE_DEVICE_DESCRIPTOR, STORAGE_PROPERTY_QUERY,
+        };
+        use windows_sys::Win32::System::IO::DeviceIoControl;
+
+        // 0x07, from the STORAGE_BUS_TYPE enum.
+        const BUS_TYPE_USB: i32 = 7;
+
+        // The volume path, without the trailing slash a device name cannot have.
+        let path = wide(&format!("\\\\.\\{letter}:"));
+
+        let handle = unsafe {
+            CreateFileW(
+                path.as_ptr(),
+                0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                // A HANDLE here, not a pointer: 0 is "no template".
+                0,
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            return false;
+        }
+
+        let query = STORAGE_PROPERTY_QUERY {
+            PropertyId: StorageDeviceProperty,
+            QueryType: PropertyStandardQuery,
+            AdditionalParameters: [0],
+        };
+        // The descriptor is variable length — it carries its strings inline —
+        // so give it room and read only the fixed head.
+        let mut buffer = [0u8; 512];
+        let mut returned: u32 = 0;
+
+        let ok = unsafe {
+            DeviceIoControl(
+                handle,
+                IOCTL_STORAGE_QUERY_PROPERTY,
+                &query as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+                buffer.as_mut_ptr() as *mut std::ffi::c_void,
+                buffer.len() as u32,
+                &mut returned,
+                std::ptr::null_mut(),
+            )
+        };
+        unsafe { CloseHandle(handle) };
+
+        if ok == 0 || (returned as usize) < std::mem::size_of::<STORAGE_DEVICE_DESCRIPTOR>() {
+            return false;
+        }
+        let descriptor = unsafe { &*(buffer.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR) };
+        descriptor.BusType == BUS_TYPE_USB
+    }
+
     fn is_system_drive(letter: char) -> bool {
         std::env::var("SystemDrive")
             .ok()

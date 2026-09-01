@@ -146,7 +146,18 @@ const el = {
   status: $("status"),
 
   // Dialogs
-  editDialog: $("edit-dialog"),
+  tabCreate: $("tab-create"),
+  tabEdit: $("tab-edit"),
+  panelCreate: $("panel-create"),
+  panelEdit: $("panel-edit"),
+  editDrives: $("edit-drives"),
+  editDrivesEmpty: $("edit-drives-empty"),
+  editFormWrap: $("edit-form-wrap"),
+  btnRefetchArt: $("btn-refetch-art"),
+  formatGroup: $("format-group"),
+  formatGroupHead: $("format-group-head"),
+  setFormat: $("set-format"),
+  setRegisterSteam: $("set-register-steam"),
   editTitle: $("edit-title"),
   btnEditCover: $("btn-edit-cover"),
   editCoverName: $("edit-cover-name"),
@@ -836,9 +847,12 @@ function refreshOptions() {
       ? "Each into its own folder, with the launcher pointing at all of them."
       : "Also registers the drive as a Steam library, so Steam plays from the cartridge instead of your internal copy.";
 
-  // Closing Steam is only relevant when Steam is involved at all.
-  const steamInvolved = steamCount > 0 || driveIsSteamLibrary;
-  el.optCloseSteamRow.hidden = !(el.optCopy.checked && steamInvolved);
+  // Closing Steam is only relevant when Steam is involved at all — and it is
+  // now a consequence rather than a question. Settings decides whether the
+  // cartridge joins Steam's library at all; the numbered plan below says Steam
+  // will be closed, which is the part worth reading before Write.
+  el.optCloseSteam.checked = settings.defaultRegisterSteam !== false;
+  el.optCloseSteamRow.hidden = true;
   el.optCloseSteamHint.textContent = steamCount
     ? `${steamCount} of ${count} ${count === 1 ? "is a Steam game" : "are Steam games"}. Steam writes its library list out on exit, so a cartridge it knows about cannot be rewritten while it runs.`
     : "This drive is already registered as a Steam library, so Steam has to close before it can be rewritten.";
@@ -1200,10 +1214,10 @@ function blockingReason() {
   if (size > 0 && drive && size > capacity) return "free enough space";
 
   if (el.optFormat.checked) {
+    // No typed confirmation to wait for — formatting is a setting now, and the
+    // plan below states what it erases. What is still required is the plan
+    // itself, because the label it carries is what the backend checks.
     if (!formatPlan) return "load the drive format details";
-    if (el.formatConfirm.value.trim() !== formatPlan.currentLabel) {
-      return `type ${formatPlan.currentLabel} to confirm`;
-    }
     if (!el.formatLabel.value.trim()) return "name the drive";
   }
   return "";
@@ -1369,7 +1383,11 @@ function buildRequest() {
     formatDrive: el.optFormat.checked,
     formatFilesystem: filesystem(),
     formatLabel: el.formatLabel.value.trim() || null,
-    formatConfirmation: el.formatConfirm.value.trim() || null,
+    // Create does not ask for this any more, so it supplies what the backend
+    // demands: the drive's current label, read from the format plan. The gate
+    // itself is unchanged — `format_drive` still refuses anything that does not
+    // match, and re-reads the label itself rather than trusting this.
+    formatConfirmation: el.optFormat.checked ? formatPlan?.currentLabel ?? null : null,
     copyGame: el.optCopy.checked,
     closeSteam: el.optCloseSteam.checked,
     verifyCopy: el.optVerify.checked,
@@ -1794,15 +1812,88 @@ function applySettings() {
   el.setVerify.checked = Boolean(settings.defaultVerify);
   el.setIcon.checked = settings.defaultIcon !== false;
   el.setEject.checked = settings.defaultEject !== false;
+  el.setRegisterSteam.checked = settings.defaultRegisterSteam !== false;
+  el.setFormat.checked = Boolean(settings.defaultFormat);
 }
 
+/**
+ * Create stopped asking. Everything it used to put to the user each time now
+ * comes from Settings, including whether the drive is formatted — the controls
+ * still exist because the plan and the capacity maths read them, but the window
+ * no longer shows them.
+ */
 function applyDefaults() {
   el.optVerify.checked = Boolean(settings.defaultVerify);
   el.optIcon.checked = settings.defaultIcon !== false;
   el.optEject.checked = settings.defaultEject !== false;
+  el.optCloseSteam.checked = settings.defaultRegisterSteam !== false;
+  el.optFormat.checked = Boolean(settings.defaultFormat);
   const fs = settings.defaultFilesystem ?? "exfat";
   const radio = document.querySelector(`#format-filesystem input[value="${fs}"]`);
   if (radio) radio.checked = true;
+
+  // Settings owns the destructive choice now, so Create states it in the plan
+  // rather than offering it again.
+  el.formatGroup.hidden = true;
+  el.formatGroupHead.hidden = true;
+  refreshFormat();
+  refreshOptions();
+}
+
+/* ==========================================================================
+   Create / Edit
+   ========================================================================== */
+
+/** Which tab is showing. The rail belongs to both and never moves. */
+function showTab(name) {
+  const editing = name === "edit";
+  el.tabCreate.setAttribute("aria-selected", String(!editing));
+  el.tabEdit.setAttribute("aria-selected", String(editing));
+  el.panelCreate.hidden = editing;
+  el.panelEdit.hidden = !editing;
+  if (editing) refreshEditDrives();
+}
+
+/**
+ * The cartridges that can be edited: every target drive that already holds one.
+ *
+ * This is the whole reason Edit is a tab. It used to be a link under the drive
+ * list inside step 3, so reaching it meant ticking a game you did not want in
+ * order to edit a cartridge that already existed.
+ */
+async function refreshEditDrives() {
+  let drives = [];
+  try {
+    drives = await invoke("list_target_drives");
+  } catch (error) {
+    status(String(error), "error");
+    return;
+  }
+  const cartridges = drives.filter((drive) => drive.hasCartridge);
+
+  el.editDrives.replaceChildren();
+  el.editDrivesEmpty.hidden = cartridges.length > 0;
+
+  for (const drive of cartridges) {
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "drive";
+    button.setAttribute("aria-selected", String(editing?.drivePath === drive.path));
+
+    const name = document.createElement("span");
+    name.className = "drive__name";
+    name.textContent = drive.label;
+
+    const meta = document.createElement("span");
+    meta.className = "drive__meta mono";
+    meta.textContent = `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
+
+    button.append(name, meta);
+    button.addEventListener("click", () => openEditor(drive.path));
+    li.append(button);
+    el.editDrives.append(li);
+  }
 }
 
 function openSettings() {
@@ -1848,6 +1939,9 @@ async function saveSettings() {
         defaultVerify: el.setVerify.checked,
         defaultIcon: el.setIcon.checked,
         defaultEject: el.setEject.checked,
+        defaultRegisterSteam: el.setRegisterSteam.checked,
+        defaultFormat: el.setFormat.checked,
+        gameFolderRoots: settings.gameFolderRoots ?? [],
       },
     });
     applyDefaults();
@@ -1862,10 +1956,11 @@ async function saveSettings() {
    Editing a cartridge that is already there
    ========================================================================== */
 
-async function openEditor() {
-  if (!selectedDrive) return;
+async function openEditor(drivePath) {
+  const target = drivePath ?? selectedDrive;
+  if (!target) return;
   try {
-    editing = await invoke("read_cartridge_for_edit", { drivePath: selectedDrive });
+    editing = await invoke("read_cartridge_for_edit", { drivePath: target });
   } catch (error) {
     status(String(error), "error");
     return;
@@ -1873,8 +1968,38 @@ async function openEditor() {
   el.editTitle.value = editing.title ?? "";
   el.editCoverName.textContent = editing.coverPath ? "" : "no artwork on this cartridge";
   el.editStatus.textContent = "";
+  el.editFormWrap.hidden = false;
   renderEditGames();
-  el.editDialog.showModal();
+  refreshEditDrives();
+}
+
+/**
+ * Replace every poster on the cartridge with one fetched from SteamGridDB.
+ *
+ * Writes straight to the cartridge rather than staging like the rest of the
+ * panel: it is a repair, and there is nothing to preview against — the point is
+ * that what is there now is wrong.
+ */
+async function refetchArtwork() {
+  if (!editing) return;
+  if (!settings.steamgriddbEnabled || !(settings.steamgriddbApiKey ?? "").trim()) {
+    el.editStatus.textContent =
+      "SteamGridDB is switched off. Turn it on in Settings and add a key.";
+    return;
+  }
+  el.btnRefetchArt.disabled = true;
+  el.editStatus.textContent = "Fetching posters…";
+  try {
+    const result = await invoke("refetch_cartridge_artwork", { drivePath: editing.drivePath });
+    await openEditor(editing.drivePath);
+    el.editStatus.textContent = result.warnings?.length
+      ? result.warnings.join(" ")
+      : "Every game has a fresh poster.";
+  } catch (error) {
+    el.editStatus.textContent = String(error);
+  } finally {
+    el.btnRefetchArt.disabled = false;
+  }
 }
 
 function renderEditGames() {
@@ -1887,6 +2012,13 @@ function renderEditGames() {
     const name = document.createElement("span");
     name.className = "rail-game__name";
     name.textContent = game.title;
+
+    const artwork = document.createElement("button");
+    artwork.type = "button";
+    artwork.className = "link";
+    artwork.textContent = game.coverSource ? "artwork ✓" : "artwork…";
+    artwork.title = `Change the poster for ${game.title}`;
+    artwork.addEventListener("click", () => pickGameCover(index));
 
     const up = document.createElement("button");
     up.type = "button";
@@ -1911,13 +2043,32 @@ function renderEditGames() {
       renderEditGames();
     });
 
-    li.append(name, up, down, drop);
+    li.append(name, artwork, up, down, drop);
     el.editGames.append(li);
   });
 
   el.editGamesHint.textContent = list.length
     ? "Reordering changes the order on the launcher. Nothing is copied or deleted."
     : "This cartridge lists no games.";
+}
+
+/**
+ * Choose a new poster for one game on the cartridge.
+ *
+ * Held on the game until the edit is saved, like every other change in this
+ * dialog: nothing reaches the cartridge until Save, so closing the dialog
+ * abandons it.
+ */
+async function pickGameCover(index) {
+  try {
+    const chosen = await invoke("pick_cover_image");
+    if (!chosen) return;
+    editing.games[index].coverSource = chosen.path;
+    editing.games[index].cover = chosen.preview;
+    renderEditGames();
+  } catch (error) {
+    el.editStatus.textContent = String(error);
+  }
 }
 
 function moveGame(index, direction) {
@@ -1939,11 +2090,16 @@ async function saveEdits() {
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,
+          // Absent leaves the game's existing poster alone.
+          coverSource: g.coverSource ?? null,
         })),
       },
     });
-    el.editDialog.close();
+    el.editStatus.textContent = "";
     status("Cartridge updated. No files were moved.", "good");
+    // Read it back so the panel shows what is on the drive rather than what
+    // was typed, and so a second edit starts from the saved state.
+    await openEditor(editing.drivePath);
     await refreshDrives();
   } catch (error) {
     el.editStatus.textContent = String(error);
@@ -2034,7 +2190,16 @@ el.btnOptionsBack.addEventListener("click", () => {
   showPhase(isCollection() ? "name" : manual ? "custom" : "games");
 });
 el.create.addEventListener("click", write);
-el.btnEdit.addEventListener("click", openEditor);
+el.tabCreate.addEventListener("click", () => showTab("create"));
+el.tabEdit.addEventListener("click", () => showTab("edit"));
+el.btnRefetchArt.addEventListener("click", refetchArtwork);
+
+// The old way in, from under the drive list. It still works, and now it takes
+// you to the tab rather than opening a dialog over the preview.
+el.btnEdit.addEventListener("click", () => {
+  showTab("edit");
+  openEditor(selectedDrive);
+});
 el.editSave.addEventListener("click", saveEdits);
 el.btnEditCover.addEventListener("click", () => pickCoverFile("cover"));
 el.btnUnregister.addEventListener("click", async () => {

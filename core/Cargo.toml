@@ -26,4 +26,11 @@ urlencoding = "2.1"
 windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
+    # Asking a volume which bus its disk is on, so a cartridge can be told from
+    # an internal data disk that reports the same drive type.
+    "Win32_System_Ioctl",
+    "Win32_System_IO",
+    # CreateFileW's SECURITY_ATTRIBUTES parameter lives here, so the file API is
+    # not exposed without it.
+    "Win32_Security",
 ] }

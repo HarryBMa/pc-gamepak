@@ -43,11 +43,23 @@
       </div>
     </header>
 
+    <!-- Two jobs, not two modes of one job. Create makes a cartridge and asks
+         as little as it can; Edit changes one that exists and asks as much as
+         you like. The rail is the same in both, because it is the same
+         cartridge either way. -->
+    <nav id="tabs" role="tablist" aria-label="What to do">
+      <button id="tab-create" class="tab" type="button" role="tab"
+              aria-selected="true" aria-controls="panel-create">Create</button>
+      <button id="tab-edit" class="tab" type="button" role="tab"
+              aria-selected="false" aria-controls="panel-edit">Edit</button>
+    </nav>
+
     <div id="columns">
       <!-- ============================================================
            Left column: whichever phase the build is in
            ============================================================ -->
       <div id="work">
+        <div id="panel-create" role="tabpanel" aria-labelledby="tab-create">
 
         <!-- Step 1 — choose the games ------------------------------- -->
         <section id="step-games" class="phase" aria-labelledby="step-games-h">
@@ -292,9 +304,12 @@
               </label>
             </div>
 
-            <!-- The destructive one stands alone, under its own heading. -->
-            <p class="group group--danger">Destructive</p>
-            <div class="group__body">
+            <!-- The destructive one stands alone, under its own heading.
+                 Settings owns whether it happens at all, so this whole group is
+                 hidden there; the controls stay because the plan, the capacity
+                 maths and the drive label all read them. -->
+            <p id="format-group-head" class="group group--danger" hidden>Destructive</p>
+            <div id="format-group" class="group__body" hidden>
               <label class="opt opt--danger">
                 <input id="opt-format" type="checkbox" />
                 <span class="opt__body">
@@ -394,6 +409,79 @@
             <ul id="log" aria-live="polite"></ul>
           </div>
         </section>
+        </div>
+
+        <!-- ============================================================
+             Edit — a cartridge that already exists
+             ============================================================
+             Reachable without picking a game first, which is what made this a
+             dead end before: editing lived behind a link under the drive list,
+             and the drive list only appeared once something was ticked.
+
+             Not a dialog. Editing is a job you sit in, comparing what you
+             changed against the preview beside it, and a modal that covers the
+             preview is the wrong shape for that. -->
+        <div id="panel-edit" role="tabpanel" aria-labelledby="tab-edit" hidden>
+          <div class="step">
+            <span class="step__n">1</span>
+            <h2 class="step__h" id="step-pick-h">Pick a cartridge</h2>
+            <span class="step__rule"></span>
+          </div>
+
+          <ul id="edit-drives" aria-labelledby="step-pick-h"></ul>
+          <p id="edit-drives-empty" class="hint" hidden>
+            No cartridge is plugged in. Insert one and it appears here.
+          </p>
+
+          <div id="edit-form-wrap" hidden>
+            <div class="step">
+              <span class="step__n">2</span>
+              <h2 class="step__h" id="step-edit-h">Change what it says</h2>
+              <span class="step__rule"></span>
+            </div>
+
+            <p class="hint">
+              Rewrites what the cartridge says about itself — its name, its
+              artwork and the list of games. Nothing is copied, and no game
+              files are touched.
+            </p>
+
+            <label class="field">
+              <span class="field__label">Cartridge name</span>
+              <input id="edit-title" type="text" autocomplete="off" />
+            </label>
+
+            <div class="field">
+              <span class="field__label">Cover</span>
+              <div class="folder-pick">
+                <button id="btn-edit-cover" class="btn btn--quiet" type="button">
+                  Change cover…
+                </button>
+                <span id="edit-cover-name" class="hint"></span>
+              </div>
+            </div>
+
+            <div class="field">
+              <span class="field__label">Games</span>
+              <ul id="edit-games" aria-label="Games on this cartridge"></ul>
+              <p class="hint" id="edit-games-hint"></p>
+              <button id="btn-refetch-art" class="btn btn--quiet" type="button">
+                Fetch fresh posters for every game
+              </button>
+              <p class="hint">
+                One SteamGridDB lookup per game. Replaces a wide Steam header
+                with a real cover, which is what a cropped-looking poster is.
+              </p>
+            </div>
+
+            <div class="edit-actions">
+              <button id="edit-save" class="btn btn--primary" type="button">
+                <span class="btn__label">Save changes</span>
+              </button>
+              <p id="edit-status" class="hint" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ============================================================
@@ -500,52 +588,6 @@
     </div>
   </main>
 
-  <dialog id="edit-dialog">
-    <form id="edit-form" method="dialog">
-      <header class="dialog-head">
-        <h3>Edit cartridge</h3>
-        <button id="edit-close" class="icon-btn icon-btn--close" type="submit" value="cancel"
-                aria-label="Close">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
-               stroke-linecap="round" width="15" height="15" aria-hidden="true">
-            <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" />
-          </svg>
-        </button>
-      </header>
-
-      <p class="hint">
-        Rewrites what the cartridge says about itself — its name, its artwork and
-        the list of games. Nothing is copied, and no game files are touched.
-      </p>
-
-      <label class="field">
-        <span class="field__label">Cartridge name</span>
-        <input id="edit-title" type="text" autocomplete="off" />
-      </label>
-
-      <div class="field">
-        <span class="field__label">Artwork</span>
-        <div class="folder-pick">
-          <button id="btn-edit-cover" class="btn btn--quiet" type="button">Change artwork…</button>
-          <span id="edit-cover-name" class="hint"></span>
-        </div>
-      </div>
-
-      <div class="field">
-        <span class="field__label">Games</span>
-        <ul id="edit-games" aria-label="Games on this cartridge"></ul>
-        <p class="hint" id="edit-games-hint"></p>
-      </div>
-
-      <footer class="dialog-actions">
-        <button id="edit-save" class="btn btn--primary" type="button">
-          <span class="btn__label">Save changes</span>
-        </button>
-      </footer>
-      <p id="edit-status" class="hint" role="status" aria-live="polite"></p>
-    </form>
-  </dialog>
-
   <dialog id="settings-dialog">
     <form id="settings-form" method="dialog">
       <header class="dialog-head">
@@ -622,6 +664,26 @@
             <input id="set-eject" type="checkbox" />
             <span class="opt__body">
               <span class="opt__label">Eject when writing finishes</span>
+            </span>
+          </label>
+          <label class="opt">
+            <input id="set-register-steam" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Add the cartridge to Steam's library list</span>
+              <span class="opt__hint">
+                Only for Steam games, and Steam is asked to close first so it
+                does not write the list back over the change.
+              </span>
+            </span>
+          </label>
+          <label class="opt opt--grave">
+            <input id="set-format" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Format the drive before writing</span>
+              <span class="opt__hint">
+                Erases everything on the cartridge, every time you write one,
+                without asking again. Only drives on USB are ever offered.
+              </span>
             </span>
           </label>
         </div>

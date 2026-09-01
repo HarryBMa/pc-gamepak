@@ -601,11 +601,20 @@ body.is-gamepad .btn__pad-icon {
   border-color: oklch(1 0 0 / 0.18);
 }
 
+/* 2:3, which is what a cover actually is: Steam's library art is 600x900 and
+   SteamGridDB's portrait grids match it. The slot was 34x46, so even a correct
+   cover lost a sliver top and bottom.
+
+   `contain` rather than `cover` because not every game has a portrait cover to
+   give. Steam falls back to a 460x215 header, and cropping that to a portrait
+   slot leaves a vertical strip through the middle of a wide image — the reason
+   the older Tomb Raider entries looked mangled while the newer ones did not.
+   Letterboxed on the field below, a wide image reads as a wide image. */
 .game-row__cover {
   flex: none;
-  width: 34px;
-  height: 46px;
-  object-fit: cover;
+  width: 32px;
+  height: 48px;
+  object-fit: contain;
   border-radius: 4px;
   background: oklch(0.2 0.005 65);
 }
@@ -732,9 +741,9 @@ body.is-gamepad :focus {
 
 #sheet-thumb {
   flex: none;
-  width: 30px;
+  width: 28px;
   height: 42px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 3px;
   box-shadow: 0 3px 10px -4px oklch(0 0 0 / 0.8);
 }

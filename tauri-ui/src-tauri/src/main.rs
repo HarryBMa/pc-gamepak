@@ -461,6 +461,14 @@ fn update_cartridge(request: edit::UpdateRequest) -> Result<edit::UpdateResult, 
     edit::update(&request)
 }
 
+/// Replace every game's poster on a cartridge with one from SteamGridDB.
+///
+/// One request per game, so the window asks before calling it.
+#[tauri::command]
+fn refetch_cartridge_artwork(drive_path: String) -> Result<edit::UpdateResult, String> {
+    edit::refetch_artwork(&drive_path)
+}
+
 /// Which OS the wizard is running on, so it can offer only what exists here.
 #[tauri::command]
 fn host_platform() -> &'static str {
@@ -703,6 +711,15 @@ fn open_wizard_settings(app: tauri::AppHandle) {
     spawn_open_wizard(app, true);
 }
 
+/// The wizard itself, on the tab it opens with.
+///
+/// The popup had a way to Settings but none to the thing Settings belongs to,
+/// so making a second cartridge meant finding the tray icon.
+#[tauri::command]
+fn open_wizard_window(app: tauri::AppHandle) {
+    spawn_open_wizard(app, false);
+}
+
 /// Build the wizard from a thread that is not the event loop's.
 ///
 /// A command handler and a tray-menu handler both run on the main thread, and
@@ -835,6 +852,7 @@ fn main() {
             cartridge_health,
             read_cartridge_for_edit,
             update_cartridge,
+            refetch_cartridge_artwork,
             host_platform,
             tuning_plan,
             apply_tuning,
@@ -849,6 +867,7 @@ fn main() {
             unregister_from_steam,
             create_cartridge,
             open_wizard_settings,
+            open_wizard_window,
         ])
         .setup(move |app| {
             let wizard_item = MenuItem::with_id(app, "open-wizard", "Open wizard", true, None::<&str>)?;

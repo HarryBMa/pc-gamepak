@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     /// Look artwork up on SteamGridDB. Off unless the user says otherwise: it
@@ -28,6 +28,48 @@ pub struct Settings {
     /// the list, so a new launcher directory appearing on disk is picked up
     /// without anyone having to re-run anything.
     pub game_folder_roots: Vec<String>,
+
+    // ---- What Create does without asking ---------------------------------
+    //
+    // The wizard has always had these controls; it just had nowhere to put the
+    // answers. They were sent to `set_settings` as fields this struct did not
+    // declare, and serde dropped them on the floor, so every one of them reset
+    // on the next run. They live here now because Create stopped asking: it
+    // reads them and gets on with it.
+    /// `exfat` or `btrfs`.
+    pub default_filesystem: String,
+    /// Read the cartridge back and check it against what was written.
+    pub default_verify: bool,
+    /// Write `autorun.inf` and `cover.ico` so Explorer names the drive.
+    pub default_icon: bool,
+    /// Power the drive down when the write finishes.
+    pub default_eject: bool,
+    /// Register a Steam cartridge in `libraryfolders.vdf`.
+    pub default_register_steam: bool,
+    /// Format the drive before writing.
+    ///
+    /// Off unless asked for, and the backend still requires the drive's current
+    /// label to be sent back before it will touch a filesystem — this decides
+    /// whether Create *offers* to format, never whether the gate applies.
+    pub default_format: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            steamgriddb_enabled: false,
+            steamgriddb_api_key: String::new(),
+            game_folder_roots: Vec::new(),
+            default_filesystem: "exfat".to_string(),
+            default_verify: false,
+            // A cartridge that does not name itself in Explorer is half a
+            // cartridge, and ejecting is what you were going to do anyway.
+            default_icon: true,
+            default_eject: true,
+            default_register_steam: true,
+            default_format: false,
+        }
+    }
 }
 
 impl Settings {
@@ -129,6 +171,39 @@ mod tests {
         assert_eq!(read_back, chosen);
         // Whitespace around a pasted key is the user's, not theirs to debug.
         assert_eq!(read_back.steamgriddb_key(), Some("abc123"));
+    }
+
+    #[test]
+    fn every_default_the_wizard_sends_survives_a_save() {
+        // These were declared nowhere, so `set_settings` accepted them and
+        // serde dropped them: the wizard's own defaults reset on every run.
+        let scratch = crate::testutil::Scratch::new("settings-defaults");
+        let path = scratch.join("settings.json");
+
+        let chosen = Settings {
+            default_filesystem: "btrfs".to_string(),
+            default_verify: true,
+            default_icon: false,
+            default_eject: false,
+            default_register_steam: false,
+            default_format: true,
+            ..Settings::default()
+        };
+        save_to(&path, &chosen).unwrap();
+
+        assert_eq!(load_from(&path), chosen);
+    }
+
+    #[test]
+    fn a_fresh_install_writes_a_named_cartridge_and_ejects_it() {
+        let fresh = Settings::default();
+        assert!(fresh.default_icon, "a cartridge should name itself");
+        assert!(fresh.default_eject);
+        assert!(fresh.default_register_steam);
+        // The two that cost something: one erases a drive, the other doubles
+        // the write time. Neither happens unless it is asked for.
+        assert!(!fresh.default_format);
+        assert!(!fresh.default_verify);
     }
 
     #[test]

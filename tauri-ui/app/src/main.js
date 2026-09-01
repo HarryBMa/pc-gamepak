@@ -42,6 +42,7 @@ const el = {
   eject: document.getElementById("btn-eject"),
   close: document.getElementById("btn-close"),
   details: document.getElementById("btn-details"),
+  openWizard: document.getElementById("btn-open-wizard"),
   openSettings: document.getElementById("btn-open-settings"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
@@ -945,6 +946,14 @@ el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
 el.sheetBack.addEventListener("click", () => toggleSheet(false));
 el.pathsToggle.addEventListener("click", () => togglePaths());
+el.openWizard.addEventListener("click", async () => {
+  try {
+    await invoke("open_wizard_window");
+  } catch (error) {
+    console.error(error);
+  }
+});
+
 el.openSettings.addEventListener("click", async () => {
   try {
     await invoke("open_wizard_settings");

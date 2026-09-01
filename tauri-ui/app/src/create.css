@@ -110,11 +110,103 @@
    Columns
    ========================================================================== */
 
+/* Two jobs across the top. Not a segmented control floating in the middle of
+   the page — these sit on the same rule the header ends with, so the tab that
+   is open reads as continuous with the panel below it. */
+#tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 20px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.075);
+}
+
+.tab {
+  position: relative;
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  padding: 10px 14px 11px;
+  cursor: pointer;
+  border-radius: 7px 7px 0 0;
+  transition: color 160ms linear, background-color 160ms linear;
+}
+
+.tab:hover {
+  color: var(--ink);
+  background: oklch(1 0 0 / 0.035);
+}
+
+/* The open tab sits on the rule rather than under it. */
+.tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 10px -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
 #columns {
   display: grid;
   /* The library list is the wider job; the rail is what is being built. */
   grid-template-columns: 1fr 348px;
   min-height: 0;
+}
+
+#panel-create,
+#panel-edit {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#panel-edit {
+  padding: 20px 20px 18px;
+  overflow-y: auto;
+  gap: 14px;
+  animation: rise 320ms var(--ease) both;
+}
+
+#edit-drives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#edit-form-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+/* Formatting is the one setting that destroys something, so it does not look
+   like the toggles above it. */
+.opt--grave .opt__label {
+  color: var(--danger);
 }
 
 #work {

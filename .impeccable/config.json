@@ -20,6 +20,15 @@
         ],
         "createdAt": "2026-08-23T10:14:34.072Z",
         "reason": "pre-existing: intentionally empty+hidden until a cartridge with a logo is parsed and JS sets .src at runtime, not something this change introduced"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "tauri-ui/app/index.html"
+        ],
+        "createdAt": "2026-09-01T15:07:01.326Z",
+        "reason": "Launcher art elements are filled at runtime with data: URIs read in Rust; CSP default-src 'self' forbids the webview loading files, so they ship src-less and hidden by design (PRODUCT.md security model)."
       }
     ]
   }
