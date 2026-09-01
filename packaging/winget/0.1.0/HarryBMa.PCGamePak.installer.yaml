@@ -6,8 +6,9 @@
 # commands; it does not and cannot create the logon task, which is why the
 # description tells the user to run install.ps1 once. See ReleaseNotes below.
 #
-# InstallerSha256 is filled in at release time from the .sha256 file the release
-# workflow uploads beside the zip. Do not submit with the placeholder.
+# InstallerSha256 comes from the .sha256 the release workflow uploads beside the
+# zip. The value below was checked against a fresh download of the published
+# asset, not copied from the workflow log.
 
 PackageIdentifier: HarryBMa.PCGamePak
 PackageVersion: 0.1.0
@@ -27,7 +28,7 @@ ReleaseDate: 2026-09-01
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/HarryBMa/pc-gamepak/releases/download/v0.1.0/pc-gamepak-0.1.0-windows-x86_64.zip
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: F7208A20F470DC000396D46854F00EEA3932BD185A93F3A0DCDBDF48D33A81A6
 
 ManifestType: installer
 ManifestVersion: 1.6.0
