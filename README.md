@@ -10,7 +10,7 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 [![CI](https://github.com/HarryBMa/pc-gamepak/actions/workflows/ci.yml/badge.svg)](https://github.com/HarryBMa/pc-gamepak/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/HarryBMa/pc-gamepak)](https://github.com/HarryBMa/pc-gamepak/releases)
 [![AUR version](https://img.shields.io/aur/version/pc-gamepak)](https://aur.archlinux.org/packages/pc-gamepak)
-[![WinGet version](https://img.shields.io/winget/v/HarryBMa.pc-gamepak)](https://github.com/microsoft/winget-pkgs)
+[![WinGet version](https://img.shields.io/winget/v/HarryBMa.PCGamePak)](https://github.com/microsoft/winget-pkgs)
 [![License](https://img.shields.io/github/license/HarryBMa/pc-gamepak)](LICENSE)
 [![Support on Ko-Fi](https://img.shields.io/badge/Support-Ko--Fi-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/harrybma)
 
