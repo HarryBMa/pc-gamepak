@@ -642,7 +642,7 @@ fn list_target_drives() -> Vec<drives::TargetDrive> {
     create::target_drives()
 }
 
-/// What formatting a drive would destroy, for the confirmation step.
+/// What formatting a drive would destroy, for the warning shown before it runs.
 #[tauri::command]
 fn format_plan(drive_path: String) -> Result<format::FormatPlan, String> {
     create::format_plan(&drive_path)

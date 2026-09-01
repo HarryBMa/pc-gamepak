@@ -138,16 +138,14 @@ pub struct CartridgeRequest {
     /// Absolute path to a user-chosen title logo for a single game.
     #[serde(default)]
     pub logo_source: Option<String>,
-    /// Format the drive first. `format_confirmation` must match the drive's
-    /// current label or nothing happens.
+    /// Format the drive first. `format` re-checks the drive itself before it
+    /// touches anything, so this asks rather than authorises.
     #[serde(default)]
     pub format_drive: bool,
     #[serde(default)]
     pub format_filesystem: Option<format::Filesystem>,
     #[serde(default)]
     pub format_label: Option<String>,
-    #[serde(default)]
-    pub format_confirmation: Option<String>,
     /// Copy the game's files onto the cartridge.
     ///
     /// For a Steam game that also registers the drive as a Steam library. For
@@ -727,7 +725,6 @@ pub fn create_cartridge(
             .format_label
             .clone()
             .unwrap_or_else(|| default_label_for(filesystem, &title));
-        let confirmation = request.format_confirmation.clone().unwrap_or_default();
 
         progress(Progress {
             step: "format",
@@ -751,9 +748,8 @@ pub fn create_cartridge(
         // own attempt below did not already resolve it.
         let device = current_device(&root);
 
-        let remounted =
-            format::format_drive(&request.drive_path, filesystem, &label, &confirmation)
-                .map_err(|e| e.to_string())?;
+        let remounted = format::format_drive(&request.drive_path, filesystem, &label)
+            .map_err(|e| e.to_string())?;
         result.formatted = true;
         result.formatted_filesystem = Some(filesystem);
 
@@ -2506,7 +2502,6 @@ mod tests {
             title: "God of War Collection".into(),
             collection_cover_source: Some("/pictures/collection.png".into()),
             format_drive: true,
-            format_confirmation: Some("CART".into()),
             copy_game: true,
             copy_executable: Some("wrong-game.exe".into()),
             ..Default::default()

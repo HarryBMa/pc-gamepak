@@ -72,7 +72,6 @@ impl Filesystem {
 pub enum FormatError {
     NotRemovable(String),
     SystemDrive(String),
-    ConfirmationMismatch { expected: String, got: String },
     BadLabel(String),
     NoDevice(String),
     ToolMissing(String),
@@ -89,10 +88,6 @@ impl std::fmt::Display for FormatError {
             FormatError::SystemDrive(p) => {
                 write!(f, "{p} is the system drive. Refusing to format it.")
             }
-            FormatError::ConfirmationMismatch { expected, got } => write!(
-                f,
-                "To erase this drive, type its current name exactly: {expected:?} (got {got:?})."
-            ),
             FormatError::BadLabel(l) => write!(
                 f,
                 "{l:?} is not a usable volume label. Use only letters, digits, \
@@ -111,12 +106,13 @@ impl std::fmt::Display for FormatError {
     }
 }
 
-/// What a format would do, for the confirmation step.
+/// What a format would do, for the warning shown before it runs.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FormatPlan {
     pub path: String,
-    /// The label the user must type back to confirm.
+    /// What the drive is called now, so the warning can name what is about to
+    /// be erased rather than describing it as "the selected drive".
     pub current_label: String,
     pub device: Option<String>,
     pub total_bytes: u64,
@@ -177,9 +173,15 @@ pub fn plan(path: &str) -> Result<FormatPlan, FormatError> {
 
 /// Format the drive, having checked everything.
 ///
-/// `confirmation` must equal the drive's current label. That is the gate: it
-/// forces the user to look at which drive they picked, rather than clicking
-/// through a dialog.
+/// There used to be a fourth gate here: the drive's current label had to be
+/// typed back before this would run. It went because the wizard had already
+/// stopped asking — formatting is a setting now, and the request was filled in
+/// from the plan the same code had just produced, so the check was comparing a
+/// value against itself. A gate that cannot fail is not a gate.
+///
+/// Three real ones remain, all of them checked here rather than trusted from
+/// the caller: the drive must be on the removable allowlist, it must not be the
+/// system drive, and formatting must have been explicitly asked for.
 ///
 /// Returns the path the drive can be found at afterward, when known. A fresh
 /// filesystem gets a fresh label, and on Linux the desktop automounts by
@@ -191,23 +193,17 @@ pub fn format_drive(
     path: &str,
     filesystem: Filesystem,
     new_label: &str,
-    confirmation: &str,
 ) -> Result<Option<String>, FormatError> {
+    // plan() is what re-derives eligibility from the system rather than taking
+    // the caller's word for it, so it stays the first thing that happens.
     let plan = plan(path)?;
     let label = check_label_for(filesystem, new_label)?;
-
-    if confirmation.trim() != plan.current_label {
-        return Err(FormatError::ConfirmationMismatch {
-            expected: plan.current_label,
-            got: confirmation.trim().to_string(),
-        });
-    }
 
     run_format(&plan, filesystem, &label)
 }
 
-/// The label to confirm against. An unlabelled drive would make confirmation
-/// meaningless, so its short name stands in.
+/// The name to show for a drive about to be erased. An unlabelled drive would
+/// leave the warning with nothing to name, so its short name stands in.
 fn current_label(drive: &drives::TargetDrive) -> String {
     let label = drive.label.trim();
     if label.is_empty() {
@@ -587,9 +583,10 @@ mod tests {
     }
 
     #[test]
-    fn format_refuses_before_confirmation_is_even_checked() {
-        // An ineligible drive fails on eligibility, not on the label.
-        let err = format_drive("/", Filesystem::Btrfs, "CART", "anything").unwrap_err();
+    fn format_refuses_a_drive_it_does_not_recognise() {
+        // Eligibility is re-derived inside format_drive, so an ineligible path
+        // is refused there and not merely filtered out of the drive list.
+        let err = format_drive("/", Filesystem::Btrfs, "CART").unwrap_err();
         assert!(matches!(
             err,
             FormatError::NotRemovable(_) | FormatError::SystemDrive(_)
@@ -636,19 +633,6 @@ mod tests {
         assert_eq!(human_bytes(0), "0 B");
         assert_eq!(human_bytes(128_035_676_160), "128 GB");
         assert_eq!(human_bytes(1_500_000_000), "1.5 GB");
-    }
-
-    #[test]
-    fn confirmation_mismatch_names_what_was_expected() {
-        // Constructed directly: reaching this through plan() needs a real drive.
-        let err = FormatError::ConfirmationMismatch {
-            expected: "CINDER".into(),
-            got: "cinder".into(),
-        };
-        let text = err.to_string();
-        assert!(text.contains("CINDER"), "{text}");
-        // Case matters, so the message has to show both.
-        assert!(text.contains("cinder"), "{text}");
     }
 
     #[test]

@@ -133,7 +133,6 @@ const el = {
   railDrives: $("rail-drives"),
   drives: $("drives"),
   drivesEmpty: $("drives-empty"),
-  btnEdit: $("btn-edit"),
   btnUnregister: $("btn-unregister"),
   railPlan: $("rail-plan"),
   plan: $("plan"),
@@ -805,7 +804,6 @@ async function selectDrive(drive) {
 
   await readLinkRate(drive.path);
 
-  el.btnEdit.hidden = !drive.hasCartridge;
   el.btnUnregister.hidden = !driveIsSteamLibrary;
 
   if (labelIsOurs) el.formatLabel.value = driveLabelFor(cartridgeTitle(), filesystem());
@@ -1214,9 +1212,9 @@ function blockingReason() {
   if (size > 0 && drive && size > capacity) return "free enough space";
 
   if (el.optFormat.checked) {
-    // No typed confirmation to wait for — formatting is a setting now, and the
-    // plan below states what it erases. What is still required is the plan
-    // itself, because the label it carries is what the backend checks.
+    // No typed confirmation to wait for — formatting is a setting now. The plan
+    // is still required, because it is what states on screen which drive is
+    // about to be erased and what is on it.
     if (!formatPlan) return "load the drive format details";
     if (!el.formatLabel.value.trim()) return "name the drive";
   }
@@ -1385,11 +1383,6 @@ function buildRequest() {
     formatDrive: el.optFormat.checked,
     formatFilesystem: filesystem(),
     formatLabel: el.formatLabel.value.trim() || null,
-    // Create does not ask for this any more, so it supplies what the backend
-    // demands: the drive's current label, read from the format plan. The gate
-    // itself is unchanged — `format_drive` still refuses anything that does not
-    // match, and re-reads the label itself rather than trusting this.
-    formatConfirmation: el.optFormat.checked ? formatPlan?.currentLabel ?? null : null,
     copyGame: el.optCopy.checked,
     closeSteam: el.optCloseSteam.checked,
     verifyCopy: el.optVerify.checked,
@@ -1839,7 +1832,7 @@ function applyDefaults() {
   // rather than offering it again.
   el.formatGroup.hidden = true;
   el.formatGroupHead.hidden = true;
-  refreshFormat();
+  refreshFormatFields();
   refreshOptions();
 }
 
@@ -2197,12 +2190,7 @@ el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.btnRefetchArt.addEventListener("click", refetchArtwork);
 
-// The old way in, from under the drive list. It still works, and now it takes
-// you to the tab rather than opening a dialog over the preview.
-el.btnEdit.addEventListener("click", () => {
-  showTab("edit");
-  openEditor(selectedDrive);
-});
+// Edit is now a single tab action, not a second link in the drive list.
 el.editSave.addEventListener("click", saveEdits);
 el.btnEditCover.addEventListener("click", () => pickCoverFile("cover"));
 el.btnUnregister.addEventListener("click", async () => {
