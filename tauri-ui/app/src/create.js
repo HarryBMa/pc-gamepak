@@ -118,8 +118,17 @@ const el = {
   railBody: $("rail-body"),
   railKindText: $("rail-kind-text"),
   railKindCount: $("rail-kind-count"),
-  railCover: $("rail-cover"),
-  railCoverImg: $("rail-cover-img"),
+  railLauncherCard: $("rail-launcher-card"),
+  railLauncherArt: $("rail-launcher-art"),
+  railLauncherScrim: $("rail-launcher-scrim"),
+  railLauncherStage: $("rail-launcher-stage"),
+  railLauncherEyebrow: $("rail-launcher-eyebrow"),
+  railLauncherLogo: $("rail-launcher-logo"),
+  railLauncherTitle: $("rail-launcher-title"),
+  railExplorer: $("rail-explorer"),
+  railExplorerIcon: $("rail-explorer-icon"),
+  railExplorerName: $("rail-explorer-name"),
+  railExplorerFree: $("rail-explorer-free"),
   railTitle: $("rail-title"),
   railSub: $("rail-sub"),
   btnRailArt: $("btn-rail-art"),
@@ -762,7 +771,11 @@ function whyDemoted(choice) {
 
 function renderDrives() {
   el.drives.replaceChildren();
-  for (const drive of drives) {
+  // Once a drive is chosen the list has done its job, and leaving all of them on
+  // screen makes the rail long enough to bury the button that starts the write.
+  // The chosen one stays, and Change reopens the full list in the picker.
+  const shown = selectedDrive ? drives.filter((d) => d.path === selectedDrive) : drives;
+  for (const drive of shown) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
@@ -1229,7 +1242,7 @@ function refreshRail() {
 
   // A collection has no art of its own until it is given some.
   const coverSrc = art.cover?.preview ?? (collection ? null : picked[0]?.cover);
-  setPlate(el.railCover, el.railCoverImg, coverSrc);
+  renderRailLauncher(coverSrc);
 
   const bits = [];
   if (!collection && picked[0]) {
@@ -1265,6 +1278,97 @@ function refreshRail() {
   refreshSpace();
   refreshPlan();
   refreshCreateButton();
+}
+
+/**
+ * Keep the preview scaled to whatever width the rail gives it.
+ *
+ * The card is laid out at the launcher's real 420x560 so every size inside it is
+ * the size the launcher itself uses. Fitting it to the rail is therefore one
+ * number, and CSS cannot work it out: `scale()` needs a unitless factor and
+ * there is no way to divide a container width by 420 to get one.
+ */
+function fitRailLauncher() {
+  const frame = el.railLauncherCard?.parentElement;
+  if (!frame) return;
+  const width = frame.clientWidth;
+  if (width > 0) el.railLauncherCard.style.setProperty("--rail-scale", String(width / 420));
+}
+
+if (el.railLauncherCard?.parentElement && "ResizeObserver" in window) {
+  new ResizeObserver(fitRailLauncher).observe(el.railLauncherCard.parentElement);
+}
+
+/**
+ * The launcher, as this cartridge will look when it is plugged in.
+ *
+ * Built from the same three parts the real one is — the cover behind, the logo
+ * or the title over it, Play in the accent — because the question the wizard
+ * cannot otherwise answer is whether the artwork and the title survive being put
+ * on top of each other. A cover thumbnail on its own never shows that.
+ *
+ * `--rail-accent` is set from the cover the same way the launcher samples it, so
+ * a dark cover gets a light Play and a bright one gets dark ink, here as there.
+ */
+function renderRailLauncher(coverSrc) {
+  const collection = isCollection();
+  setPlate(el.railLauncherCard, el.railLauncherArt, coverSrc);
+
+  // A collection's own name goes above the title, because on a collection the
+  // title names whichever game is selected rather than the cartridge.
+  const logoSrc = safeSrc(art.logo?.preview);
+  el.railLauncherLogo.hidden = !logoSrc;
+  if (logoSrc) el.railLauncherLogo.src = logoSrc;
+  el.railLauncherStage.classList.toggle("has-logo", Boolean(logoSrc));
+
+  el.railLauncherEyebrow.hidden = !collection || Boolean(logoSrc);
+  el.railLauncherEyebrow.textContent = collection ? cartridgeTitle() || "Collection" : "";
+
+  // With a logo the title is already printed in the artwork; without one this
+  // is the launcher's heading, so it shows the game rather than the collection.
+  const heading = collection
+    ? picked[0]?.name || cartridgeTitle() || "Nothing yet"
+    : cartridgeTitle() || "Nothing yet";
+  el.railLauncherTitle.textContent = heading;
+  el.railLauncherTitle.classList.toggle("is-long", heading.length > 22);
+
+  renderRailExplorer();
+}
+
+/** The drive as Explorer will label it — the one thing the icon slot is for. */
+function renderRailExplorer() {
+  const drive = drives.find((d) => d.path === selectedDrive);
+  const named = el.optIcon?.checked !== false;
+  el.railExplorer.hidden = !drive || !named;
+  if (!drive) return;
+
+  const icon = safeSrc(art.icon?.preview) || safeSrc(art.cover?.preview) || safeSrc(picked[0]?.cover);
+  el.railExplorerIcon.style.backgroundImage = icon ? `url("${icon}")` : "";
+  el.railExplorerIcon.classList.toggle("is-blank", !icon);
+
+  const label = el.optFormat.checked ? el.formatLabel.value.trim() : driveLabel();
+  const name = label || cartridgeTitle() || "Cartridge";
+  // On Linux the mount point is named after the label, so appending it prints
+  // the same word twice — "CINDER (CINDER)". The path is only worth saying when
+  // it says something the name does not, which on Windows it always does.
+  const where = shortPath(drive.path);
+  el.railExplorerName.textContent =
+    where.toLowerCase() === name.toLowerCase() ? name : `${name} (${where})`;
+  el.railExplorerFree.textContent = `${formatBytes(drive.freeBytes)} free`;
+}
+
+/**
+ * How a drive is worth naming in a sentence: `E:` on Windows, and the mount
+ * point's own name elsewhere.
+ *
+ * Explorer's row has one line to play with, so printing
+ * `/run/media/harry/CINDER` in it pushes out the thing the row is actually for.
+ */
+function shortPath(path) {
+  const trimmed = String(path ?? "").replace(/[\\/]+$/, "");
+  if (/^[A-Za-z]:$/.test(trimmed)) return trimmed;
+  const last = trimmed.split(/[\\/]/).filter(Boolean).pop();
+  return last || trimmed || "?";
 }
 
 function renderRailGames() {

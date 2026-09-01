@@ -1270,13 +1270,234 @@
   display: none;
 }
 
-/* Third column is the Change button. It is `auto` rather than a fixed width so
-   the name beside it keeps every pixel the button does not need. */
+/* The cover plate that used to sit here is now the launcher preview below, so
+   this row is just the name and the way to change it. */
 #rail-id {
   display: grid;
-  grid-template-columns: 64px 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 13px;
   align-items: center;
+}
+
+/* --- The launcher preview ----------------------------------------------- */
+
+#rail-launcher {
+  margin-top: 14px;
+}
+
+/* The card is built at the launcher's real 420x560 and scaled down, so every
+   size inside it is the size the launcher actually uses — no second set of
+   numbers to keep in step with the real window. The frame reserves the scaled
+   footprint, since a transform does not affect layout. */
+/* Capped rather than full-bleed. At the rail's full width the preview is over
+   400px tall and pushes the capacity bar, the drive and the button that starts
+   the write below the fold — a preview that hides the thing it is previewing
+   the result of. This is large enough to read the title against the art, which
+   is the whole job. */
+#rail-launcher-frame {
+  width: 100%;
+  max-width: 160px;
+  aspect-ratio: 420 / 560;
+  overflow: hidden;
+  border-radius: 11px;
+}
+
+#rail-launcher-card {
+  position: relative;
+  width: 420px;
+  height: 560px;
+  transform: scale(var(--rail-scale, 0.7));
+  transform-origin: top left;
+  overflow: hidden;
+  border-radius: 16px;
+  background: oklch(0.115 0.004 65);
+  box-shadow:
+    inset 0 0 0 1px oklch(1 0 0 / 0.1),
+    0 14px 30px -12px oklch(0 0 0 / 0.8);
+}
+
+#rail-launcher-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#rail-launcher-art[hidden] {
+  display: none;
+}
+
+#rail-launcher-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: oklch(0.42 0.006 65);
+  background: repeating-linear-gradient(
+    135deg,
+    oklch(0.185 0.005 65) 0 10px,
+    oklch(0.16 0.005 65) 10px 20px
+  );
+}
+
+#rail-launcher-card.has-art #rail-launcher-empty {
+  display: none;
+}
+
+#rail-launcher-scrim {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 52%;
+  background: linear-gradient(
+    to top,
+    oklch(0.09 0.004 65 / 0.98) 0%,
+    oklch(0.09 0.004 65 / 0.9) 22%,
+    oklch(0.1 0.004 65 / 0.58) 48%,
+    transparent 100%
+  );
+}
+
+#rail-launcher-stage {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0 20px 20px;
+}
+
+#rail-launcher-eyebrow {
+  margin: 0 0 9px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: oklch(0.66 0.008 75);
+}
+
+#rail-launcher-eyebrow[hidden] {
+  display: none;
+}
+
+#rail-launcher-logo {
+  display: block;
+  max-width: min(88%, 360px);
+  max-height: 78px;
+  margin: 0 0 8px;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 2px 10px oklch(0 0 0 / 0.52));
+}
+
+#rail-launcher-logo[hidden] {
+  display: none;
+}
+
+/* A logo prints the name in the artwork, so the heading would say it twice. */
+#rail-launcher-stage.has-logo #rail-launcher-title {
+  display: none;
+}
+
+#rail-launcher-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 800;
+  font-stretch: 84%;
+  line-height: 0.9;
+  letter-spacing: -0.012em;
+  text-transform: uppercase;
+  text-wrap: balance;
+  color: oklch(0.97 0.006 75);
+  text-shadow: 0 2px 14px oklch(0 0 0 / 0.6);
+}
+
+#rail-launcher-title.is-long {
+  font-size: 30px;
+  font-stretch: 76%;
+  line-height: 0.96;
+}
+
+#rail-launcher-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+#rail-launcher-play {
+  flex: 1;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.3);
+}
+
+#rail-launcher-eject {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 7px;
+  border: 1px solid oklch(1 0 0 / 0.15);
+  background: oklch(0.1 0.004 65 / 0.4);
+  color: oklch(0.88 0.008 75);
+}
+
+/* --- In Explorer --------------------------------------------------------- */
+
+#rail-explorer {
+  margin-top: 14px;
+}
+
+#rail-explorer[hidden] {
+  display: none;
+}
+
+#rail-explorer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid oklch(1 0 0 / 0.07);
+  background: oklch(0 0 0 / 0.3);
+}
+
+#rail-explorer-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background-size: cover;
+  background-position: center;
+}
+
+#rail-explorer-icon.is-blank {
+  background: oklch(1 0 0 / 0.06);
+}
+
+#rail-explorer-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: oklch(0.86 0.008 75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#rail-explorer-free {
+  flex: none;
+  font-size: 9.5px;
+  color: oklch(0.58 0.008 75);
 }
 
 #rail-names {
@@ -1650,10 +1871,25 @@
 
 /* --- The rail's footer -------------------------------------------------- */
 
+/* Sticky, not merely last. The rail scrolls now that it carries a preview, and
+   the button that starts the write is the one thing that must never be the
+   reason someone has to scroll. The negative bottom margin cancels the rail's
+   own padding so the backing reaches the window edge rather than leaving a
+   scrolling sliver under it. */
 #rail-foot {
   flex: none;
   margin-top: auto;
   padding-top: 17px;
+  position: sticky;
+  bottom: -20px;
+  margin-bottom: -20px;
+  padding-bottom: 20px;
+  background: linear-gradient(
+    to top,
+    oklch(0.145 0.005 65) 72%,
+    oklch(0.145 0.005 65 / 0.92) 88%,
+    transparent 100%
+  );
 }
 
 #ready-message {
