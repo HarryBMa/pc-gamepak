@@ -407,10 +407,15 @@ pub fn folder_roots() -> Vec<PathBuf> {
 /// its folder name, so that is what has to be looked up here — keying this on
 /// the path instead would never find anything the picker had saved.
 fn folder_artwork_key(id: &str) -> String {
-    Path::new(id)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| id.to_string())
+    // Deliberately not `Path::file_name`. Its idea of a separator is the host's,
+    // so a Windows path handed to a Linux build comes back whole — `\` is an
+    // ordinary filename character there — and the key becomes the entire path
+    // instead of the folder. Both separators are split on here, because the id
+    // travels between the two platforms and the path does not.
+    id.rsplit(['/', '\\'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(id)
+        .to_string()
 }
 
 /// A folder name, as something worth searching a store for.
@@ -2290,6 +2295,19 @@ mod tests {
             folder_artwork_key(r"F:\Games\Epic\HogwartsLegacy"),
             "HogwartsLegacy"
         );
+        // Both separators, on both platforms. This used to go through
+        // Path::file_name, which meant the Windows case above returned the
+        // whole path on Linux and the test only passed on one of the two
+        // machines CI runs.
+        assert_eq!(
+            folder_artwork_key("/home/harry/Games/HogwartsLegacy"),
+            "HogwartsLegacy"
+        );
+        // A trailing separator is the folder, not an empty name.
+        assert_eq!(folder_artwork_key(r"F:\Games\Epic\Control\"), "Control");
+        assert_eq!(folder_artwork_key("/games/Control/"), "Control");
+        // Nothing to split is still an answer.
+        assert_eq!(folder_artwork_key("Control"), "Control");
     }
 
     #[test]
