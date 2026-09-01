@@ -959,3 +959,46 @@ cartridge can damage a game that was already on it and verified.
 through the same enclosure, and the last one is what caused this. The next step
 is to move that enclosure to a chipset port — or swap the enclosure — and only
 then rewrite the cartridge whole rather than patching files into it.
+
+---
+
+## 2026-09-01, resolved — Open issue 9 closed: it was the port
+
+Reported by the machine's owner: the enclosure that corrupted `bigfile.005.tiger`
+works correctly on a different port. Not the cable, not the bridge chip, not the
+drive — the port.
+
+That closes both hardware faults chased today, and both were physical:
+
+| Symptom | Cause |
+|---|---|
+| Drive did not enumerate at all; Code 43 ghosts, 37 MB/s | `Port_#0002.Hub_#0007` — bad port |
+| 19 bus resets over a 107 GB write; three files corrupted | the port the second enclosure was on |
+
+**Neither was the drive, and neither was this software.** Worth keeping in mind
+the first time a user reports that PC GamePak corrupted their cartridge: the
+tool was right, the hardware was not, and the only reason anyone can tell the
+difference is that `verify` wrote down what it copied.
+
+### What it cost, and what that implies
+
+`bigfile.005.tiger` on `TOMB RAIDER` is still corrupt. It stays that way here as
+a record: it was destroyed by a write to two *other* files, which means a bad
+link can damage a game that was already on the cartridge and had already passed
+its check. Verifying what a copy just wrote is not sufficient on its own; that is
+the argument for `verify-cart` being able to re-check a whole cartridge on demand
+and, eventually, for the launcher offering it.
+
+### Packaging verified against this release
+
+While the hardware question was settling, both Windows channels were tested
+against the published v0.1.0 artefact rather than in theory:
+
+- **Scoop** — installed on this machine from `packaging/scoop/pc-gamepak.json`.
+  Scoop's hash check passed, `extract_dir` stripped the version folder, both
+  executables landed at the app root and got shims, `windows\install.ps1` came
+  with them. Uninstalled cleanly afterwards.
+- **WinGet** — `winget validate` passes; the zip's internal paths match the
+  manifest's `NestedInstallerFiles`; the hash matches a fresh download.
+  `wingetcreate show` confirms the package is not yet in winget-pkgs, so the
+  first submission goes through moderation.

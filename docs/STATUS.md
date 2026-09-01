@@ -127,17 +127,21 @@ Ranked by how much it matters.
    default: the request that built it never mentioned verifying and got it
    anyway.
 
-   The Tomb Raider enclosure, on the ASMedia port, is a different story. Its two
-   corrupt archives were replaced from source and both now verify — but the same
-   pass found **a third file corrupt that had been intact three hours earlier**,
-   and a `UASPStor` reset is logged inside the window where that copy ran. The
-   new file is stably wrong on the drive and differs from its source, so this is
-   fresh damage, not a misread. Writing 4 GB to that enclosure appears to have
-   destroyed 2 GB of an unrelated file.
+   The Tomb Raider enclosure took longer to pin down. Its two corrupt archives
+   were replaced from source and both verified — but the same pass found a third
+   file corrupt that had been intact three hours earlier, with a `UASPStor` reset
+   logged inside the window where that copy ran. Writing 4 GB had destroyed 2 GB
+   of a file nothing was writing to.
 
-   So: do not conclude the cable fixed it. The cable fixed *a* port. Nothing has
-   yet distinguished the enclosure from the port it is on, and until something
-   does, that enclosure should not be written to.
+   **That was the port, not the enclosure.** On a different port the same
+   enclosure behaves. Both faults on this machine turned out to be physical and
+   neither was the drive — which is worth remembering when a user reports that
+   this tool corrupted their cartridge.
+
+   The cost is on the record: `bigfile.005.tiger` on that cartridge is still
+   corrupt, because repairing it meant another write through the port that broke
+   it. A bad link does not merely fail a copy, it can damage a game already
+   written and already verified.
 
    Still untested: a sustained write big enough to be interesting. The clean run
    was 0.75 GB and the corrupt one 107 GB, so the wizard's running panel — the

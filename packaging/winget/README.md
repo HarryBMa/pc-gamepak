@@ -9,6 +9,30 @@ that is not a manifest.
 
 Validated with `winget validate --manifest packaging\winget\0.1.0`.
 
+## State of the 0.1.0 manifests
+
+Ready to submit. Everything that can be checked without publishing has been:
+
+- `winget validate` passes.
+- `InstallerSha256` is the real hash, taken from a fresh download of the
+  published asset and cross-checked against the `.sha256` GitHub serves.
+- Both `NestedInstallerFiles` paths were checked against the actual zip; the
+  archive nests under `pc-gamepak-0.1.0-windows-x86_64/` and both executables
+  are there.
+- `wingetcreate show HarryBMa.PCGamePak` returns not-found, so this is a first
+  submission and will go through human moderation rather than the automatic
+  path later versions get.
+
+The one step left is the submission itself, which opens a public pull request
+against microsoft/winget-pkgs from your GitHub account:
+
+```powershell
+wingetcreate submit --token <github-pat> packaging\winget\0.1.0
+```
+
+The token needs `public_repo`. `wingetcreate token --store` caches it so later
+releases do not need it on the command line.
+
 ## What WinGet can and cannot do here
 
 It delivers the files and puts `pc-gamepak` and `pc-gamepak-watcher` on PATH.
