@@ -2046,7 +2046,6 @@ dialog form {
     0 8px 20px -10px oklch(0 0 0 / 0.8);
 }
 
-#preview-hero,
 #preview-grid {
   position: absolute;
   inset: 0;
@@ -2057,7 +2056,6 @@ dialog form {
   transition: opacity 320ms var(--ease);
 }
 
-#preview-hero[hidden],
 #preview-grid[hidden],
 #preview-logo[hidden] {
   display: none;

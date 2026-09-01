@@ -199,7 +199,6 @@ const el = {
   sgdbUseManual: $("sgdb-use-manual"),
   sgdbUseLocal: $("sgdb-use-local"),
   previewArt: $("preview-art"),
-  previewHero: $("preview-hero"),
   previewGrid: $("preview-grid"),
   previewStage: $("preview-stage"),
   previewLogo: $("preview-logo"),
@@ -1536,7 +1535,6 @@ function buildRequest() {
       collectionCoverSource: art.cover?.path ?? null,
       collectionLogoSource: art.logo?.path ?? null,
       collectionIconSource: art.icon?.path ?? null,
-      collectionBackgroundSource: art.background?.path ?? null,
       games: picked.map((g) => ({
         title: g.name,
         executable: g.executable,
@@ -1561,7 +1559,6 @@ function buildRequest() {
       copyExecutable: manual.executable || null,
       coverSource: art.cover?.path ?? null,
       iconSource: art.icon?.path ?? null,
-      backgroundSource: art.background?.path ?? null,
       logoSource: art.logo?.path ?? null,
     };
   }
@@ -1576,7 +1573,6 @@ function buildRequest() {
     sourceDir: game.library === "folder" ? game.id : null,
     coverSource: art.cover?.path ?? null,
     iconSource: art.icon?.path ?? null,
-    backgroundSource: art.background?.path ?? null,
     logoSource: art.logo?.path ?? null,
   };
 }
@@ -1775,7 +1771,7 @@ function applyArt(path, preview) {
 }
 
 function targetFor(kind) {
-  return { grid: "cover", hero: "background", logo: "logo", icon: "icon" }[kind] ?? "cover";
+  return { grid: "cover", logo: "logo", icon: "icon" }[kind] ?? "cover";
 }
 
 el.sgdbTabs.addEventListener("click", (event) => {
@@ -1869,18 +1865,13 @@ function refreshPreview() {
   // While a game's poster is being chosen, the preview shows that game — it is
   // the row the picture will land on, not the cartridge's own face.
   const targeted = artGameOf();
-  const hero = art.background?.preview;
   const grid = targeted
     ? targeted.cover
     : art.cover?.preview ?? (isCollection() ? null : picked[0]?.cover);
 
-  el.previewHero.hidden = !safeSrc(hero);
-  if (safeSrc(hero)) el.previewHero.src = safeSrc(hero);
   el.previewGrid.hidden = !safeSrc(grid);
   if (safeSrc(grid)) el.previewGrid.src = safeSrc(grid);
-  // A hero is the launcher background when there is one; the grid is behind it.
-  el.previewGrid.style.opacity = safeSrc(hero) ? "0" : "1";
-  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(hero) || safeSrc(grid)));
+  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(grid)));
 
   const logo = art.logo?.preview;
   el.previewLogo.hidden = !safeSrc(logo);
@@ -1937,9 +1928,6 @@ async function pickCoverFile(target = artTarget) {
     art[target] = { path: chosen.path, preview: chosen.preview };
     if (target === "cover") {
       setPlate(el.collectionCover, el.collectionCoverImg, chosen.preview);
-    }
-    if (target === "background") {
-      setPlate(el.previewHero, el.previewHero, chosen.preview);
     }
     refreshPreview();
     refreshRail();
