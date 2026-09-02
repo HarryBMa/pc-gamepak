@@ -93,8 +93,6 @@ const el = {
   optFormatHint: $("opt-format-hint"),
   formatFields: $("format-fields"),
   formatLabel: $("format-label"),
-  formatConfirm: $("format-confirm"),
-  confirmLabel: $("confirm-label"),
   labelHintText: $("label-hint-text"),
   formatWarning: $("format-warning"),
   btnOptionsBack: $("btn-options-back"),
@@ -941,12 +939,8 @@ function refreshFormatFields() {
   if (!on) return;
 
   if (formatPlan) {
-    el.confirmLabel.textContent = `Type ${formatPlan.currentLabel} to confirm`;
-    el.formatConfirm.placeholder = formatPlan.currentLabel;
     el.formatWarning.textContent = formatPlan.warning;
   } else {
-    el.confirmLabel.textContent = "Type the current drive name to confirm";
-    el.formatConfirm.placeholder = "";
     el.formatWarning.textContent = selectedDrive
       ? "This drive cannot be formatted by the wizard."
       : "Choose a drive first.";
@@ -2219,10 +2213,10 @@ function renderEditGames() {
   const list = editing?.games ?? [];
   list.forEach((game, index) => {
     const li = document.createElement("li");
-    li.className = "rail-game";
+    li.className = "edit-game";
 
     const name = document.createElement("span");
-    name.className = "rail-game__name";
+    name.className = "edit-game__name";
     name.textContent = game.title;
 
     const artwork = document.createElement("button");
@@ -2411,7 +2405,6 @@ el.formatLabel.addEventListener("input", () => {
   refreshCreateButton();
   refreshRail();
 });
-el.formatConfirm.addEventListener("input", refreshCreateButton);
 
 el.btnOptions.addEventListener("click", () => {
   showPhase("options");

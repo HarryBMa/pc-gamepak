@@ -109,7 +109,7 @@ window is the slot and the cover is the cartridge seated in it: press Eject and
 the whole face rides out, leaving the empty slot behind.
 
 <img width="420" alt="The launcher showing Stardew Valley: cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="docs/launcher.png" />
-<img width="420" alt="The details sheet: link speed and free space as two large figures, above a folded Show file paths disclosure" src="docs/launcher-details.png" />
+<img width="420" alt="The details sheet for a Stardew Valley cartridge: the free space as one large figure with a fill bar, above a folded Show file paths disclosure" src="docs/launcher-details.png" />
 
 The accent colour is sampled from the cover art at load, so the Play button
 belongs to whatever game is in the dock. At rest almost nothing else is on
@@ -123,7 +123,7 @@ launcher grows a rail: **picking a game is what Play acts on**, and the artwork
 behind it cross-fades to whichever one is selected — no menu, no submenu,
 nothing to learn.
 
-<img width="420" alt="The launcher showing a God of War collection: the selected game's art filling the window, the collection name above the title, and a rail of games above one shared Play button" src="docs/launcher-bundle.png" />
+<img width="420" alt="The launcher showing a ten-game Tomb Raider cartridge: the selected game's art filling the window, the collection name above a rail of games, and the selected game's title over one shared Play button" src="docs/launcher-bundle.png" />
 
 Each row carries the game's own art and size, and the first nine answer to the
 number keys — pressing one selects that game and starts it, so the window shows
@@ -225,7 +225,7 @@ Tick a second game and the cartridge is a collection — nothing else to press.
 The rail counts them, and the bar under it puts one band per game so you can see
 which one is taking the room:
 
-<img width="760" alt="The wizard with three games ticked: the rail titled Multicartridge with a three-game list and a space bar split into one band per game" src="docs/wizard-bundle.png" />
+<img width="760" alt="The wizard with three games chosen: the Game card naming the collection, a Name and order group with a drag-sortable play order, and the rail titled Multicartridge above a live preview of the launcher" src="docs/wizard-bundle.png" />
 
 A collection is the one thing in a library with no artwork of its own, so a
 **Name and order** group appears on the same screen for the two things the wizard
@@ -331,7 +331,7 @@ emulator entries, older GOG titles — and the launcher then shows a placeholder
 The wizard can look artwork up on [SteamGridDB](https://www.steamgriddb.com/)
 to fill those gaps.
 
-<img width="760" alt="The wizard's settings, grouped: where games come from, artwork with the SteamGridDB switch off by default and a key field, and defaults for a new cartridge" src="docs/wizard-settings.png" />
+<img width="760" alt="The wizard's settings, grouped: a count of where the 87 games came from with a Rescan link, the SteamGridDB switch and its key field, and defaults for a new cartridge" src="docs/wizard-settings.png" />
 
 **It is off by default**, and it is the only part of this project that talks to
 the network. Turn it on behind the gear in the wizard's title bar, where it also
@@ -415,7 +415,7 @@ Neither of these gets better with a faster cartridge.
 Press `I` on the launcher and it reports three things about the drive in front
 of it:
 
-<img width="420" alt="The details sheet with an advisory open: the link reading explaining BOT mode in plain language, and the file paths unfolded below" src="docs/launcher-health.png" />
+<img width="420" alt="The details sheet for a ten-game cartridge with the paths unfolded: free space, a games count, and the steam:// URI each game launches by" src="docs/launcher-health.png" />
 
 - **Link** — 10 Gbps is what a Gen 2 enclosure should negotiate. 5 Gbps means a
   front-panel port, a hub, or a cable that is not rated for it; 480 Mbps means
