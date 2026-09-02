@@ -1,11 +1,11 @@
 /* ==========================================================================
    Create-cartridge wizard.
 
-   One window, three phases in the left column — pick the games, name a
-   collection, then what to put on it — with a rail on the right that says what
-   is being built the whole way through. Selection is always multiple: one game
-   ticked is a cartridge, three is a multicartridge, and there is no mode to
-   enter and no + to discover.
+   One screen: what to write to, what to put on it, and what it looks like,
+   with a live preview of the launcher on the right. Every switch lives in
+   Settings, so the build screen asks three questions and states three answers.
+   Selection is always multiple — one game is a cartridge, three is a
+   multicartridge, and there is no mode to enter.
 
    The palette, the type and the buttons come from tokens.css, so this reads as
    the same product as the popup it makes cartridges for.
@@ -284,13 +284,6 @@
   background: oklch(1 0 0 / 0.08);
 }
 
-/* The whole mechanism of the selection model, in one line of type. */
-.step__count {
-  flex: none;
-  font-size: 10px;
-  color: oklch(0.6 0.008 75);
-}
-
 /* ==========================================================================
    Step 1 — the library
    ========================================================================== */
@@ -515,16 +508,6 @@
   border-color: color-mix(in oklch, var(--accent) 50%, transparent) !important;
 }
 
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.field-row .field + .field {
-  margin-top: 0;
-}
-
 .hint {
   margin: 9px 0 0;
   font-size: 11px;
@@ -540,16 +523,6 @@
 }
 
 .hint--warn,
-.hint--danger {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-}
-
-.hint--warn {
-  color: oklch(0.79 0.13 30);
-}
-
 .hint--danger {
   color: color-mix(in oklch, var(--danger) 70%, var(--ink));
 }
@@ -596,18 +569,6 @@
   cursor: not-allowed;
   color: var(--ink-3);
   border-color: var(--hairline-soft);
-}
-
-/* The one that offers the thing the phase is missing. */
-.btn--accent {
-  border-color: color-mix(in oklch, var(--accent) 50%, transparent);
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
-  color: color-mix(in oklch, var(--accent) 70%, var(--ink));
-}
-
-.btn--accent:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 20%, transparent);
 }
 
 /* ==========================================================================
@@ -761,10 +722,6 @@
   color: oklch(0.7 0.008 75);
 }
 
-/* ==========================================================================
-   Step 2 — name it and give it a face
-   ========================================================================== */
-
 #order {
   flex: 1;
   min-height: 0;
@@ -898,10 +855,6 @@
   color: oklch(0.56 0.008 75);
 }
 
-.group--danger {
-  color: color-mix(in oklch, var(--danger) 62%, var(--ink-3));
-}
-
 .group__body {
   display: flex;
   flex-direction: column;
@@ -909,10 +862,6 @@
   padding-bottom: 15px;
   margin-bottom: 15px;
   border-bottom: 1px solid oklch(1 0 0 / 0.07);
-}
-
-#options .group__body:last-of-type {
-  border-bottom: 0;
 }
 
 .opt {
@@ -954,89 +903,6 @@
   font-size: 10.5px;
   line-height: 1.5;
   color: oklch(0.64 0.008 75);
-}
-
-/* The destructive option is marked, not hidden. */
-.opt--danger input {
-  accent-color: var(--danger);
-}
-
-.opt--danger .opt__label {
-  color: color-mix(in oklch, var(--danger) 68%, var(--ink));
-}
-
-#format-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  margin: 2px 0 0 24px;
-  padding: 12px 13px;
-  border-left: 1px solid color-mix(in oklch, var(--danger) 45%, transparent);
-  background: color-mix(in oklch, var(--danger) 6%, transparent);
-  border-radius: 0 4px 4px 0;
-  animation: rise 320ms var(--ease) both;
-}
-
-#format-fields[hidden] {
-  display: none;
-}
-
-#format-fields .field input:focus {
-  border-color: color-mix(in oklch, var(--danger) 60%, transparent);
-}
-
-.choices {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  /* A grid item defaults to min-width:auto and refuses to shrink below its
-     content, which pushed the label straight out of the cell. */
-  min-width: 0;
-  padding: 9px 11px;
-  border: 1px solid oklch(1 0 0 / 0.1);
-  border-radius: 6px;
-  background: oklch(0 0 0 / 0.24);
-  cursor: pointer;
-  transition: border-color 160ms linear, background-color 160ms linear;
-}
-
-.choice:has(:checked) {
-  border-color: color-mix(in oklch, var(--accent) 55%, transparent);
-  background: color-mix(in oklch, var(--accent) 9%, transparent);
-}
-
-.choice input {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin: 1px 0 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.choice__body {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.choice__name {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.choice__hint {
-  display: block;
-  margin-top: 2px;
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--ink-3);
 }
 
 /* ==========================================================================
@@ -1496,10 +1362,6 @@
   color: oklch(0.58 0.008 75);
 }
 
-#rail-names {
-  min-width: 0;
-}
-
 /* --- Change ------------------------------------------------------------- */
 
 /* Quiet by default: what is chosen matters more than the means of changing it,
@@ -1525,13 +1387,6 @@
 .change-btn:hover {
   background: oklch(1 0 0 / 0.1);
   border-color: oklch(1 0 0 / 0.2);
-}
-
-.rail-drives__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
 }
 
 /* The label carries its own bottom margin; in this row the flexbox owns the
@@ -1825,11 +1680,6 @@
   gap: 8px;
 }
 
-#btn-options {
-  flex: none;
-  height: 46px;
-}
-
 #btn-create {
   flex: 1;
   height: 46px;
@@ -1978,86 +1828,6 @@ dialog form {
 
 #pick-dialog {
   width: min(520px, 92vw);
-}
-
-.pick-search input {
-  width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  font: inherit;
-  font-size: 13px;
-  color: inherit;
-  border-radius: 8px;
-  border: 1px solid oklch(1 0 0 / 0.12);
-  background: oklch(0 0 0 / 0.28);
-}
-
-.pick-search input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* Capped and scrolled: a machine with three hundred games should not open a
-   dialog taller than the window it is in. */
-.pick-list {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-height: min(48vh, 360px);
-  overflow-y: auto;
-}
-
-.pick-item {
-  appearance: none;
-  width: 100%;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  text-align: left;
-  padding: 9px 11px;
-  font: inherit;
-  color: inherit;
-  border-radius: 9px;
-  border: 1px solid transparent;
-  background: oklch(1 0 0 / 0.035);
-  cursor: pointer;
-  transition: background 140ms linear, border-color 140ms linear;
-}
-
-.pick-item:hover {
-  background: oklch(1 0 0 / 0.09);
-}
-
-.pick-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* The current answer, marked rather than merely tinted: this list is long and
-   the row for what is already chosen has to be findable by eye. */
-.pick-item[aria-checked="true"] {
-  border-color: color-mix(in oklch, var(--accent) 62%, transparent);
-  background: color-mix(in oklch, var(--accent) 12%, transparent);
-}
-
-.pick-item__name {
-  min-width: 0;
-  font-size: 13.5px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pick-item__meta {
-  flex: none;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
-  color: var(--ink-3);
 }
 
 /* --- The artwork picker ------------------------------------------------- */
@@ -2352,17 +2122,6 @@ dialog form {
   color: oklch(0.6 0.008 75);
 }
 
-.build-label-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.build-label-row .hint {
-  margin: 0;
-}
-
 .build-card {
   display: flex;
   align-items: center;
@@ -2426,23 +2185,6 @@ dialog form {
   color: oklch(0.62 0.008 75);
 }
 
-/* The copy toggle sits with Media because it is a question about the drive:
-   does the game go on it, or does the cartridge point at an installed copy. */
-.opt--inline {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 12px;
-  border-radius: 9px;
-  background: oklch(0 0 0 / 0.16);
-}
-
-#opt-copy-size {
-  flex: none;
-  font-size: 11px;
-  color: oklch(0.8 0.008 75);
-}
-
 /* --- Artwork slots ------------------------------------------------------- */
 
 #art-slots {
@@ -2504,38 +2246,12 @@ dialog form {
   display: none;
 }
 
+/* The filename line under this used to carry the bottom padding. */
 .art-slot__name {
   display: block;
-  padding: 7px 9px 0;
+  padding: 7px 9px 8px;
   font-size: 11px;
   font-weight: 700;
-}
-
-.art-slot__file {
-  display: block;
-  padding: 2px 9px 8px;
-  font-size: 8.5px;
-  color: oklch(0.6 0.008 75);
-}
-
-/* --- Written to ---------------------------------------------------------- */
-
-#written-list {
-  margin: 0;
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  gap: 5px 12px;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10.5px;
-}
-
-#written-list dt {
-  color: oklch(0.92 0.008 75);
-}
-
-#written-list dd {
-  margin: 0;
-  color: oklch(0.56 0.008 75);
 }
 
 /* --- The picker's two panes ---------------------------------------------- */
@@ -2562,4 +2278,22 @@ dialog form {
 #pick-media {
   max-height: min(46vh, 340px);
   overflow-y: auto;
+}
+
+/* Collection name and play order, inline under the Games card. A placeholder
+   does the labelling: a field captioned "Collection name" containing a
+   collection name is the same word twice. */
+#build-name {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+#build-name[hidden] {
+  display: none;
+}
+
+#build-name #collection-title {
+  width: 100%;
 }

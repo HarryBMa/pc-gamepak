@@ -35,7 +35,6 @@ const el = {
   eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
   title: document.getElementById("game-title"),
-  gameMeta: document.getElementById("game-meta"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
   play: document.getElementById("btn-play"),
@@ -625,24 +624,9 @@ function select(index) {
   const game = list[index];
   setGameTitle(game.title);
   if (game.cover) crossfadeCover(game.cover);
-  renderGameMeta();
   setBusy(false);
 }
 
-/**
- * The line under the title saying where the game actually lives.
- *
- * `holds_game` is the cartridge's answer for every game on it: whether this
- * drive carries the files, or is a key pointing at an installed copy. It is the
- * one fact the launcher can state that nothing else on screen implies.
- */
-function renderGameMeta() {
-  const game = currentGame();
-  const where = cartridge?.holds_game ? "On the cartridge" : "On this PC";
-  const size = game?.sizeBytes ? formatBytes(game.sizeBytes) : "";
-  el.gameMeta.textContent = size ? `${where} · ${size}` : where;
-  el.gameMeta.hidden = false;
-}
 
 /** Bring the next game's art up behind the current one, then swap. */
 function crossfadeCover(src) {
@@ -838,7 +822,6 @@ async function init() {
   // over it, and the icon is Explorer's business rather than this window's.
   const launcherArt = (isCollection() ? games()[selected]?.cover : null) || cartridge.cover;
   if (launcherArt) await showCover(launcherArt);
-  renderGameMeta();
 
   setBusy(false);
   await showWindow();

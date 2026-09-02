@@ -52,6 +52,16 @@ pub struct Settings {
     pub default_eject: bool,
     /// Register a Steam cartridge in `libraryfolders.vdf`.
     pub default_register_steam: bool,
+    /// Copy the game onto the cartridge, rather than leaving it a key that
+    /// points at an installed copy.
+    pub default_copy: bool,
+    /// Ask Steam to close before touching its library list.
+    pub default_close_steam: bool,
+    /// Apply the per-cartridge Windows tweaks. Windows-only, and off: it edits
+    /// Defender and Search settings, which is not something to do unasked.
+    pub default_tune: bool,
+    /// Tell the drive which blocks it no longer has to keep.
+    pub default_trim: bool,
     /// Format the drive before writing.
     ///
     /// Off unless asked for, and the backend still requires the drive's current
@@ -75,6 +85,10 @@ impl Default for Settings {
             default_icon: true,
             default_eject: true,
             default_register_steam: true,
+            default_copy: true,
+            default_close_steam: true,
+            default_tune: false,
+            default_trim: false,
             default_format: false,
         }
     }
