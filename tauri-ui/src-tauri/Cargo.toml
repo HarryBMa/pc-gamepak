@@ -25,6 +25,9 @@ windows-sys = { version = "0.52", features = [
     # CreateFileW takes a *const SECURITY_ATTRIBUTES, so it is gated behind
     # this even though the eject path passes null.
     "Win32_Security",
+    # DwmSetWindowAttribute, to stop Windows rounding a window that rounds
+    # itself.
+    "Win32_Graphics_Dwm",
 ] }
 
 # The launcher is started on insert and exits when it is dismissed, so start-up

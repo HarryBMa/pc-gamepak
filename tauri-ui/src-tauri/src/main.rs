@@ -747,6 +747,37 @@ fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
     });
 }
 
+/// Stop Windows rounding a window that already rounds itself.
+///
+/// Both windows are undecorated and transparent, and paint their own corners —
+/// 18px on the wizard, 16 on the launcher. Windows 11 rounds an undecorated
+/// window anyway, at its own smaller radius, and paints a border on that curve.
+/// The two curves do not agree, so between them sits a crescent of DWM's border
+/// over the app's transparent corner: a pale hook at each corner of the window.
+///
+/// Nothing can reconcile the radii, because DWM's is not ours to set. Turning
+/// DWM's corner off leaves one curve — the one the app drew.
+#[cfg(windows)]
+fn square_dwm_corners(window: &tauri::WebviewWindow) {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+    };
+
+    let Ok(handle) = window.hwnd() else { return };
+    let preference = DWMWCP_DONOTROUND;
+    unsafe {
+        DwmSetWindowAttribute(
+            handle.0 as _,
+            DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+            std::ptr::addr_of!(preference).cast(),
+            std::mem::size_of_val(&preference) as u32,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn square_dwm_corners(_window: &tauri::WebviewWindow) {}
+
 /// Put the launcher away while the wizard is up, and bring it back after.
 ///
 /// The popup is always_on_top, because a cartridge going in has to land over
@@ -821,6 +852,8 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
             }
         })
         .build()?;
+
+    square_dwm_corners(&wizard);
 
     // The popup comes back when the wizard goes away, whichever way it goes:
     // create.js closes the window, so this is a destroy rather than a hide.
@@ -915,6 +948,7 @@ fn main() {
                     .center()
                     .visible(false)
                     .build()?;
+                square_dwm_corners(&launcher);
                 let _ = launcher; // keep the window alive and preserve the builder's side effects.
             }
             Ok(())
