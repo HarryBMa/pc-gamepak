@@ -126,9 +126,13 @@ const el = {
   setFormat: $("set-format"),
   setRegisterSteam: $("set-register-steam"),
   editTitle: $("edit-title"),
-  btnEditCover: $("btn-edit-cover"),
+  editArtSlots: $("edit-art-slots"),
   editCover: $("edit-cover"),
   editCoverImg: $("edit-cover-img"),
+  editLogo: $("edit-logo"),
+  editLogoImg: $("edit-logo-img"),
+  editIcon: $("edit-icon"),
+  editIconImg: $("edit-icon-img"),
   editGames: $("edit-games"),
   editStatus: $("edit-status"),
 
@@ -1904,6 +1908,7 @@ async function pickCoverFile(target = artTarget) {
       setPlate(el.collectionCover, el.collectionCoverImg, chosen.preview);
     }
     refreshPreview();
+    if (activeTab === "edit") renderEditArt();
     refreshRail();
   } catch (error) {
     status(String(error), "error");
@@ -2098,14 +2103,31 @@ async function openEditor(drivePath) {
     status(String(error), "error");
     return;
   }
+  // `art` is shared with Create, and nothing used to clear it: a cover chosen
+  // while building a cartridge was still sitting there when Edit opened, and
+  // Update wrote it to whatever cartridge happened to be selected. Editing
+  // starts from what is on the drive, every time.
+  art.cover = null;
+  art.logo = null;
+  art.icon = null;
+  art.background = null;
+  artGame = null;
+
   el.editTitle.value = editing.title ?? "";
-  setPlate(el.editCover, el.editCoverImg, editing.cover);
+  renderEditArt();
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
   if (el.pickDialog.open) el.pickDialog.close();
   renderEditGames();
   renderEditMedia();
   refreshRail();
+}
+
+/** The three slots, showing what is chosen or what the cartridge already has. */
+function renderEditArt() {
+  setPlate(el.editCover, el.editCoverImg, art.cover?.preview ?? editing?.cover);
+  setPlate(el.editLogo, el.editLogoImg, art.logo?.preview ?? editing?.logo);
+  setPlate(el.editIcon, el.editIconImg, art.icon?.preview ?? art.cover?.preview ?? editing?.cover);
 }
 
 /**
@@ -2218,6 +2240,8 @@ async function saveEdits() {
         drivePath: editing.drivePath,
         title: el.editTitle.value.trim() || editing.title,
         coverSource: art.cover?.path ?? null,
+        logoSource: art.logo?.path ?? null,
+        iconSource: art.icon?.path ?? null,
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,
@@ -2314,9 +2338,12 @@ el.btnRefetchArt.addEventListener("click", refetchArtwork);
 
 // Edit is now a single tab action, not a second link in the drive list.
 el.btnChangeCart.addEventListener("click", openCartridgePicker);
+el.editArtSlots.addEventListener("click", (event) => {
+  const slot = event.target.closest(".art-slot");
+  if (slot) openArtwork(slot.dataset.slot);
+});
 // The preview is the reason to type a name here, so it keeps up with the typing.
 el.editTitle.addEventListener("input", refreshRail);
-el.btnEditCover.addEventListener("click", () => openArtwork("cover"));
 el.btnUnregister.addEventListener("click", async () => {
   try {
     await invoke("unregister_from_steam", { drivePath: selectedDrive });

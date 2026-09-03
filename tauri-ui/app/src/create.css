@@ -2187,7 +2187,7 @@ dialog form {
 
 /* --- Artwork slots ------------------------------------------------------- */
 
-#art-slots {
+.art-slots {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 9px;
@@ -2296,14 +2296,6 @@ dialog form {
 
 #build-name #collection-title {
   width: 100%;
-}
-
-/* Edit's artwork group holds one slot, not three, so it is sized rather than
-   stretched across the column. */
-#edit-art-slots {
-  display: grid;
-  grid-template-columns: 160px;
-  gap: 9px;
 }
 
 #edit-games {

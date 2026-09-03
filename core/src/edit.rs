@@ -52,6 +52,14 @@ pub struct UpdateRequest {
     /// A new picture for the collection. Absent leaves the existing art alone.
     #[serde(default)]
     pub cover_source: Option<String>,
+    /// A new title logo, printed over the cover on the launcher. Absent leaves
+    /// whatever the cartridge already had.
+    #[serde(default)]
+    pub logo_source: Option<String>,
+    /// A new picture for the drive's icon in Explorer. Absent falls back to the
+    /// cover, which is what a cartridge without its own icon has always used.
+    #[serde(default)]
+    pub icon_source: Option<String>,
     /// The games, in the order they should appear. A single-game cartridge has
     /// exactly one; removing the last one is refused.
     pub games: Vec<UpdateGame>,
@@ -153,7 +161,11 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
         &UpdateRequest {
             drive_path: drive_path.to_string(),
             title: current.title,
+            // Refetching posters replaces each game's art and nothing else, so
+            // the cartridge's own three slots are left exactly as they are.
             cover_source: None,
+            logo_source: None,
+            icon_source: None,
             games,
         },
     )?;
@@ -289,14 +301,11 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
             .and_then(|path| file_name_relative(root, path)),
     };
 
-    // ---- cartridge.conf --------------------------------------------------
+    // ---- The logo ---------------------------------------------------------
     //
-    // Neither the background nor the logo can be changed from here — this
-    // request has nowhere to carry a new source for either — so whatever the
-    // cartridge already had is carried forward unchanged rather than dropped.
-    // Bundle icon/background/logo have no round trip yet (`existing` never
-    // populates them for a bundle); that is a pre-existing gap, not something
-    // this edit introduces.
+    // The background is still carried forward rather than edited: the launcher
+    // stopped reading heroes, so there is nothing on this cartridge that would
+    // show a new one.
     let existing_background = existing
         .as_ref()
         .map(|info| info.background_path.clone())
@@ -308,12 +317,34 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
         .filter(|path| !path.is_empty())
         .and_then(|path| file_name_relative(root, &path));
 
+    let logo_name = match request.logo_source.as_deref().map(str::trim) {
+        Some(source) if !source.is_empty() => {
+            match create::copy_cover(Path::new(source), root, "logo") {
+                Ok(name) => Some(name),
+                Err(e) => {
+                    warnings.push(format!("The logo was not changed: {e}"));
+                    existing_logo.clone()
+                }
+            }
+        }
+        _ => existing_logo.clone(),
+    };
+
+    // ---- cartridge.conf --------------------------------------------------
+
     let conf = if entries.len() > 1 {
         let tuples: Vec<(&str, &str, Option<&str>)> = entries
             .iter()
             .map(|(t, e, c)| (t.as_str(), e.as_str(), c.as_deref()))
             .collect();
-        create::render_bundle_conf(&title, cover_name.as_deref(), None, None, None, &tuples)
+        create::render_bundle_conf(
+            &title,
+            cover_name.as_deref(),
+            None,
+            None,
+            logo_name.as_deref(),
+            &tuples,
+        )
     } else {
         create::render_cartridge_conf(
             &title,
@@ -321,7 +352,7 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
             cover_name.as_deref(),
             None,
             existing_background.as_deref(),
-            existing_logo.as_deref(),
+            logo_name.as_deref(),
         )
     };
 
@@ -331,7 +362,22 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     result.conf_path = conf_path.to_string_lossy().into_owned();
 
     // ---- autorun.inf ------------------------------------------------------
-    let cover_full = cover_name.as_ref().map(|name| root.join(name));
+    //
+    // The icon slot is what Explorer shows. Without one the cover stands in,
+    // which is what every cartridge did before the slot existed.
+    let icon_source = match request.icon_source.as_deref().map(str::trim) {
+        Some(source) if !source.is_empty() => {
+            match create::copy_cover(Path::new(source), root, "icon") {
+                Ok(name) => Some(root.join(name)),
+                Err(e) => {
+                    warnings.push(format!("The icon was not changed: {e}"));
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+    let cover_full = icon_source.or_else(|| cover_name.as_ref().map(|name| root.join(name)));
     match autorun::write_autorun(root, &title, cover_full.as_deref()) {
         Ok(icon) => {
             result.autorun_written = true;
@@ -414,6 +460,8 @@ mod tests {
             drive_path: String::new(),
             title: title.to_string(),
             cover_source: None,
+            logo_source: None,
+            icon_source: None,
             games: games
                 .iter()
                 .map(|(t, e)| UpdateGame {

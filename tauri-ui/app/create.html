@@ -119,7 +119,7 @@
 
           <div class="build-group">
             <p class="build-label">Artwork</p>
-            <div id="art-slots">
+            <div id="art-slots" class="art-slots">
               <button class="art-slot" type="button" data-slot="cover">
                 <span class="art-slot__art" id="collection-cover">
                   <img id="collection-cover-img" alt="" hidden />
@@ -280,14 +280,29 @@
                      autocomplete="off" aria-label="Cartridge name" />
             </div>
 
+            <!-- The same three slots Create has, for the same three files. A
+                 cartridge's artwork does not change meaning because it already
+                 exists. -->
             <div class="build-group">
               <p class="build-label">Artwork</p>
-              <div id="edit-art-slots">
-                <button class="art-slot" type="button" id="btn-edit-cover">
+              <div id="edit-art-slots" class="art-slots">
+                <button class="art-slot" type="button" data-slot="cover">
                   <span class="art-slot__art" id="edit-cover">
                     <img id="edit-cover-img" alt="" hidden />
                   </span>
                   <span class="art-slot__name">Cover</span>
+                </button>
+                <button class="art-slot" type="button" data-slot="logo">
+                  <span class="art-slot__art art-slot__art--check" id="edit-logo">
+                    <img id="edit-logo-img" alt="" hidden />
+                  </span>
+                  <span class="art-slot__name">Logo</span>
+                </button>
+                <button class="art-slot" type="button" data-slot="icon">
+                  <span class="art-slot__art" id="edit-icon">
+                    <img id="edit-icon-img" alt="" hidden />
+                  </span>
+                  <span class="art-slot__name">Icon</span>
                 </button>
               </div>
               <button id="btn-refetch-art" class="link" type="button">
