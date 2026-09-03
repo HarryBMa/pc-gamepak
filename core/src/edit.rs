@@ -524,9 +524,10 @@ mod tests {
 
         assert!(result.cover_written);
         let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
-        assert!(conf.contains("cover=cover.png"), "{conf}");
-        assert!(scratch.join("cover.png").is_file());
-        // The superseded picture is cleared away rather than left behind.
+        assert!(conf.contains("cover=.gamepak/cover.png"), "{conf}");
+        assert!(scratch.join(".gamepak").join("cover.png").is_file());
+        // The superseded picture is cleared away rather than left behind, even
+        // though it sat at the root and its replacement does not.
         assert!(!scratch.join("cover.jpg").exists());
     }
 
@@ -544,7 +545,7 @@ mod tests {
         req.cover_source = Some(scratch.join("chosen.png").to_string_lossy().into_owned());
         update_at(scratch.path(), &req).unwrap();
 
-        assert!(scratch.join("cover.png").is_file());
+        assert!(scratch.join(".gamepak").join("cover.png").is_file());
         assert!(
             scratch.join("my-own-photo.jpg").is_file(),
             "a file we did not write must survive being replaced in the conf"

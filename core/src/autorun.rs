@@ -249,6 +249,12 @@ fn notify_shell(root: &Path) {
 #[cfg(not(windows))]
 fn notify_shell(_root: &Path) {}
 
+/// Hide the cartridge's asset folder, so the drive root shows what is on the
+/// cartridge rather than what the wizard needed to put there.
+pub fn hide(path: &Path) {
+    protect(path, false);
+}
+
 /// Mark a file hidden, and system too when Explorer requires it.
 ///
 /// Hiding also keeps both files out of the way on a drive someone is using for

@@ -1978,10 +1978,22 @@ fn cover_source(
     Ok(None)
 }
 
-/// Copy art onto the cartridge as `<stem>.<its extension>`.
+/// Where a cartridge keeps everything that is not addressed to Windows.
+///
+/// The root of a cartridge is a place someone looks at: it is a drive, and they
+/// opened it to see what is on it. A ten-game collection put fifteen files
+/// there, thirteen of them artwork nobody needs to see. Those live here now.
+///
+/// Three things stay at the root because something outside this program reads
+/// them there: `autorun.inf`, which Windows only reads from the root; the icon
+/// it names; and `cartridge.conf`, which is the file a person edits by hand.
+pub const ASSET_DIR: &str = ".gamepak";
+
+/// Copy art onto the cartridge as `.gamepak/<stem>.<its extension>`.
 ///
 /// Returns the name relative to the cartridge root, which is what goes into
-/// cartridge.conf.
+/// cartridge.conf. Forward slash regardless of platform, like the manifest, so
+/// a cartridge written on Windows reads on Linux.
 pub(crate) fn copy_cover(source: &Path, root: &Path, stem: &str) -> Result<String, String> {
     let meta = std::fs::metadata(source).map_err(|e| format!("{}: {e}", source.display()))?;
     if !meta.is_file() {
@@ -2002,10 +2014,16 @@ pub(crate) fn copy_cover(source: &Path, root: &Path, stem: &str) -> Result<Strin
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_else(|| "jpg".to_string());
-    let relative = format!("{stem}.{extension}");
+    let relative = format!("{ASSET_DIR}/{stem}.{extension}");
 
-    copy_small_file(source, &root.join(&relative))
-        .map_err(|e| format!("could not write {}: {e}", root.join(&relative).display()))?;
+    let destination = root.join(ASSET_DIR).join(format!("{stem}.{extension}"));
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("could not create {}: {e}", parent.display()))?;
+        crate::autorun::hide(parent);
+    }
+    copy_small_file(source, &destination)
+        .map_err(|e| format!("could not write {}: {e}", destination.display()))?;
     Ok(relative)
 }
 
@@ -2554,9 +2572,10 @@ mod tests {
         let name = copy_cover(&scratch.path().join("source.PNG"), &root, "cover_1").unwrap();
 
         // Lowercased extension, because that name goes straight into
-        // cartridge.conf for the launcher to resolve.
-        assert_eq!(name, "cover_1.png");
-        assert!(root.join("cover_1.png").is_file());
+        // cartridge.conf for the launcher to resolve — and under .gamepak, so a
+        // ten-game cartridge does not put thirteen pictures in the drive root.
+        assert_eq!(name, ".gamepak/cover_1.png");
+        assert!(root.join(".gamepak").join("cover_1.png").is_file());
     }
 
     #[test]

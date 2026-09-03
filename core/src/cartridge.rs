@@ -472,6 +472,33 @@ pub fn base64_encode(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    // Artwork lives under .gamepak now, so the reader has to resolve a path with
+    // a separator in it — and still refuse one that climbs out of the drive.
+    #[test]
+    fn art_in_the_asset_folder_is_found() {
+        let scratch = crate::testutil::Scratch::new("asset-dir");
+        std::fs::create_dir_all(scratch.path().join(".gamepak")).unwrap();
+        std::fs::write(scratch.path().join(".gamepak").join("cover.png"), b"art").unwrap();
+        scratch.write(
+            "cartridge.conf",
+            b"title=Tunic
+executable=steam://rungameid/553420
+cover=.gamepak/cover.png
+",
+        );
+
+        let info = super::read_cartridge_info(&scratch.path().to_string_lossy()).unwrap();
+        assert!(
+            info.cover_path.ends_with("cover.png"),
+            "expected the asset folder's cover, got {:?}",
+            info.cover_path
+        );
+        assert!(
+            !info.cover.is_empty(),
+            "it should have been read and inlined"
+        );
+    }
+
     use super::*;
 
     #[test]
