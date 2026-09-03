@@ -106,6 +106,9 @@ pub fn copy_and_digest(from: &Path, to: &Path) -> std::io::Result<(u64, u32)> {
     let mut buffer = vec![0u8; CHUNK];
     let mut crc = Crc32::new();
     let mut bytes = 0u64;
+    // Paced across this file rather than the whole cartridge: a fresh clock per
+    // file keeps one slow file from earning the next one a burst.
+    let started = std::time::Instant::now();
 
     loop {
         let read = source.read(&mut buffer)?;
@@ -115,6 +118,7 @@ pub fn copy_and_digest(from: &Path, to: &Path) -> std::io::Result<(u64, u32)> {
         crc.update(&buffer[..read]);
         bytes += read as u64;
         std::io::Write::write_all(&mut destination, &buffer[..read])?;
+        crate::throttle::pace(bytes, started);
     }
 
     // Without this the check could pass against a file the kernel has not

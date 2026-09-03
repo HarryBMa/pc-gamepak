@@ -579,6 +579,20 @@
               <span class="opt__label">Release freed space back to the drive</span>
             </span>
           </label>
+          <label class="field">
+            <span class="field__label">Copy speed limit</span>
+            <select id="set-copy-rate">
+              <option value="0">No limit</option>
+              <option value="200">200 MB/s</option>
+              <option value="120">120 MB/s</option>
+              <option value="80">80 MB/s</option>
+              <option value="40">40 MB/s</option>
+            </select>
+            <span class="opt__hint">
+              A drive in a small enclosure gets hot on a long write, and a hot
+              bridge drops the link.
+            </span>
+          </label>
 
           <!-- The one switch here that destroys something, so it does not look
                like the ones above it. -->

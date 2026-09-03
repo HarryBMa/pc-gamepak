@@ -174,6 +174,7 @@ const el = {
   setTune: $("set-tune"),
   setTuneRow: $("set-tune-row"),
   setTrim: $("set-trim"),
+  setCopyRate: $("set-copy-rate"),
   settingsSave: $("settings-save"),
   settingsStatus: $("settings-status"),
 
@@ -2017,6 +2018,7 @@ function applySettings() {
   el.setCloseSteam.checked = settings.defaultCloseSteam !== false;
   el.setTune.checked = Boolean(settings.defaultTune);
   el.setTrim.checked = Boolean(settings.defaultTrim);
+  el.setCopyRate.value = String(settings.defaultCopyRateMbS ?? 0);
   el.setFormat.checked = Boolean(settings.defaultFormat);
   // Tuning edits Defender and Search, which exist on one platform.
   el.setTuneRow.hidden = platform !== "windows";
@@ -2163,6 +2165,7 @@ async function saveSettings() {
         defaultCloseSteam: el.setCloseSteam.checked,
         defaultTune: el.setTune.checked,
         defaultTrim: el.setTrim.checked,
+        defaultCopyRateMbS: Number(el.setCopyRate.value) || 0,
         defaultFormat: el.setFormat.checked,
         gameFolderRoots: settings.gameFolderRoots ?? [],
       },

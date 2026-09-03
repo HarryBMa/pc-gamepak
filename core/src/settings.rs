@@ -62,6 +62,13 @@ pub struct Settings {
     pub default_tune: bool,
     /// Tell the drive which blocks it no longer has to keep.
     pub default_trim: bool,
+    /// Cap the copy at this many MB/s. Zero writes as fast as the link allows.
+    ///
+    /// An NVMe stick in an aluminium enclosure has nowhere to put its heat, and
+    /// a cartridge is the worst thermal case it ever sees: tens of gigabytes in
+    /// one sustained pass. A bridge that overheats resets the bus, which is how
+    /// this project's first 107 GB write produced three corrupt files.
+    pub default_copy_rate_mb_s: u64,
     /// Format the drive before writing.
     ///
     /// Off unless asked for, and the backend still requires the drive's current
@@ -89,6 +96,9 @@ impl Default for Settings {
             default_close_steam: true,
             default_tune: false,
             default_trim: false,
+            // Off: a drive with a heatsink, or a link too slow to trouble it,
+            // should not be slowed for a problem it does not have.
+            default_copy_rate_mb_s: 0,
             default_format: false,
         }
     }

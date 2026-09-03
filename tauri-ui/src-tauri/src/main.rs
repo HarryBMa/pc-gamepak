@@ -688,6 +688,11 @@ async fn create_cartridge(
     window: tauri::WebviewWindow,
     request: create::CartridgeRequest,
 ) -> Result<create::CartridgeResult, String> {
+    // Read here rather than carried on the request: the cap describes the drive
+    // and the enclosure, not this cartridge, and it should hold for a write the
+    // window started before the setting was last changed.
+    gamepak_core::throttle::set_limit_mb_s(settings::load().default_copy_rate_mb_s);
+
     tauri::async_runtime::spawn_blocking(move || {
         create::create_cartridge(&request, &mut |progress| {
             let _ = window.emit("cartridge://progress", progress);

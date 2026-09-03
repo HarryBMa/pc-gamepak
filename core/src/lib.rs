@@ -27,6 +27,7 @@ pub mod settings;
 pub mod sgdb;
 pub mod steam;
 pub mod steamlib;
+pub mod throttle;
 pub mod trim;
 pub mod tuning;
 pub mod verify;
