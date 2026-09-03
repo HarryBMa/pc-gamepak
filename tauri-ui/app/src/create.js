@@ -528,13 +528,52 @@ function driveLabelFor(title, filesystem = "exfat") {
   return cleaned.slice(0, limit) || "GAMEPAK";
 }
 
-function renderOrder() {
-  el.orderList.replaceChildren();
-  picked.forEach((game, index) => {
+/** An inline SVG, since these are the only pictures in the interface. */
+function icon(paths, size = 14) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of paths) {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    node.setAttribute("d", d);
+    svg.append(node);
+  }
+  return svg;
+}
+
+const ICON_IMAGE = ["M2.4 3.6h11.2v8.8H2.4z", "M2.4 10l3.2-2.6 2.6 2 2-1.4 3.4 2.4", "M5.9 6.3v.01"];
+const ICON_CROSS = ["M4.4 4.4l7.2 7.2", "M11.6 4.4l-7.2 7.2"];
+const ICON_GRIP = ["M6 4.5h.01", "M10 4.5h.01", "M6 8h.01", "M10 8h.01", "M6 11.5h.01", "M10 11.5h.01"];
+
+/**
+ * One list of games, drawn the same way wherever it appears.
+ *
+ * Create orders the games about to be written; Edit orders the ones already on
+ * a cartridge. They were two renderers with two different sets of controls —
+ * arrows in one, drag in the other — for what is visibly the same list, so a
+ * person who learned to drag in Create found arrows in Edit.
+ *
+ * `rows` is the array being reordered in place. Everything is a picture: a grip
+ * to say the row moves, the poster it will use, and a cross to take it off.
+ */
+function renderGameRows(list, rows, { showSize = false, removable = false, onChange }) {
+  list.replaceChildren();
+  rows.forEach((game, index) => {
     const li = document.createElement("li");
     li.className = "order-row";
     li.draggable = true;
     li.dataset.index = String(index);
+
+    const grip = document.createElement("span");
+    grip.className = "order-row__grip";
+    grip.append(icon(ICON_GRIP, 13));
 
     const n = document.createElement("span");
     n.className = "order-row__n";
@@ -545,10 +584,11 @@ function renderOrder() {
     // an empty slot waiting to be filled in.
     const thumb = document.createElement("span");
     thumb.className = "order-row__art";
-    if (safeSrc(game.cover)) {
+    const art = safeSrc(game.cover);
+    if (art) {
       const img = document.createElement("img");
       img.alt = "";
-      img.src = safeSrc(game.cover);
+      img.src = art;
       thumb.append(img);
     } else {
       thumb.classList.add("is-empty");
@@ -556,86 +596,113 @@ function renderOrder() {
 
     const name = document.createElement("span");
     name.className = "order-row__name";
-    name.textContent = game.name;
-    const size = document.createElement("span");
-    size.className = "order-row__size";
-    size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "—";
+    name.textContent = game.name ?? game.title ?? "";
+
+    li.append(grip, n, thumb, name);
+
+    if (showSize) {
+      const size = document.createElement("span");
+      size.className = "order-row__size";
+      size.textContent = game.sizeOnDisk ? formatBytes(game.sizeOnDisk) : "—";
+      li.append(size);
+    }
 
     const poster = document.createElement("button");
-    poster.className = "order-row__poster";
+    poster.className = "row-btn";
     poster.type = "button";
     // Not draggable, or starting the drag from the button would reorder rather
     // than press.
     poster.draggable = false;
-    poster.textContent = game.coverSource ? "Change" : "Poster…";
-    poster.setAttribute("aria-label", `Choose the poster for ${game.name}`);
+    poster.append(icon(ICON_IMAGE));
+    poster.classList.toggle("is-set", Boolean(game.coverSource));
+    poster.title = `Poster for ${game.name ?? game.title}`;
+    poster.setAttribute("aria-label", poster.title);
     poster.addEventListener("click", (event) => {
       event.stopPropagation();
       openArtwork("cover", Number(li.dataset.index));
     });
+    li.append(poster);
 
-    li.append(n, thumb, name, size, poster);
-    el.orderList.append(li);
+    if (removable) {
+      const drop = document.createElement("button");
+      drop.className = "row-btn row-btn--danger";
+      drop.type = "button";
+      drop.draggable = false;
+      drop.append(icon(ICON_CROSS));
+      drop.title = `Take ${game.name ?? game.title} off the cartridge`;
+      drop.setAttribute("aria-label", drop.title);
+      drop.addEventListener("click", (event) => {
+        event.stopPropagation();
+        rows.splice(index, 1);
+        onChange();
+      });
+      li.append(drop);
+    }
+
+    list.append(li);
   });
 }
 
-/**
- * Fill in the poster each game already has, for the order list to show.
- *
- * One request per game, and only for the ones with nothing yet: a collection
- * is built from a library that has cached art for most of it, and the point of
- * the list is to show which games will look bare before the cartridge is
- * written rather than after.
- */
-async function fillGameCovers() {
-  const missing = picked.filter((game) => !game.cover);
-  for (const game of missing) {
-    try {
-      const cover = await invoke("game_cover", { library: game.library, id: game.id });
-      if (cover) game.cover = cover;
-    } catch {
-      // no art is a state, not a failure
-    }
-  }
-  if (missing.length) renderOrder();
+function renderOrder() {
+  renderGameRows(el.orderList, picked, {
+    showSize: true,
+    onChange: () => {
+      renderOrder();
+      refreshRail();
+    },
+  });
 }
 
-/* Drag to reorder — this is the order the games appear in on the launcher. */
+/* Drag to reorder — the launcher plays them in this order. */
 let dragFrom = null;
 
-el.orderList.addEventListener("dragstart", (event) => {
-  const row = event.target.closest(".order-row");
-  if (!row) return;
-  dragFrom = Number(row.dataset.index);
-  row.classList.add("is-dragging");
-  event.dataTransfer.effectAllowed = "move";
-});
+/**
+ * Reordering, for any list drawn by renderGameRows.
+ *
+ * Attached once per list rather than per row, so a redraw during a drag cannot
+ * strand a listener on a row that no longer exists.
+ */
+function draggable(list, rowsOf, onChange) {
+  list.addEventListener("dragstart", (event) => {
+    const row = event.target.closest(".order-row");
+    if (!row) return;
+    dragFrom = Number(row.dataset.index);
+    row.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+  });
 
-el.orderList.addEventListener("dragover", (event) => {
-  event.preventDefault();
-  const row = event.target.closest(".order-row");
-  for (const other of el.orderList.children) other.classList.remove("is-over");
-  if (row) row.classList.add("is-over");
-});
+  list.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    const row = event.target.closest(".order-row");
+    for (const other of list.children) other.classList.remove("is-over");
+    if (row) row.classList.add("is-over");
+  });
 
-el.orderList.addEventListener("drop", (event) => {
-  event.preventDefault();
-  const row = event.target.closest(".order-row");
-  if (row && dragFrom !== null) {
-    const to = Number(row.dataset.index);
-    const [moved] = picked.splice(dragFrom, 1);
-    picked.splice(to, 0, moved);
-    renderOrder();
-    refreshRail();
-  }
-  dragFrom = null;
-});
+  list.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const row = event.target.closest(".order-row");
+    if (row && dragFrom !== null) {
+      const to = Number(row.dataset.index);
+      // Looked up now, not captured: `picked` is reassigned by ticking and
+      // `editing.games` is replaced whenever another cartridge is opened, so a
+      // reference taken when the listener was attached goes stale.
+      const rows = rowsOf();
+      const [moved] = rows.splice(dragFrom, 1);
+      rows.splice(to, 0, moved);
+      onChange();
+    }
+    dragFrom = null;
+  });
 
-el.orderList.addEventListener("dragend", () => {
-  for (const other of el.orderList.children) {
-    other.classList.remove("is-over", "is-dragging");
-  }
-  dragFrom = null;
+  list.addEventListener("dragend", () => {
+    for (const other of list.children) other.classList.remove("is-over", "is-dragging");
+    dragFrom = null;
+  });
+}
+
+draggable(el.orderList, () => picked, () => {
+  renderOrder();
+  refreshRail();
 });
 
 el.collectionTitle.addEventListener("input", () => {
@@ -1681,8 +1748,23 @@ let sgdbTimer = null;
  */
 let artGame = null;
 
+/**
+ * The game a poster is being chosen for, from whichever list is on screen.
+ *
+ * Create orders `picked`; Edit orders the cartridge's own games. Resolving
+ * against `picked` either way meant the poster button on the Edit tab pointed
+ * into the wrong array — usually an empty one, so it silently did nothing.
+ */
 function artGameOf() {
-  return artGame === null ? null : picked[artGame] ?? null;
+  if (artGame === null) return null;
+  const rows = activeTab === "edit" ? editing?.games ?? [] : picked;
+  return rows[artGame] ?? null;
+}
+
+/** Redraw whichever list the poster just landed in. */
+function renderActiveGameList() {
+  if (activeTab === "edit") renderEditGames();
+  else renderOrder();
 }
 
 function openArtwork(target, gameIndex = null) {
@@ -1741,7 +1823,7 @@ function applyArt(path, preview) {
   if (game) {
     game.coverSource = path;
     game.cover = preview;
-    renderOrder();
+    renderActiveGameList();
     refreshRail();
     return;
   }
@@ -1898,7 +1980,7 @@ async function pickCoverFile(target = artTarget) {
     if (game) {
       game.coverSource = chosen.path;
       game.cover = chosen.preview;
-      renderOrder();
+      renderActiveGameList();
       refreshPreview();
       refreshRail();
       return;
@@ -2160,77 +2242,16 @@ async function refetchArtwork() {
 }
 
 function renderEditGames() {
-  el.editGames.replaceChildren();
-  const list = editing?.games ?? [];
-  list.forEach((game, index) => {
-    const li = document.createElement("li");
-    li.className = "edit-game";
-
-    const name = document.createElement("span");
-    name.className = "edit-game__name";
-    name.textContent = game.title;
-
-    const artwork = document.createElement("button");
-    artwork.type = "button";
-    artwork.className = "link";
-    artwork.textContent = game.coverSource ? "artwork ✓" : "artwork…";
-    artwork.title = `Change the poster for ${game.title}`;
-    artwork.addEventListener("click", () => pickGameCover(index));
-
-    const up = document.createElement("button");
-    up.type = "button";
-    up.className = "link";
-    up.textContent = "↑";
-    up.disabled = index === 0;
-    up.addEventListener("click", () => moveGame(index, -1));
-
-    const down = document.createElement("button");
-    down.type = "button";
-    down.className = "link";
-    down.textContent = "↓";
-    down.disabled = index === list.length - 1;
-    down.addEventListener("click", () => moveGame(index, 1));
-
-    const drop = document.createElement("button");
-    drop.type = "button";
-    drop.className = "link";
-    drop.textContent = "×";
-    drop.addEventListener("click", () => {
-      editing.games.splice(index, 1);
+  renderGameRows(el.editGames, editing?.games ?? [], {
+    removable: true,
+    onChange: () => {
       renderEditGames();
-    });
-
-    li.append(name, artwork, up, down, drop);
-    el.editGames.append(li);
+      refreshRail();
+    },
   });
 }
 
-/**
- * Choose a new poster for one game on the cartridge.
- *
- * Held on the game until the edit is saved, like every other change in this
- * dialog: nothing reaches the cartridge until Save, so closing the dialog
- * abandons it.
- */
-async function pickGameCover(index) {
-  try {
-    const chosen = await invoke("pick_cover_image");
-    if (!chosen) return;
-    editing.games[index].coverSource = chosen.path;
-    editing.games[index].cover = chosen.preview;
-    renderEditGames();
-  } catch (error) {
-    el.editStatus.textContent = String(error);
-  }
-}
 
-function moveGame(index, direction) {
-  const to = index + direction;
-  if (to < 0 || to >= editing.games.length) return;
-  const [moved] = editing.games.splice(index, 1);
-  editing.games.splice(to, 0, moved);
-  renderEditGames();
-}
 
 async function saveEdits() {
   el.editStatus.textContent = "Saving…";
@@ -2337,6 +2358,11 @@ el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.btnRefetchArt.addEventListener("click", refetchArtwork);
 
 // Edit is now a single tab action, not a second link in the drive list.
+draggable(el.editGames, () => editing?.games ?? [], () => {
+  renderEditGames();
+  refreshRail();
+});
+
 el.btnChangeCart.addEventListener("click", openCartridgePicker);
 el.editArtSlots.addEventListener("click", (event) => {
   const slot = event.target.closest(".art-slot");

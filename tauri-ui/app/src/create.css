@@ -815,23 +815,59 @@
   border: 1px dashed oklch(0.42 0.008 75);
 }
 
-.order-row__poster {
+/* The controls on a row are pictures: a grip that says it moves, a frame for
+   the poster, a cross to take it off. A row is a game and three verbs; spelling
+   the verbs out made every row a sentence. */
+.row-btn {
   flex: none;
   appearance: none;
-  border: 0;
-  border-radius: 4px;
-  padding: 3px 7px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: oklch(0 0 0 / 0.4);
-  color: oklch(0.78 0.008 75);
-  font: inherit;
-  font-size: 10px;
+  color: oklch(0.72 0.008 75);
   cursor: pointer;
-  transition: background-color 160ms linear, color 160ms linear;
+  transition: background-color 160ms linear, color 160ms linear, border-color 160ms linear;
 }
 
-.order-row__poster:hover {
+.row-btn:hover {
   background: color-mix(in oklch, var(--accent) 26%, transparent);
   color: var(--ink);
+}
+
+.row-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A poster that has been chosen, so the row says which ones still need one. */
+.row-btn.is-set {
+  border-color: color-mix(in oklch, var(--accent) 55%, transparent);
+  color: color-mix(in oklch, var(--accent) 80%, white);
+}
+
+.row-btn--danger:hover {
+  background: color-mix(in oklch, var(--danger) 30%, transparent);
+  color: oklch(0.98 0.01 27);
+}
+
+/* The handle. Dim until the row is under the pointer — it is an affordance,
+   not a thing to read. */
+.order-row__grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: oklch(0.44 0.006 65);
+  cursor: grab;
+  transition: color 160ms linear;
+}
+
+.order-row:hover .order-row__grip {
+  color: oklch(0.68 0.008 75);
 }
 
 /* ==========================================================================
@@ -1799,6 +1835,8 @@ dialog form {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 /* One game on a cartridge being edited. These carried "rail-" names because the
@@ -2305,6 +2343,8 @@ dialog form {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 #panel-edit {

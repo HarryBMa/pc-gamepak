@@ -170,7 +170,7 @@
 
             <div id="custom-fields">
               <label class="field">
-                <span class="field__label">The game's folder</span>
+                <span class="field__label">Folder</span>
                 <div class="folder-pick">
                   <button id="btn-pick-folder" class="btn btn--quiet" type="button">
                     Choose folder…
@@ -187,19 +187,19 @@
               <p id="title-hint" class="hint" hidden></p>
 
               <div class="field">
-                <span class="field__label">Play should start</span>
+                <span class="field__label">Starts</span>
                 <ul id="exe-choices" aria-label="Executables found in this folder"></ul>
                 <p id="exe-hint" class="hint"></p>
               </div>
 
               <label class="field">
-                <span class="field__label">Or type it</span>
+                <span class="field__label">Or type a link</span>
                 <input id="custom-exec" type="text" placeholder="steam://rungameid/367520"
                        autocomplete="off" spellcheck="false" />
               </label>
 
               <button id="btn-custom-back" class="link" type="button">
-                Back to the game list
+                Back
               </button>
             </div>
           </div>
@@ -305,8 +305,9 @@
                   <span class="art-slot__name">Icon</span>
                 </button>
               </div>
-              <button id="btn-refetch-art" class="link" type="button">
-                Fetch fresh posters for every game
+              <button id="btn-refetch-art" class="link" type="button"
+                      title="Fetch a fresh poster for every game on this cartridge">
+                Refetch posters
               </button>
             </div>
 
@@ -332,7 +333,7 @@
             <rect x="4" y="3" width="16" height="18" rx="2" />
             <path d="M8 7h8M8 21v-4h8v4" />
           </svg>
-          <p>Tick one game for a cartridge, or several for a multicartridge.</p>
+          <p>Choose media and games</p>
         </div>
 
         <!-- What it is -->
@@ -464,8 +465,7 @@
             <ul id="games" aria-label="Installed games"></ul>
             <p id="games-empty" hidden></p>
             <p id="games-foot">
-              Not in the list?
-              <button id="btn-custom" class="link" type="button">Enter it by hand</button>
+              <button id="btn-custom" class="link" type="button">Add a game by hand</button>
             </p>
           </div>
         </div>
@@ -474,7 +474,7 @@
           <ul id="drives" aria-label="Target drives"></ul>
           <p id="drives-empty" class="hint" hidden></p>
           <button id="btn-unregister" class="link" type="button" hidden>
-            Remove this drive from Steam's library list
+            Remove from Steam's library
           </button>
         </div>
       </div>
@@ -519,11 +519,6 @@
               <input id="set-sgdb-key" type="password" autocomplete="off" spellcheck="false"
                      placeholder="Paste your key" />
             </label>
-            <p class="hint">
-              Their API refuses unauthenticated requests, so the lookup does nothing
-              without a key. Generate one under your SteamGridDB profile preferences.
-              It is stored on this machine only, next to the artwork cache.
-            </p>
           </div>
         </div>
 
@@ -641,12 +636,12 @@
           <p id="ico-receipt" class="hint" hidden></p>
 
           <label class="field">
-            <span class="field__label">Or choose a file</span>
+            <span class="field__label">Or a file</span>
             <button id="sgdb-use-local" class="btn btn--quiet" type="button">Choose file…</button>
           </label>
 
           <label class="field">
-            <span class="field__label">Or paste an artwork URL</span>
+            <span class="field__label">Or a URL</span>
             <div class="folder-pick">
               <input id="sgdb-manual-url" type="url" placeholder="https://..."
                      autocomplete="off" spellcheck="false" />
