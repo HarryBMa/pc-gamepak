@@ -190,7 +190,7 @@ fn ico_from_pngs(frames: &[(u32, u32, Vec<u8>)]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// Write `autorun.inf` to the cartridge, and a `cover.ico` when one can be made.
+/// Write `autorun.inf` to the cartridge, and the drive icon when one can be made.
 ///
 /// `cover` is the art already copied onto the cartridge, if any. Returns the
 /// icon filename that ended up in the file.
@@ -206,7 +206,7 @@ pub fn write_autorun(
     std::fs::write(&path, contents)?;
     // Explorer reads this file for the drive's icon only when it is marked
     // hidden and system. Written without them it is simply ignored, and a
-    // cartridge with a perfectly good cover.ico still comes up as a generic
+    // cartridge with a perfectly good icon still comes up as a generic
     // drive — which is what happened to every cartridge built before this.
     protect(&path, true);
     // Explorer caches a drive's icon and does not re-read autorun.inf when the
@@ -299,7 +299,7 @@ fn protect(_path: &Path, _system: bool) {}
 #[cfg(not(windows))]
 fn unprotect(_path: &Path) {}
 
-/// Produce `cover.ico` on the cartridge if we can, and return its name.
+/// Produce the drive icon on the cartridge if we can, and return its name.
 fn make_icon(root: &Path, cover: &Path) -> Option<String> {
     let bytes = std::fs::read(cover).ok()?;
 
@@ -317,13 +317,13 @@ fn make_icon(root: &Path, cover: &Path) -> Option<String> {
         ico_from_image(&bytes)?
     };
 
-    let path = root.join("cover.ico");
+    let path = root.join(crate::create::ICON_NAME);
     unprotect(&path);
     std::fs::write(&path, ico).ok()?;
     // Hidden, but not system: Explorer only insists on that for autorun.inf,
     // and the icon is just a file the cartridge would rather not show.
     protect(&path, false);
-    Some("cover.ico".to_string())
+    Some(crate::create::ICON_NAME.to_string())
 }
 
 /// Does this start with an ICONDIR: reserved 0, type 1 (icon), one image or more?
@@ -350,7 +350,7 @@ mod tests {
             .unwrap()
             .file_attributes();
         // Without both of these Explorer ignores the file and the cartridge
-        // shows the generic drive icon, however good its cover.ico is.
+        // shows the generic drive icon, however good its .ico is.
         assert!(attributes & FILE_ATTRIBUTE_HIDDEN != 0, "not hidden");
         assert!(attributes & FILE_ATTRIBUTE_SYSTEM != 0, "not system");
     }
@@ -371,10 +371,10 @@ mod tests {
 
     #[test]
     fn renders_label_and_icon_with_crlf() {
-        let out = render_autorun("Hollow Knight", Some("cover.ico"));
+        let out = render_autorun("Hollow Knight", Some("icon.ico"));
         assert!(out.starts_with("[autorun]\r\n"));
         assert!(out.contains("label=Hollow Knight\r\n"));
-        assert!(out.contains("icon=cover.ico\r\n"));
+        assert!(out.contains("icon=icon.ico\r\n"));
         // Nothing executable may ever appear in a file we write.
         assert!(!out.to_lowercase().contains("open="));
         assert!(!out.to_lowercase().contains("shellexecute="));
@@ -521,9 +521,9 @@ mod tests {
 
         assert_eq!(
             write_autorun(scratch.path(), "ICO", Some(&misnamed)).unwrap(),
-            Some("cover.ico".to_string())
+            Some("icon.ico".to_string())
         );
-        assert_eq!(std::fs::read(scratch.join("cover.ico")).unwrap(), source);
+        assert_eq!(std::fs::read(scratch.join("icon.ico")).unwrap(), source);
     }
 
     #[test]
@@ -583,9 +583,9 @@ mod tests {
         std::fs::write(&png_path, real_png(512, 512)).unwrap();
         assert_eq!(
             write_autorun(scratch.path(), "CONVERTED", Some(&png_path)).unwrap(),
-            Some("cover.ico".to_string())
+            Some("icon.ico".to_string())
         );
-        assert!(scratch.join("cover.ico").is_file());
+        assert!(scratch.join("icon.ico").is_file());
 
         // A JPEG cover converts as well; this is the case that used to leave
         // the cartridge with Explorer's default icon.
@@ -593,11 +593,11 @@ mod tests {
         std::fs::write(&jpg_path, real_jpeg(600, 900)).unwrap();
         assert_eq!(
             write_autorun(scratch.path(), "JPEG", Some(&jpg_path)).unwrap(),
-            Some("cover.ico".to_string())
+            Some("icon.ico".to_string())
         );
         let text = std::fs::read_to_string(scratch.join("autorun.inf")).unwrap();
         assert!(text.contains("label=JPEG"));
-        assert!(text.contains("icon=cover.ico"));
+        assert!(text.contains("icon=icon.ico"));
 
         // Art that is not an image at all: autorun still written, no icon key.
         let junk_path = scratch.join("art.bin");

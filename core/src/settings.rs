@@ -46,7 +46,7 @@ pub struct Settings {
     /// under a sustained write. Nothing else would have caught that until the
     /// game crashed on a level the user had not reached yet.
     pub default_verify: bool,
-    /// Write `autorun.inf` and `cover.ico` so Explorer names the drive.
+    /// Write `autorun.inf` and the drive icon so Explorer names the drive.
     pub default_icon: bool,
     /// Power the drive down when the write finishes.
     pub default_eject: bool,

@@ -880,9 +880,16 @@ pub fn create_cartridge(
             .flatten()
         });
 
+        // `copy_cover` returns the name the cartridge knows the art by, which
+        // since the art moved into `.gamepak/` is a path and not a bare
+        // filename. Keep that name: it is what cartridge.conf has to say, and
+        // what the sweep below has to match. Joining it onto `root` here and
+        // taking `file_name()` back off again at the conf - which is what this
+        // did - wrote `cover=collection.png` for a file living at
+        // `.gamepak/collection.png`, and the launcher then found no art at all.
         let collection_cover = match collection_art {
             Some(source) => match copy_cover(&source, &root, "collection") {
-                Ok(name) => Some(root.join(name)),
+                Ok(name) => Some(name),
                 Err(e) => {
                     warnings.push(format!("Collection cover art was not copied: {e}"));
                     None
@@ -895,22 +902,19 @@ pub fn create_cartridge(
             .as_deref()
             .map(Path::new)
             .filter(|path| path.is_file())
-            .and_then(|source| copy_cover(source, &root, "icon").ok())
-            .map(|name| root.join(name));
+            .and_then(|source| copy_cover(source, &root, "icon").ok());
         let collection_background = request
             .collection_background_source
             .as_deref()
             .map(Path::new)
             .filter(|path| path.is_file())
-            .and_then(|source| copy_cover(source, &root, "background").ok())
-            .map(|name| root.join(name));
+            .and_then(|source| copy_cover(source, &root, "background").ok());
         let collection_logo = request
             .collection_logo_source
             .as_deref()
             .map(Path::new)
             .filter(|path| path.is_file())
-            .and_then(|source| copy_cover(source, &root, "logo").ok())
-            .map(|name| root.join(name));
+            .and_then(|source| copy_cover(source, &root, "logo").ok());
         result.cover_written = collection_cover.is_some();
 
         // ---- cartridge.conf -----------------------------------------------
@@ -920,22 +924,10 @@ pub fn create_cartridge(
             .collect();
         let conf = render_bundle_conf(
             &title,
-            collection_cover
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str()),
-            collection_icon
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str()),
-            collection_background
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str()),
-            collection_logo
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str()),
+            collection_cover.as_deref(),
+            collection_icon.as_deref(),
+            collection_background.as_deref(),
+            collection_logo.as_deref(),
             &tuples,
         );
         let conf_path = root.join("cartridge.conf");
@@ -951,11 +943,11 @@ pub fn create_cartridge(
                 done_bytes: 0,
                 total_bytes: 0,
             });
-            match autorun::write_autorun(
-                &root,
-                &title,
-                collection_icon.as_deref().or(collection_cover.as_deref()),
-            ) {
+            let autorun_source = collection_icon
+                .as_deref()
+                .or(collection_cover.as_deref())
+                .map(|art| root.join(art));
+            match autorun::write_autorun(&root, &title, autorun_source.as_deref()) {
                 Ok(icon) => {
                     result.autorun_written = true;
                     result.icon = icon;
@@ -977,12 +969,19 @@ pub fn create_cartridge(
                         &collection_logo,
                     ]
                     .into_iter()
-                    .filter_map(|path| path.as_ref()?.file_name()?.to_str()),
+                    .filter_map(|name| name.as_deref()),
                 )
                 .chain(result.icon.as_deref())
                 // With the drive icon turned off, autorun.inf is not rewritten
-                // either - so an existing cover.ico is still the one it names.
-                .chain((!request.write_icon).then_some("cover.ico")),
+                // either, so whichever icon it already names is still the live
+                // one. `cover.ico` is the name cartridges built before the
+                // rename carry, and deleting it would strip their drive icon.
+                .chain(
+                    (!request.write_icon)
+                        .then_some([ICON_NAME, "cover.ico"])
+                        .into_iter()
+                        .flatten(),
+                ),
             &mut warnings,
         );
 
@@ -1047,7 +1046,7 @@ pub fn create_cartridge(
     });
 
     let cover_destination = match write_cover(&root, request) {
-        Ok(path) => path,
+        Ok(name) => name,
         Err(e) => {
             warnings.push(format!("Cover art was not copied: {e}"));
             None
@@ -1063,36 +1062,28 @@ pub fn create_cartridge(
         .as_deref()
         .map(Path::new)
         .filter(|path| path.is_file())
-        .and_then(|source| copy_cover(source, &root, "icon").ok())
-        .map(|name| root.join(name));
+        .and_then(|source| copy_cover(source, &root, "icon").ok());
     let background_destination = request
         .background_source
         .as_deref()
         .map(Path::new)
         .filter(|path| path.is_file())
-        .and_then(|source| copy_cover(source, &root, "background").ok())
-        .map(|name| root.join(name));
+        .and_then(|source| copy_cover(source, &root, "background").ok());
     let logo_destination = request
         .logo_source
         .as_deref()
         .map(Path::new)
         .filter(|path| path.is_file())
-        .and_then(|source| copy_cover(source, &root, "logo").ok())
-        .map(|name| root.join(name));
+        .and_then(|source| copy_cover(source, &root, "logo").ok());
 
     // ---- 5. cartridge.conf ----------------------------------------------
-    fn file_name(p: &Option<PathBuf>) -> Option<&str> {
-        p.as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-    }
     let conf = render_cartridge_conf(
         &title,
         &executable,
-        file_name(&cover_destination),
-        file_name(&icon_destination),
-        file_name(&background_destination),
-        file_name(&logo_destination),
+        cover_destination.as_deref(),
+        icon_destination.as_deref(),
+        background_destination.as_deref(),
+        logo_destination.as_deref(),
     );
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
@@ -1108,8 +1099,11 @@ pub fn create_cartridge(
             total_bytes: 0,
         });
 
-        let autorun_source = icon_destination.as_deref().or(cover_destination.as_deref());
-        match autorun::write_autorun(&root, &title, autorun_source) {
+        let autorun_source = icon_destination
+            .as_deref()
+            .or(cover_destination.as_deref())
+            .map(|art| root.join(art));
+        match autorun::write_autorun(&root, &title, autorun_source.as_deref()) {
             Ok(icon) => {
                 result.autorun_written = true;
                 result.icon = icon;
@@ -1135,11 +1129,16 @@ pub fn create_cartridge(
             &logo_destination,
         ]
         .into_iter()
-        .filter_map(file_name)
+        .filter_map(|name| name.as_deref())
         .chain(result.icon.as_deref())
-        // With the drive icon turned off, autorun.inf is not rewritten either -
-        // so an existing cover.ico is still the one it names.
-        .chain((!request.write_icon).then_some("cover.ico")),
+        // See the collection sweep: an icon this write did not replace is still
+        // the one autorun.inf names, under whichever name it was written under.
+        .chain(
+            (!request.write_icon)
+                .then_some([ICON_NAME, "cover.ico"])
+                .into_iter()
+                .flatten(),
+        ),
         &mut warnings,
     );
 
@@ -1181,28 +1180,44 @@ fn sweep_stale_art<'a>(
     keep: impl Iterator<Item = &'a str>,
     warnings: &mut Vec<String>,
 ) {
-    let keep: std::collections::HashSet<String> = keep.map(str::to_lowercase).collect();
+    // `keep` names art the way the cartridge does - `.gamepak/cover_0.png` for
+    // everything the wizard lays down, a bare `icon.ico` for the one file
+    // Explorer needs at the root. Matching on the whole relative name rather
+    // than the basename is what lets the same sweep clear the root copies a
+    // pre-`.gamepak` cartridge still has: `cover_0.png` and
+    // `.gamepak/cover_0.png` are different files, and only the second is kept.
+    let keep: std::collections::HashSet<String> = keep
+        .map(|name| name.replace('\\', "/").to_lowercase())
+        .collect();
 
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if keep.contains(&name.to_lowercase()) {
-            continue;
-        }
-        let path = entry.path();
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+    for directory in [root.to_path_buf(), root.join(ASSET_DIR)] {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
             continue;
         };
-        if !is_art_stem(&stem.to_lowercase()) {
-            continue;
-        }
-        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
-            continue;
-        }
-        if let Err(e) = std::fs::remove_file(&path) {
-            warnings.push(format!("Stale artwork {name} was left behind: {e}"));
+        let prefix = if directory == root {
+            String::new()
+        } else {
+            format!("{ASSET_DIR}/")
+        };
+
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if keep.contains(&format!("{prefix}{}", name.to_lowercase())) {
+                continue;
+            }
+            let path = entry.path();
+            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if !is_art_stem(&stem.to_lowercase()) {
+                continue;
+            }
+            if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
+                continue;
+            }
+            if let Err(e) = std::fs::remove_file(&path) {
+                warnings.push(format!("Stale artwork {name} was left behind: {e}"));
+            }
         }
     }
 }
@@ -1918,7 +1933,7 @@ pub(crate) fn resolve_target(requested: &str) -> Result<PathBuf, String> {
 }
 
 /// Copy the chosen art to the cartridge. Returns where it landed.
-fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<PathBuf>, String> {
+fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<String>, String> {
     let Some(source) = cover_source(
         request.cover_source.as_deref(),
         request.app_id.as_deref(),
@@ -1929,7 +1944,7 @@ fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<PathBuf
     else {
         return Ok(None);
     };
-    copy_cover(&source, root, "cover").map(|name| Some(root.join(name)))
+    copy_cover(&source, root, "cover").map(Some)
 }
 
 /// Where the art for one game currently lives.
@@ -1988,6 +2003,12 @@ fn cover_source(
 /// them there: `autorun.inf`, which Windows only reads from the root; the icon
 /// it names; and `cartridge.conf`, which is the file a person edits by hand.
 pub const ASSET_DIR: &str = ".gamepak";
+
+/// The drive icon Explorer reads, which stays at the root because `autorun.inf`
+/// does. Named for what it is: it is built from the cover when nothing better
+/// was chosen, but it is the icon, and a cartridge that set its own icon art
+/// was writing a file called `cover.ico` that had never been a cover.
+pub const ICON_NAME: &str = "icon.ico";
 
 /// Copy art onto the cartridge as `.gamepak/<stem>.<its extension>`.
 ///
@@ -2576,6 +2597,77 @@ mod tests {
         // ten-game cartridge does not put thirteen pictures in the drive root.
         assert_eq!(name, ".gamepak/cover_1.png");
         assert!(root.join(".gamepak").join("cover_1.png").is_file());
+    }
+
+    #[test]
+    fn the_conf_names_art_where_the_art_actually_is() {
+        let scratch = crate::testutil::Scratch::new("cover-conf");
+        scratch.write("art.png", b"not really a png");
+        let root = scratch.path().join("cartridge");
+        std::fs::create_dir_all(&root).unwrap();
+
+        let request = CartridgeRequest {
+            title: "Hollow Knight".to_string(),
+            executable: "steam://rungameid/367520".to_string(),
+            cover_source: Some(scratch.path().join("art.png").display().to_string()),
+            ..Default::default()
+        };
+        let name = write_cover(&root, &request).unwrap().unwrap();
+
+        // The whole point of the return value: it is the name the cartridge
+        // refers to the art by, so it has to survive into cartridge.conf with
+        // the folder still attached. Taking `file_name()` off it here wrote a
+        // conf pointing at a root that holds nothing.
+        assert_eq!(name, ".gamepak/cover.png");
+        let conf = render_cartridge_conf("Hollow Knight", "x", Some(&name), None, None, None);
+        assert!(conf.contains("cover=.gamepak/cover.png\n"), "{conf}");
+    }
+
+    #[test]
+    fn a_rewrite_sweeps_the_asset_folder_and_the_root_it_replaced() {
+        let scratch = crate::testutil::Scratch::new("sweep-assets");
+        let root = scratch.path();
+        std::fs::create_dir(root.join(ASSET_DIR)).unwrap();
+
+        for name in [
+            // Where art lives now.
+            ".gamepak/cover_0.png",
+            ".gamepak/logo.png",
+            // A fourth game that has since been removed.
+            ".gamepak/cover_3.png",
+            // Where art lived before, on a cartridge written by an older
+            // build. The rewrite put its replacement under .gamepak, so these
+            // are duplicates the drive root should not keep showing.
+            "cover_0.png",
+            "logo.png",
+            // Explorer's, and not under .gamepak because autorun.inf cannot
+            // point there.
+            "icon.ico",
+            // Never the writer's to delete, wherever it sits.
+            "screenshot.png",
+        ] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+
+        let mut warnings = Vec::new();
+        sweep_stale_art(
+            root,
+            [".gamepak/cover_0.png", ".gamepak/logo.png", "icon.ico"].into_iter(),
+            &mut warnings,
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        for kept in [
+            ".gamepak/cover_0.png",
+            ".gamepak/logo.png",
+            "icon.ico",
+            "screenshot.png",
+        ] {
+            assert!(root.join(kept).is_file(), "{kept} was swept");
+        }
+        for gone in [".gamepak/cover_3.png", "cover_0.png", "logo.png"] {
+            assert!(!root.join(gone).exists(), "{gone} survived");
+        }
     }
 
     #[test]

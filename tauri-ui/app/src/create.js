@@ -12,6 +12,8 @@
  * Backend contract (src-tauri/src/main.rs):
  *   list_games()                     -> { games, problems }
  *   list_target_drives()             -> [{ path, label, totalBytes, freeBytes, hasCartridge }]
+ *   list_unmounted_volumes()         -> [{ disk, partition, label, filesystem, totalBytes }]
+ *   mount_volume({ volume })         -> the new drive root
  *   game_cover({ library, id })      -> data URI or ""
  *   executable_choices({ ... })      -> [{ relative, name, score }]
  *   format_plan({ drivePath })       -> { currentLabel, device, totalBytes, warning }
@@ -204,6 +206,10 @@ const el = {
 
 let library = [];
 let drives = [];
+// Volumes Windows can read but has not lettered. Not drives yet — nothing
+// can be written to a volume with no mount point — so they are held apart
+// from `drives` and only join it once one has been assigned.
+let unmounted = [];
 /** Ticked games, in the order they were ticked — which is the play order. */
 let picked = [];
 let selectedDrive = null;
@@ -886,11 +892,63 @@ function renderDrives({ onlyCartridges = false, choose = selectDrive } = {}) {
     el.drives.append(li);
   }
 
-  el.drivesEmpty.hidden = shown.length > 0;
+  // A cartridge on a volume Windows never lettered is invisible to every
+  // other part of this: it has no path to write to and no path to read from,
+  // so it cannot be listed above and could not be found by looking harder.
+  // Offering it here, as a drive that needs a letter, is the only way anyone
+  // finds out it is there at all — short of opening Disk Management.
+  for (const volume of unmounted) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "drive drive--unmounted";
+
+    const name = document.createElement("span");
+    name.className = "drive__name";
+    name.textContent = volume.label || `${volume.filesystem} volume`;
+
+    const meta = document.createElement("span");
+    meta.className = "drive__meta drive__warn";
+    meta.textContent = `${formatBytes(volume.totalBytes)} · needs a drive letter`;
+
+    btn.append(name, meta);
+    btn.addEventListener("click", () => mountVolume(volume, btn));
+    li.append(btn);
+    el.drives.append(li);
+  }
+
+  el.drivesEmpty.hidden = shown.length > 0 || unmounted.length > 0;
   if (shown.length === 0) {
     el.drivesEmpty.textContent = onlyCartridges
       ? "No cartridge is plugged in. Write one on the Create tab first."
       : "No removable drive found. Plug a cartridge in, then press Rescan.";
+  }
+}
+
+/**
+ * Ask Windows to give this volume a drive letter, then pick it up as a drive.
+ *
+ * Elevates on the backend, so there is a UAC prompt in the middle of it and a
+ * decline comes back as an error rather than a silent nothing.
+ */
+async function mountVolume(volume, button) {
+  button.disabled = true;
+  status(`Assigning a drive letter to ${volume.label || "the volume"}…`);
+  let path;
+  try {
+    path = await invoke("mount_volume", { volume });
+  } catch (error) {
+    button.disabled = false;
+    status(String(error), "error");
+    return;
+  }
+  await refreshDrives();
+  const drive = drives.find((d) => d.path === path);
+  if (drive) {
+    status(`${drive.label} is ready.`);
+    await selectDrive(drive);
+  } else {
+    status(`Mounted at ${path}.`);
   }
 }
 
@@ -2467,6 +2525,11 @@ async function refreshDrives() {
     drives = await invoke("list_target_drives");
   } catch {
     drives = [];
+  }
+  try {
+    unmounted = await invoke("list_unmounted_volumes");
+  } catch {
+    unmounted = [];
   }
   // A drive that has gone away takes the selection with it.
   if (selectedDrive && !drives.some((d) => d.path === selectedDrive)) {

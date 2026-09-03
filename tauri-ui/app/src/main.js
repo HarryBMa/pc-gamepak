@@ -636,6 +636,14 @@ function crossfadeCover(src) {
   incoming.src = src;
   coverFront = !coverFront;
   el.card.classList.toggle("is-crossfaded", !coverFront);
+
+  // The accent belongs to the art that is showing. It was sampled once, at
+  // startup, from whichever game loaded first — so on a collection Play kept
+  // that game's colour however far down the rail you went, and if the first
+  // cover was too grey to sample it kept the stock amber for ever.
+  const resample = () => sampleAccent(incoming);
+  if (incoming.complete && incoming.naturalWidth > 0) resample();
+  else incoming.addEventListener("load", resample, { once: true });
 }
 
 function renderRail(list) {

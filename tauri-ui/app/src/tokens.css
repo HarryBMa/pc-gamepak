@@ -73,8 +73,10 @@ body {
 }
 
 body {
-  /* The windows are transparent and undecorated; only the card paints. */
-  background: transparent;
+  /* The windows are opaque now, so this is the ground the card sits on rather
+     than a hole through to the desktop. It matters at the corners: DWM clips
+     them, and whatever is under the clip should be the app, not white. */
+  background: oklch(0.115 0 0);
   font-family: "Archivo", ui-sans-serif, sans-serif;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;

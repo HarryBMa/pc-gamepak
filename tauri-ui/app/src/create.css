@@ -2363,3 +2363,10 @@ dialog form {
 .art-slot[hidden] {
   display: none;
 }
+
+/* A volume with no drive letter. Dashed, because it is an outline of a drive
+   rather than one: it cannot be written to until it has been given a letter,
+   and clicking it asks Windows for one instead of selecting it. */
+.drive--unmounted {
+  border-style: dashed;
+}

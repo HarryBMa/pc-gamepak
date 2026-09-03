@@ -7,7 +7,28 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+/// A volume Windows can read but has not given a drive letter to.
+///
+/// Every path in this crate is a mount point, so a volume with no letter is one
+/// nothing here can address: `GetLogicalDrives` does not report it, the wizard
+/// does not list it, and a cartridge sitting on it is invisible until someone
+/// opens Disk Management. Windows usually assigns a letter on its own, but not
+/// always — a volume unmounted with `mountvol /D`, a machine with automount
+/// turned off, or a drive whose remembered letter is now taken by something
+/// else all come back with none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnmountedVolume {
+    pub disk: u32,
+    pub partition: u32,
+    /// Volume label, which is all there is to recognise it by.
+    pub label: String,
+    /// `exFAT`, `NTFS` — only ever one Windows can actually mount.
+    pub filesystem: String,
+    pub total_bytes: u64,
+}
 
 /// A drive the wizard can offer as a cartridge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -527,6 +548,146 @@ fn display_filesystem(fs_type: &str) -> String {
         "ntfs" | "ntfs3" | "fuseblk" => "NTFS".to_string(),
         other => other.to_string(),
     }
+}
+
+/// Volumes Windows can read but has not lettered.
+///
+/// USB-attached only, and only filesystems Windows mounts: a btrfs cartridge
+/// written on Linux also has no letter, but giving it one would not make it
+/// readable, and offering it as a target would only invite someone to reformat
+/// the thing by accident. Read-only, so no elevation and no prompt — an empty
+/// list is the right answer when the query cannot be run at all.
+#[cfg(windows)]
+pub fn unmounted_volumes() -> Vec<UnmountedVolume> {
+    // One compact JSON object per line rather than one array: `ConvertTo-Json`
+    // in Windows PowerShell 5.1 unwraps a single-element array into a bare
+    // object and has no `-AsArray` to stop it, so a one-drive machine — the
+    // common case here — would return a shape the parser did not expect.
+    const QUERY: &str = "\
+        $ErrorActionPreference='Stop'; \
+        Get-Disk | Where-Object BusType -eq 'USB' | Get-Partition | \
+        Where-Object { -not $_.DriveLetter } | ForEach-Object { \
+          $v = $_ | Get-Volume -ErrorAction SilentlyContinue; \
+          if ($v -and $v.FileSystem) { \
+            [pscustomobject]@{ \
+              disk = $_.DiskNumber; partition = $_.PartitionNumber; \
+              label = [string]$v.FileSystemLabel; \
+              filesystem = [string]$v.FileSystem; \
+              totalBytes = [uint64]$_.Size \
+            } | ConvertTo-Json -Compress \
+          } \
+        }";
+
+    let Ok(out) = crate::proc::command("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            QUERY,
+        ])
+        .output()
+    else {
+        return Vec::new();
+    };
+
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| serde_json::from_str::<UnmountedVolume>(line.trim()).ok())
+        .filter(|volume| is_mountable(&volume.filesystem))
+        .collect()
+}
+
+#[cfg(not(windows))]
+pub fn unmounted_volumes() -> Vec<UnmountedVolume> {
+    // Linux automounts under /media or /run/media and there are no drive
+    // letters to hand out; `list_drives` already sees whatever is mounted.
+    Vec::new()
+}
+
+/// Filesystems Windows will mount if asked. Anything else stays where it is.
+#[cfg(windows)]
+fn is_mountable(filesystem: &str) -> bool {
+    matches!(
+        filesystem.to_ascii_uppercase().as_str(),
+        "NTFS" | "EXFAT" | "FAT32" | "FAT" | "REFS"
+    )
+}
+
+/// Give `volume` the first free drive letter, and return its new root.
+///
+/// Needs administrator, so it elevates on its own the way the formatter does
+/// rather than making the whole wizard run as admin. The UAC prompt is the
+/// point at which the user agrees to it; nothing here assigns a letter behind
+/// their back, which is also why listing is a separate call.
+#[cfg(windows)]
+pub fn mount_volume(volume: &UnmountedVolume) -> Result<String, String> {
+    let letter = free_drive_letter().ok_or("Every drive letter from D to Z is taken.")?;
+
+    let script = format!(
+        "$ErrorActionPreference='Stop'; \
+         Set-Partition -DiskNumber {} -PartitionNumber {} -NewDriveLetter {letter}",
+        volume.disk, volume.partition
+    );
+    let quoted = format!("'{}'", script.replace('\'', "''"));
+
+    let status = crate::proc::command("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &format!(
+                "Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden \
+                 -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command',{quoted})"
+            ),
+        ])
+        .status()
+        .map_err(|e| format!("powershell.exe could not be run: {e}"))?;
+
+    if !status.success() {
+        return Err(format!(
+            "Windows would not assign a drive letter to {} (exit {:?}).",
+            if volume.label.is_empty() {
+                "the volume".to_string()
+            } else {
+                volume.label.clone()
+            },
+            status.code()
+        ));
+    }
+
+    // Set-Partition returns before the volume is necessarily addressable, and
+    // the caller's next move is to read the root, so wait for it to appear
+    // rather than handing back a path that is not there yet.
+    let root = format!("{letter}:\\");
+    for _ in 0..20 {
+        if Path::new(&root).is_dir() {
+            return Ok(root);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Ok(root)
+}
+
+#[cfg(not(windows))]
+pub fn mount_volume(_volume: &UnmountedVolume) -> Result<String, String> {
+    Err("Drive letters are a Windows idea; nothing to assign here.".to_string())
+}
+
+/// The first letter from D that no volume is using.
+///
+/// From D rather than A: the floppy letters are conventionally left alone, and
+/// C is the system disk. B is skipped even when free — Windows will hand it out
+/// but plenty of software still assumes it is not a real drive.
+#[cfg(windows)]
+fn free_drive_letter() -> Option<char> {
+    use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
+
+    let mask = unsafe { GetLogicalDrives() };
+    (3..26u32)
+        .find(|bit| mask & (1 << bit) == 0)
+        .map(|bit| (b'A' + bit as u8) as char)
 }
 
 #[cfg(test)]

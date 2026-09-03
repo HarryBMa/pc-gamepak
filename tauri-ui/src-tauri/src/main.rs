@@ -31,6 +31,8 @@
 //   apply_tuning(drive_path, tweaks, applying) -> Vec<String>  (what was done)
 //   game_cover(library, id)                  -> String (data URI)
 //   list_target_drives()                     -> Vec<TargetDrive>
+//   list_unmounted_volumes()                 -> Vec<UnmountedVolume>
+//   mount_volume(volume)                     -> String (the new root)
 //   format_plan(drive_path)                  -> FormatPlan
 //   executable_choices(playnite_id?, source_dir?, title?) -> Vec<Candidate>
 //   steam_registration(drive_path)           -> bool
@@ -354,9 +356,7 @@ fn eject_windows_mountvol(drive_path: &str) -> Result<(), String> {
         last_code = status.code();
     }
 
-    Err(format!(
-        "mountvol /P returned exit code {last_code:?}"
-    ))
+    Err(format!("mountvol /P returned exit code {last_code:?}"))
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -565,7 +565,9 @@ struct PickedGameFolder {
 /// with the cover picker, the window never names a path — it gets one back only
 /// after the user has pointed at it.
 #[tauri::command]
-async fn pick_game_folder(window: tauri::WebviewWindow) -> Result<Option<PickedGameFolder>, String> {
+async fn pick_game_folder(
+    window: tauri::WebviewWindow,
+) -> Result<Option<PickedGameFolder>, String> {
     let Some(folder) = window
         .dialog()
         .file()
@@ -642,6 +644,25 @@ fn list_target_drives() -> Vec<drives::TargetDrive> {
     create::target_drives()
 }
 
+/// Readable volumes Windows has left without a drive letter.
+///
+/// Listed separately from `list_target_drives` because they are not targets
+/// yet: nothing can write to a volume with no mount point, so the wizard shows
+/// them as drives that need one rather than pretending they are ready.
+#[tauri::command]
+fn list_unmounted_volumes() -> Vec<drives::UnmountedVolume> {
+    drives::unmounted_volumes()
+}
+
+/// Give one of those volumes a drive letter, and return its new root.
+///
+/// Elevates, so the user sees a UAC prompt and can decline it — which is the
+/// whole consent step for changing how their disks are mounted.
+#[tauri::command]
+fn mount_volume(volume: drives::UnmountedVolume) -> Result<String, String> {
+    drives::mount_volume(&volume)
+}
+
 /// What formatting a drive would destroy, for the warning shown before it runs.
 #[tauri::command]
 fn format_plan(drive_path: String) -> Result<format::FormatPlan, String> {
@@ -658,10 +679,18 @@ fn executable_choices(
     title: Option<String>,
 ) -> Result<Vec<gamepak_core::portable::Candidate>, String> {
     // A folder the user chose is the more specific answer, so it wins.
-    if let Some(dir) = source_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+    if let Some(dir) = source_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+    {
         return create::executable_choices_in(dir, title.as_deref().unwrap_or_default());
     }
-    match playnite_id.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+    match playnite_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
         Some(id) => create::executable_choices(id),
         None => Err("No game folder to look in.".to_string()),
     }
@@ -747,24 +776,26 @@ fn spawn_open_wizard(app: tauri::AppHandle, open_settings: bool) {
     });
 }
 
-/// Stop Windows rounding a window that already rounds itself.
+/// Ask Windows to round the window, and let it be the only thing that does.
 ///
-/// Both windows are undecorated and transparent, and paint their own corners —
-/// 18px on the wizard, 16 on the launcher. Windows 11 rounds an undecorated
-/// window anyway, at its own smaller radius, and paints a border on that curve.
-/// The two curves do not agree, so between them sits a crescent of DWM's border
-/// over the app's transparent corner: a pale hook at each corner of the window.
+/// Two curves were fighting. The app drew its own rounded corner in CSS, which
+/// on a transparent window leaves the area outside the curve see-through; DWM
+/// rounds an undecorated window at its own radius and paints a border on that.
+/// Neither radius is the other's, so between them sat a crescent of DWM's
+/// border over the app's transparent corner — a pale hook at every corner.
 ///
-/// Nothing can reconcile the radii, because DWM's is not ours to set. Turning
-/// DWM's corner off leaves one curve — the one the app drew.
+/// Squaring both was one way out and looked like what it was. The other is to
+/// have exactly one rounder: the window is opaque and square, painted edge to
+/// edge, and DWM clips the corner. That is the shape Windows draws for every
+/// other window, anti-aliased, with the shadow that belongs to it.
 #[cfg(windows)]
-fn square_dwm_corners(window: &tauri::WebviewWindow) {
+fn round_dwm_corners(window: &tauri::WebviewWindow) {
     use windows_sys::Win32::Graphics::Dwm::{
-        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
     };
 
     let Ok(handle) = window.hwnd() else { return };
-    let preference = DWMWCP_DONOTROUND;
+    let preference = DWMWCP_ROUND;
     unsafe {
         DwmSetWindowAttribute(
             handle.0 as _,
@@ -776,7 +807,7 @@ fn square_dwm_corners(window: &tauri::WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn square_dwm_corners(_window: &tauri::WebviewWindow) {}
+fn round_dwm_corners(_window: &tauri::WebviewWindow) {}
 
 /// Put the launcher away while the wizard is up, and bring it back after.
 ///
@@ -822,7 +853,10 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         .min_inner_size(720.0, 520.0)
         .resizable(true)
         .decorations(false)
-        .transparent(true)
+        // Opaque on purpose. Transparency is what made the corner artefact
+        // possible: it gave DWM's border somewhere to show through. Nothing
+        // here needs to see the desktop — the card fills the window.
+        .transparent(false)
         // WebView2 installs an OS-level drag-and-drop handler and Tauri turns it
         // on by default. It swallows the events before the page sees them, so
         // HTML5 drag-and-drop inside the webview does nothing — a row could be
@@ -853,7 +887,7 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         })
         .build()?;
 
-    square_dwm_corners(&wizard);
+    round_dwm_corners(&wizard);
 
     // The popup comes back when the wizard goes away, whichever way it goes:
     // create.js closes the window, so this is a destroy rather than a hide.
@@ -905,6 +939,8 @@ fn main() {
             sgdb_download_artwork,
             sgdb_last_used_artwork,
             list_target_drives,
+            list_unmounted_volumes,
+            mount_volume,
             format_plan,
             executable_choices,
             steam_registration,
@@ -914,8 +950,10 @@ fn main() {
             open_wizard_window,
         ])
         .setup(move |app| {
-            let wizard_item = MenuItem::with_id(app, "open-wizard", "Open wizard", true, None::<&str>)?;
-            let open_settings = MenuItem::with_id(app, "open-settings", "Open settings", true, None::<&str>)?;
+            let wizard_item =
+                MenuItem::with_id(app, "open-wizard", "Open wizard", true, None::<&str>)?;
+            let open_settings =
+                MenuItem::with_id(app, "open-settings", "Open settings", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&wizard_item, &open_settings, &quit])?;
 
@@ -937,18 +975,19 @@ fn main() {
                 // the resizing comment in open_wizard explicitly argues against.
                 open_wizard(app.handle(), false)?;
             } else {
-                let launcher = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .title("PC GamePak")
-                    .inner_size(420.0, 630.0)
-                    .resizable(false)
-                    .decorations(false)
-                    .transparent(true)
-                    // The popup has to land on top of whatever is running.
-                    .always_on_top(true)
-                    .center()
-                    .visible(false)
-                    .build()?;
-                square_dwm_corners(&launcher);
+                let launcher =
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                        .title("PC GamePak")
+                        .inner_size(420.0, 630.0)
+                        .resizable(false)
+                        .decorations(false)
+                        .transparent(false)
+                        // The popup has to land on top of whatever is running.
+                        .always_on_top(true)
+                        .center()
+                        .visible(false)
+                        .build()?;
+                round_dwm_corners(&launcher);
                 let _ = launcher; // keep the window alive and preserve the builder's side effects.
             }
             Ok(())
