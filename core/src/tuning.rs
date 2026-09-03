@@ -90,7 +90,7 @@ pub fn apply(drive: &str, tweaks: &[Tweak], applying: bool) -> Result<Vec<String
         let script = script_for(*tweak, drive, applying)?;
         // Each tweak is elevated on its own, so the wizard itself never has to
         // run as administrator.
-        let status = std::process::Command::new("powershell.exe")
+        let status = crate::proc::command("powershell.exe")
             .args([
                 "-NoProfile",
                 "-NonInteractive",

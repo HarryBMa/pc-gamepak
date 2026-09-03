@@ -254,7 +254,7 @@ mod unix_impl {
     }
 
     fn df(mount: &Path) -> Option<(u64, u64)> {
-        let out = Command::new("df")
+        let out = crate::proc::command("df")
             .arg("-P")
             .arg("-k")
             .arg(mount)

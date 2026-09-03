@@ -33,4 +33,7 @@ windows-sys = { version = "0.52", features = [
     # CreateFileW's SECURITY_ATTRIBUTES parameter lives here, so the file API is
     # not exposed without it.
     "Win32_Security",
+    # SHChangeNotify, to tell Explorer the drive's icon has changed. Without it
+    # a rewritten cartridge keeps the icon Explorer cached the first time.
+    "Win32_UI_Shell",
 ] }

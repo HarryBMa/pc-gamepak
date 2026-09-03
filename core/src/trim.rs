@@ -15,7 +15,6 @@
 //! through at all, and a refusal is not a failure worth stopping a build for.
 
 use std::path::Path;
-use std::process::Command;
 
 /// What came of asking.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -42,7 +41,7 @@ pub fn trim(mount: &str) -> TrimOutcome {
 fn run(mount: &str) -> TrimOutcome {
     // fstrim needs root for the ioctl, so it goes through the same desktop
     // authentication prompt the formatter uses.
-    let out = Command::new("pkexec")
+    let out = crate::proc::command("pkexec")
         .args(["fstrim", "-v", mount])
         .output();
 
@@ -64,7 +63,7 @@ fn run(mount: &str) -> TrimOutcome {
     // block, which is exactly the point here.
     let script =
         format!("$ErrorActionPreference='Stop'; Optimize-Volume -DriveLetter {letter} -ReTrim");
-    let out = Command::new("powershell.exe")
+    let out = crate::proc::command("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output();
 

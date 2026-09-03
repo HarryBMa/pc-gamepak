@@ -313,7 +313,7 @@ fn probe(mount: &str) -> Option<Link> {
          (Get-PhysicalDisk | Where-Object DeviceId -eq $p.DiskNumber).BusType"
     );
 
-    let out = std::process::Command::new("powershell.exe")
+    let out = crate::proc::command("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output()
         .ok()?;

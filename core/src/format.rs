@@ -26,7 +26,6 @@
 //! [WinBtrfs]: https://github.com/maharmstone/btrfs
 
 use std::path::Path;
-use std::process::Command;
 
 use crate::drives;
 
@@ -259,7 +258,7 @@ fn backing_device(path: &Path) -> Option<String> {
 
 #[cfg(not(windows))]
 fn backing_device(path: &Path) -> Option<String> {
-    let out = Command::new("findmnt")
+    let out = crate::proc::command("findmnt")
         .args(["-n", "-o", "SOURCE", "--target"])
         .arg(path)
         .output()
@@ -302,7 +301,7 @@ fn run_format(
         allocation
     );
 
-    let status = Command::new("powershell.exe")
+    let status = crate::proc::command("powershell.exe")
         .args([
             "-NoProfile",
             "-ExecutionPolicy",
@@ -346,7 +345,7 @@ fn run_format(
         .ok_or_else(|| FormatError::NoDevice(plan.path.clone()))?;
 
     // Unmount first; mkfs on a mounted filesystem would corrupt it.
-    let _ = Command::new("udisksctl")
+    let _ = crate::proc::command("udisksctl")
         .args(["unmount", "-b", &device, "--no-user-interaction"])
         .status();
 
@@ -355,7 +354,7 @@ fn run_format(
     let (program, args) = mkfs_command(&device, filesystem, label);
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
 
-    let output = Command::new(program)
+    let output = crate::proc::command(program)
         .args(&argv)
         .output()
         .map_err(|e| FormatError::ToolMissing(format!("{program} ({e})")))?;
@@ -385,7 +384,7 @@ fn run_format(
     // no automount daemon watching this device) never resolve at all. Ask
     // for the mount directly instead of hoping one arrives; if this doesn't
     // land in time, the caller polls as a fallback.
-    let _ = Command::new("udisksctl")
+    let _ = crate::proc::command("udisksctl")
         .args(["mount", "-b", &device, "--no-user-interaction"])
         .status();
 
@@ -403,10 +402,10 @@ fn run_format(
 /// extra prompt beyond the one formatting was always going to ask for.
 #[cfg(not(windows))]
 fn reclaim_btrfs_ownership(device: &str) {
-    let Ok(uid_out) = Command::new("id").arg("-u").output() else {
+    let Ok(uid_out) = crate::proc::command("id").arg("-u").output() else {
         return;
     };
-    let Ok(gid_out) = Command::new("id").arg("-g").output() else {
+    let Ok(gid_out) = crate::proc::command("id").arg("-g").output() else {
         return;
     };
     let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
@@ -420,7 +419,7 @@ fn reclaim_btrfs_ownership(device: &str) {
     let script = "set -e; mnt=$(mktemp -d /run/gamepak-format.XXXXXX); \
                   mount \"$1\" \"$mnt\"; chown \"$2:$3\" \"$mnt\"; \
                   umount \"$mnt\"; rmdir \"$mnt\"";
-    let _ = Command::new("pkexec")
+    let _ = crate::proc::command("pkexec")
         .args(["sh", "-c", script, "reclaim-ownership", device, &uid, &gid])
         .status();
 }

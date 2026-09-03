@@ -250,55 +250,57 @@
              Not a dialog. Editing is a job you sit in, comparing what you
              changed against the preview beside it, and a modal that covers the
              preview is the wrong shape for that. -->
+        <!-- Edit is Create with the questions already answered: same cards, same
+             groups, in the same order. The only difference is that the media is
+             a cartridge that exists and the button says Update. -->
         <div id="panel-edit" role="tabpanel" aria-labelledby="tab-edit" hidden>
-          <div class="step">
-            <span class="step__n">1</span>
-            <h2 class="step__h" id="step-pick-h">Pick a cartridge</h2>
-            <span class="step__rule"></span>
+          <div class="build-group">
+            <p class="build-label">Cartridge</p>
+            <div id="edit-media" class="build-card">
+              <span id="edit-media-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+                  <rect x="3" y="7" width="14" height="9" rx="1.6" />
+                  <path d="M7 7V4.6h6V7" />
+                  <path d="M6.4 11.5h4" />
+                </svg>
+              </span>
+              <div class="build-card__body">
+                <p id="edit-media-title" class="build-card__title">Choose a cartridge</p>
+                <p id="edit-media-meta" class="build-card__meta mono"></p>
+              </div>
+              <button id="btn-change-cart" class="change-btn" type="button">Change</button>
+            </div>
           </div>
 
-          <ul id="edit-drives" aria-labelledby="step-pick-h"></ul>
-          <p id="edit-drives-empty" class="hint" hidden>
-            No cartridge is plugged in. Insert one and it appears here.
-          </p>
-
           <div id="edit-form-wrap" hidden>
-            <div class="step">
-              <span class="step__n">2</span>
-              <h2 class="step__h" id="step-edit-h">Change what it says</h2>
-              <span class="step__rule"></span>
+            <div class="build-group">
+              <p class="build-label">Name</p>
+              <input id="edit-title" type="text" class="field__input--lead"
+                     autocomplete="off" aria-label="Cartridge name" />
             </div>
 
-            <label class="field">
-              <span class="field__label">Cartridge name</span>
-              <input id="edit-title" type="text" autocomplete="off" />
-            </label>
-
-            <div class="field">
-              <span class="field__label">Cover</span>
-              <div class="folder-pick">
-                <button id="btn-edit-cover" class="btn btn--quiet" type="button">
-                  Change cover…
+            <div class="build-group">
+              <p class="build-label">Artwork</p>
+              <div id="edit-art-slots">
+                <button class="art-slot" type="button" id="btn-edit-cover">
+                  <span class="art-slot__art" id="edit-cover">
+                    <img id="edit-cover-img" alt="" hidden />
+                  </span>
+                  <span class="art-slot__name">Cover</span>
                 </button>
-                <span id="edit-cover-name" class="hint"></span>
               </div>
-            </div>
-
-            <div class="field">
-              <span class="field__label">Games</span>
-              <ul id="edit-games" aria-label="Games on this cartridge"></ul>
-              <p class="hint" id="edit-games-hint"></p>
-              <button id="btn-refetch-art" class="btn btn--quiet" type="button">
+              <button id="btn-refetch-art" class="link" type="button">
                 Fetch fresh posters for every game
               </button>
             </div>
 
-            <div class="edit-actions">
-              <button id="edit-save" class="btn btn--primary" type="button">
-                <span class="btn__label">Save changes</span>
-              </button>
-              <p id="edit-status" class="hint" role="status" aria-live="polite"></p>
+            <div class="build-group" id="edit-games-group">
+              <p class="build-label">Games</p>
+              <ul id="edit-games" aria-label="Games on this cartridge"></ul>
             </div>
+
+            <p id="edit-status" class="hint" role="status" aria-live="polite"></p>
           </div>
         </div>
       </div>

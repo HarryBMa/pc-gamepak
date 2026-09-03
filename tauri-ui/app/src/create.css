@@ -2297,3 +2297,24 @@ dialog form {
 #build-name #collection-title {
   width: 100%;
 }
+
+/* Edit's artwork group holds one slot, not three, so it is sized rather than
+   stretched across the column. */
+#edit-art-slots {
+  display: grid;
+  grid-template-columns: 160px;
+  gap: 9px;
+}
+
+#edit-games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#panel-edit {
+  gap: 18px;
+}

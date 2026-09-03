@@ -209,8 +209,45 @@ pub fn write_autorun(
     // cartridge with a perfectly good cover.ico still comes up as a generic
     // drive — which is what happened to every cartridge built before this.
     protect(&path, true);
+    // Explorer caches a drive's icon and does not re-read autorun.inf when the
+    // volume comes back, so a rewritten cartridge kept the icon it had the
+    // first time it was plugged in — for as long as the cache lived, which
+    // outlasts unplugging it. Telling the shell the drive changed is the
+    // supported way to drop that.
+    notify_shell(root);
     Ok(icon)
 }
+
+/// Tell Explorer that this drive's appearance has changed.
+#[cfg(windows)]
+fn notify_shell(root: &Path) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::{
+        SHChangeNotify, SHCNE_UPDATEDIR, SHCNE_UPDATEITEM, SHCNF_FLUSH, SHCNF_PATHW,
+    };
+
+    let wide: Vec<u16> = root.as_os_str().encode_wide().chain(Some(0)).collect();
+    let path = wide.as_ptr().cast();
+    // The icon hangs off the drive itself; the contents changed too, and
+    // Explorer treats those as separate notifications.
+    unsafe {
+        SHChangeNotify(
+            SHCNE_UPDATEITEM as i32,
+            SHCNF_PATHW | SHCNF_FLUSH,
+            path,
+            std::ptr::null(),
+        );
+        SHChangeNotify(
+            SHCNE_UPDATEDIR as i32,
+            SHCNF_PATHW | SHCNF_FLUSH,
+            path,
+            std::ptr::null(),
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn notify_shell(_root: &Path) {}
 
 /// Mark a file hidden, and system too when Explorer requires it.
 ///

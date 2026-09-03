@@ -301,7 +301,7 @@ pub fn remove_library_entry(text: &str, drive: &str) -> Option<String> {
 pub fn steam_is_running() -> bool {
     #[cfg(windows)]
     {
-        std::process::Command::new("tasklist")
+        crate::proc::command("tasklist")
             .args(["/FI", "IMAGENAME eq steam.exe", "/NH"])
             .output()
             .map(|o| {
@@ -313,7 +313,7 @@ pub fn steam_is_running() -> bool {
     }
     #[cfg(not(windows))]
     {
-        std::process::Command::new("pgrep")
+        crate::proc::command("pgrep")
             .args(["-x", "steam"])
             .output()
             .map(|o| o.status.success())
@@ -360,7 +360,7 @@ pub fn shutdown_steam(steam_root: &Path) -> Shutdown {
 
     let mut asked = false;
     for (program, args) in shutdown_commands(steam_root) {
-        if std::process::Command::new(&program)
+        if crate::proc::command(&program)
             .args(&args)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())

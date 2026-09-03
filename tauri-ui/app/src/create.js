@@ -118,18 +118,18 @@ const el = {
   tabEdit: $("tab-edit"),
   panelCreate: $("panel-create"),
   panelEdit: $("panel-edit"),
-  editDrives: $("edit-drives"),
-  editDrivesEmpty: $("edit-drives-empty"),
+  editMediaTitle: $("edit-media-title"),
+  editMediaMeta: $("edit-media-meta"),
+  btnChangeCart: $("btn-change-cart"),
   editFormWrap: $("edit-form-wrap"),
   btnRefetchArt: $("btn-refetch-art"),
   setFormat: $("set-format"),
   setRegisterSteam: $("set-register-steam"),
   editTitle: $("edit-title"),
   btnEditCover: $("btn-edit-cover"),
-  editCoverName: $("edit-cover-name"),
+  editCover: $("edit-cover"),
+  editCoverImg: $("edit-cover-img"),
   editGames: $("edit-games"),
-  editGamesHint: $("edit-games-hint"),
-  editSave: $("edit-save"),
   editStatus: $("edit-status"),
 
   changeGame: $("btn-change-game"),
@@ -211,9 +211,6 @@ const art = { cover: null, logo: null, icon: null, background: null };
 
 /** The by-hand game, when one is being entered. */
 let manual = null;
-
-/** Set once the user has had an opinion about copying, so we stop guessing. */
-let copyTouched = false;
 
 let settings = {
   steamgriddbEnabled: false,
@@ -455,8 +452,13 @@ function toggle(game, on) {
 }
 
 async function onSelectionChanged() {
+  // Draw first, fetch after. Everything below this point is artwork, which
+  // arrives over a network or off a disk; making the whole window wait on it
+  // meant ticking a game appeared to do nothing until the cover turned up.
+  if (!isCollection()) el.collectionTitle.value = "";
   renderGames();
   renderTickCount();
+  refreshRail();
 
   // A single game brings its own art; a collection has none of its own until it
   // is given some, and each game on it still needs its own poster for the rail.
@@ -477,12 +479,6 @@ async function onSelectionChanged() {
     fillGameCovers();
   }
 
-  // Offloading a game off the internal disk is the practical half of the
-  // appeal, so copying is on whenever there is anything to copy. Untouched
-  // once the user has had an opinion about it.
-  if (!copyTouched) on.copy = copyable().length > 0;
-
-  refreshRail();
   refreshRail();
 }
 
@@ -775,18 +771,26 @@ function whyDemoted(choice) {
    Drives
    ========================================================================== */
 
-function renderDrives() {
+/**
+ * The drive list, for whichever picker asked.
+ *
+ * Create offers every writable drive; Edit offers only the ones that already
+ * hold a cartridge, because editing one that does not exist is not a thing.
+ */
+function renderDrives({ onlyCartridges = false, choose = selectDrive } = {}) {
   el.drives.replaceChildren();
-  // Once a drive is chosen the list has done its job, and leaving all of them on
-  // screen makes the rail long enough to bury the button that starts the write.
-  // The chosen one stays, and Change reopens the full list in the picker.
-  const shown = selectedDrive ? drives.filter((d) => d.path === selectedDrive) : drives;
+  // Every drive, every time. This once collapsed to the chosen one, which made
+  // sense while the list sat in the rail and made none at all once the list
+  // became the picker: opening "Change" to change the drive showed one drive,
+  // the one you were trying to change away from.
+  const shown = onlyCartridges ? drives.filter((d) => d.hasCartridge) : drives;
   for (const drive of shown) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "drive";
-    btn.setAttribute("aria-selected", String(drive.path === selectedDrive));
+    const current = onlyCartridges ? editing?.drivePath : selectedDrive;
+    btn.setAttribute("aria-selected", String(drive.path === current));
 
     const name = document.createElement("span");
     name.className = "drive__name";
@@ -794,21 +798,22 @@ function renderDrives() {
 
     const meta = document.createElement("span");
     meta.className = "drive__meta";
-    meta.textContent = drive.hasCartridge
+    meta.textContent = drive.hasCartridge && !onlyCartridges
       ? `${formatBytes(drive.freeBytes)} free · has a cartridge`
       : `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
-    if (drive.hasCartridge) meta.classList.add("drive__warn");
+    if (drive.hasCartridge && !onlyCartridges) meta.classList.add("drive__warn");
 
     btn.append(name, meta);
-    btn.addEventListener("click", () => selectDrive(drive));
+    btn.addEventListener("click", () => choose(drive));
     li.append(btn);
     el.drives.append(li);
   }
 
-  el.drivesEmpty.hidden = drives.length > 0;
-  if (drives.length === 0) {
-    el.drivesEmpty.textContent =
-      "No removable drive found. Plug a cartridge in, then press Rescan.";
+  el.drivesEmpty.hidden = shown.length > 0;
+  if (shown.length === 0) {
+    el.drivesEmpty.textContent = onlyCartridges
+      ? "No cartridge is plugged in. Write one on the Create tab first."
+      : "No removable drive found. Plug a cartridge in, then press Rescan.";
   }
 }
 
@@ -1052,8 +1057,22 @@ function cartridgeTitle() {
 function refreshRail() {
   if (activeTab === "edit") {
     el.barText.textContent = editing?.title ? `Edit ${editing.title}` : "Edit cartridge";
-    el.railEmpty.hidden = true;
-    el.railBody.hidden = true;
+    el.railEmpty.hidden = Boolean(editing);
+    el.railBody.hidden = !editing;
+    if (editing) {
+      const games = editing.games ?? [];
+      el.railKindText.textContent = games.length > 1 ? "Multicartridge" : "Cartridge";
+      el.railKindCount.hidden = games.length <= 1;
+      el.railKindCount.textContent = `${games.length} games`;
+      renderRailLauncher(editing.cover, {
+        title: el.editTitle.value.trim() || editing.title,
+        first: games[0]?.title,
+        games: games.length,
+      });
+      el.railSpace.hidden = true;
+      el.railPlan.hidden = true;
+    }
+    refreshCreateButton();
     return;
   }
 
@@ -1124,9 +1143,24 @@ if (el.railLauncherCard?.parentElement && "ResizeObserver" in window) {
  * `--rail-accent` is set from the cover the same way the launcher samples it, so
  * a dark cover gets a light Play and a bright one gets dark ink, here as there.
  */
-function renderRailLauncher(coverSrc) {
-  const collection = isCollection();
+function renderRailLauncher(coverSrc, override = null) {
+  const collection = override ? (override.games ?? 0) > 1 : isCollection();
   setPlate(el.railLauncherCard, el.railLauncherArt, coverSrc);
+
+  // Edit hands in what the cartridge already says, so the preview answers the
+  // same question there as here: what will this look like when it is plugged
+  // in — which is most of what editing a cartridge is for.
+  if (override) {
+    el.railLauncherLogo.hidden = true;
+    el.railLauncherStage.classList.remove("has-logo");
+    el.railLauncherEyebrow.hidden = !collection;
+    el.railLauncherEyebrow.textContent = collection ? override.title || "Collection" : "";
+    const name = (collection ? override.first : override.title) || override.title || "Nothing yet";
+    el.railLauncherTitle.textContent = name;
+    el.railLauncherTitle.classList.toggle("is-long", name.length > 22);
+    el.railExplorer.hidden = true;
+    return;
+  }
 
   // A collection's own name goes above the title, because on a collection the
   // title names whichever game is selected rather than the cartridge.
@@ -1318,6 +1352,18 @@ function blockingReason() {
 function refreshCreateButton() {
   if (building) {
     el.create.disabled = true;
+    return;
+  }
+
+  // Edit writes changes to a cartridge that exists. Same button, same place,
+  // one word different — there is no second Save tucked into the panel.
+  if (activeTab === "edit") {
+    el.create.disabled = !editing;
+    el.createLabel.textContent = "Update cartridge";
+    el.readyMessage.textContent = editing
+      ? `Changing ${editing.title || "this cartridge"}`
+      : "Choose a cartridge to edit";
+    el.readyMessage.className = "";
     return;
   }
 
@@ -1944,9 +1990,9 @@ async function refreshEditDrives() {
   }
   const cartridges = drives.filter((drive) => drive.hasCartridge);
 
-  el.editDrives.replaceChildren();
-  el.editDrivesEmpty.hidden = cartridges.length > 0;
-
+  // Opening Edit with a cartridge plugged in and nothing selected picks one:
+  // there is exactly one thing this tab can be about, and asking which is a
+  // question with one answer.
   if (activeTab === "edit" && cartridges.length > 0) {
     const preferred = cartridges.find((drive) => drive.path === selectedDrive) ?? cartridges[0];
     if (!editing || editing.drivePath !== preferred.path) {
@@ -1954,26 +2000,29 @@ async function refreshEditDrives() {
     }
   }
 
-  for (const drive of cartridges) {
-    const li = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "drive";
-    button.setAttribute("aria-selected", String(editing?.drivePath === drive.path));
+  renderEditMedia();
+}
 
-    const name = document.createElement("span");
-    name.className = "drive__name";
-    name.textContent = drive.label;
-
-    const meta = document.createElement("span");
-    meta.className = "drive__meta mono";
-    meta.textContent = `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
-
-    button.append(name, meta);
-    button.addEventListener("click", () => openEditor(drive.path));
-    li.append(button);
-    el.editDrives.append(li);
+/** The cartridge being edited, stated the way Create states its media. */
+function renderEditMedia() {
+  const drive = drives.find((d) => d.path === editing?.drivePath);
+  if (drive) {
+    el.editMediaTitle.textContent = drive.label || drive.path;
+    el.editMediaMeta.textContent =
+      `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
+  } else {
+    el.editMediaTitle.textContent = "Choose a cartridge";
+    el.editMediaMeta.textContent = "";
   }
+}
+
+/** Change, on the Edit tab: the same dialog, listing only written cartridges. */
+function openCartridgePicker() {
+  renderDrives({ onlyCartridges: true, choose: (drive) => openEditor(drive.path) });
+  el.pickTitle.textContent = "Choose a cartridge";
+  el.pickGames.hidden = true;
+  el.pickMedia.hidden = false;
+  el.pickDialog.showModal();
 }
 
 function openSettings() {
@@ -2050,11 +2099,13 @@ async function openEditor(drivePath) {
     return;
   }
   el.editTitle.value = editing.title ?? "";
-  el.editCoverName.textContent = editing.coverPath ? "" : "no artwork on this cartridge";
+  setPlate(el.editCover, el.editCoverImg, editing.cover);
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
+  if (el.pickDialog.open) el.pickDialog.close();
   renderEditGames();
-  refreshEditDrives();
+  renderEditMedia();
+  refreshRail();
 }
 
 /**
@@ -2130,10 +2181,6 @@ function renderEditGames() {
     li.append(name, artwork, up, down, drop);
     el.editGames.append(li);
   });
-
-  el.editGamesHint.textContent = list.length
-    ? "Reordering changes the order on the launcher. Nothing is copied or deleted."
-    : "This cartridge lists no games.";
 }
 
 /**
@@ -2260,13 +2307,15 @@ el.btnInheritCover.addEventListener("click", async () => {
 });
 
 
-el.create.addEventListener("click", write);
+el.create.addEventListener("click", () => (activeTab === "edit" ? saveEdits() : write()));
 el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.btnRefetchArt.addEventListener("click", refetchArtwork);
 
 // Edit is now a single tab action, not a second link in the drive list.
-el.editSave.addEventListener("click", saveEdits);
+el.btnChangeCart.addEventListener("click", openCartridgePicker);
+// The preview is the reason to type a name here, so it keeps up with the typing.
+el.editTitle.addEventListener("input", refreshRail);
 el.btnEditCover.addEventListener("click", () => openArtwork("cover"));
 el.btnUnregister.addEventListener("click", async () => {
   try {
