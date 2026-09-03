@@ -25,8 +25,13 @@ pub struct UnmountedVolume {
     pub partition: u32,
     /// Volume label, which is all there is to recognise it by.
     pub label: String,
-    /// `exFAT`, `NTFS` — only ever one Windows can actually mount.
+    /// `exFAT`, `NTFS` — or empty, which is the common case here rather than
+    /// the odd one: Windows reads the filesystem off a volume when it mounts
+    /// it, so a volume it never mounted has none to report.
     pub filesystem: String,
+    /// The partition's declared type — `IFS`, `FAT32`, `Basic` — which is the
+    /// only clue to what is on it when `filesystem` came back empty.
+    pub partition_type: String,
     pub total_bytes: u64,
 }
 
@@ -566,16 +571,16 @@ pub fn unmounted_volumes() -> Vec<UnmountedVolume> {
     const QUERY: &str = "\
         $ErrorActionPreference='Stop'; \
         Get-Disk | Where-Object BusType -eq 'USB' | Get-Partition | \
-        Where-Object { -not $_.DriveLetter } | ForEach-Object { \
+        Where-Object { -not $_.DriveLetter -and $_.Size -gt 100MB } | \
+        ForEach-Object { \
           $v = $_ | Get-Volume -ErrorAction SilentlyContinue; \
-          if ($v -and $v.FileSystem) { \
-            [pscustomobject]@{ \
-              disk = $_.DiskNumber; partition = $_.PartitionNumber; \
-              label = [string]$v.FileSystemLabel; \
-              filesystem = [string]$v.FileSystem; \
-              totalBytes = [uint64]$_.Size \
-            } | ConvertTo-Json -Compress \
-          } \
+          [pscustomobject]@{ \
+            disk = $_.DiskNumber; partition = $_.PartitionNumber; \
+            label = [string]$v.FileSystemLabel; \
+            filesystem = [string]$v.FileSystem; \
+            partitionType = [string]$_.Type; \
+            totalBytes = [uint64]$_.Size \
+          } | ConvertTo-Json -Compress \
         }";
 
     let Ok(out) = crate::proc::command("powershell.exe")
@@ -594,7 +599,7 @@ pub fn unmounted_volumes() -> Vec<UnmountedVolume> {
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .filter_map(|line| serde_json::from_str::<UnmountedVolume>(line.trim()).ok())
-        .filter(|volume| is_mountable(&volume.filesystem))
+        .filter(is_mountable)
         .collect()
 }
 
@@ -605,13 +610,30 @@ pub fn unmounted_volumes() -> Vec<UnmountedVolume> {
     Vec::new()
 }
 
-/// Filesystems Windows will mount if asked. Anything else stays where it is.
+/// Whether Windows would be able to read this volume once it had a letter.
+///
+/// Asking `Get-Volume` for the filesystem is the reliable answer but not an
+/// available one: Windows identifies a filesystem when it mounts a volume, and
+/// a volume with no drive letter is usually one it has never mounted, so the
+/// name comes back empty for exactly the drives this function exists to find.
+///
+/// So fall back to the partition type, which the partition table states
+/// outright. On MBR that is decisive — `IFS` is the type byte NTFS and exFAT
+/// both claim, and a Linux filesystem declares 0x83, which surfaces here as
+/// `Unknown`. On GPT it is not: Windows and Linux share the basic-data GUID,
+/// so a `Basic` partition with no readable filesystem could be either, and
+/// lettering a btrfs cartridge would not make it readable — only easier to
+/// reformat by accident. Those are left alone unless the filesystem is known.
 #[cfg(windows)]
-fn is_mountable(filesystem: &str) -> bool {
-    matches!(
-        filesystem.to_ascii_uppercase().as_str(),
-        "NTFS" | "EXFAT" | "FAT32" | "FAT" | "REFS"
-    )
+fn is_mountable(volume: &UnmountedVolume) -> bool {
+    match volume.filesystem.to_ascii_uppercase().as_str() {
+        "NTFS" | "EXFAT" | "FAT32" | "FAT" | "FAT16" | "FAT12" | "REFS" => true,
+        "" => matches!(
+            volume.partition_type.to_ascii_uppercase().as_str(),
+            "IFS" | "FAT32" | "FAT16" | "FAT12" | "HUGE"
+        ),
+        _ => false,
+    }
 }
 
 /// Give `volume` the first free drive letter, and return its new root.
@@ -708,6 +730,43 @@ mod tests {
         assert!(!is_ejectable(Path::new("/")));
         // The automount root itself is not a cartridge either.
         assert!(!is_ejectable(Path::new("/run/media")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_volume_windows_never_mounted_is_still_offered_a_letter() {
+        let volume = |filesystem: &str, partition_type: &str| UnmountedVolume {
+            disk: 4,
+            partition: 1,
+            label: String::new(),
+            filesystem: filesystem.to_string(),
+            partition_type: partition_type.to_string(),
+            total_bytes: 256_059_448_832,
+        };
+
+        // The case this whole feature is for. Windows has not mounted it, so
+        // it cannot say what the filesystem is; the MBR type byte can, and
+        // requiring the filesystem name hid the one drive that needed a letter.
+        assert!(is_mountable(&volume("", "IFS")));
+        assert!(is_mountable(&volume("", "FAT32")));
+
+        // Named outright, whatever the partition table says.
+        assert!(is_mountable(&volume("exFAT", "IFS")));
+        assert!(is_mountable(&volume("NTFS", "Basic")));
+
+        // Nothing Windows can read. A letter would not change that.
+        assert!(!is_mountable(&volume("btrfs", "Basic")));
+        assert!(!is_mountable(&volume("ext4", "Unknown")));
+        assert!(!is_mountable(&volume("", "Unknown")));
+
+        // GPT states no more than "basic data", which Linux writes too, so an
+        // unreadable one stays put rather than being offered as a target.
+        assert!(!is_mountable(&volume("", "Basic")));
+
+        // Never the machine's own boot furniture.
+        assert!(!is_mountable(&volume("", "System")));
+        assert!(!is_mountable(&volume("", "Reserved")));
+        assert!(!is_mountable(&volume("", "Recovery")));
     }
 
     #[cfg(windows)]

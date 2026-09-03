@@ -905,7 +905,13 @@ function renderDrives({ onlyCartridges = false, choose = selectDrive } = {}) {
 
     const name = document.createElement("span");
     name.className = "drive__name";
-    name.textContent = volume.label || `${volume.filesystem} volume`;
+    // A volume Windows never mounted has no label to read either, so there is
+    // often nothing here but the size and the disk it sits on.
+    name.textContent =
+      volume.label ||
+      (volume.filesystem
+        ? `${volume.filesystem} volume`
+        : `Unnamed volume on disk ${volume.disk}`);
 
     const meta = document.createElement("span");
     meta.className = "drive__meta drive__warn";
