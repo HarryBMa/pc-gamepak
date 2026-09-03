@@ -31,6 +31,9 @@ windows-sys = { version = "0.52", features = [
     # DwmSetWindowAttribute, to stop Windows rounding a window that rounds
     # itself.
     "Win32_Graphics_Dwm",
+    # CM_Request_Device_Eject and the SetupAPI walk that finds the device to
+    # ask, which is how Eject works without administrator.
+    "Win32_Devices_DeviceAndDriverInstallation",
 ] }
 
 # The launcher is started on insert and exits when it is dismissed, so start-up

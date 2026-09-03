@@ -600,6 +600,7 @@ async function standAside() {
     // Older webview, or a platform without it. Minimising still works.
   }
   await self.minimize();
+  resetPlay();
 }
 
 /* ==========================================================================
@@ -911,6 +912,21 @@ async function showWindow() {
 /** Set while a launch is in flight, so the sweep runs once and Play holds. */
 let launching = false;
 
+/**
+ * Put Play back to rest.
+ *
+ * Used to be needed only when a launch failed, because a launch that worked
+ * closed the window a moment later and the button went with it. Now the window
+ * comes back — so it has to come back saying Play, not still spinning on a
+ * launch that finished when the game started an hour ago.
+ */
+function resetPlay() {
+  launching = false;
+  el.play.classList.remove("is-launching");
+  el.playLabel.textContent = "Play";
+  setBusy(false);
+}
+
 async function doPlay() {
   const game = currentGame();
   if (!game?.executable || el.play.disabled || launching) return;
@@ -932,10 +948,7 @@ async function doPlay() {
     setTimeout(standAside, 900);
   } catch (error) {
     toast(String(error), true);
-    launching = false;
-    el.play.classList.remove("is-launching");
-    el.playLabel.textContent = "Play";
-    setBusy(false);
+    resetPlay();
   }
 }
 

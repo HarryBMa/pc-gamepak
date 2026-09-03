@@ -55,6 +55,10 @@ use gamepak_core::{create, drives, edit, format, health, settings, sgdb, tuning}
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::webview::PageLoadEvent;
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
+    CM_Get_Parent, CM_Request_Device_EjectW, CR_SUCCESS,
+};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
@@ -183,55 +187,257 @@ fn eject_drive(drive_path: String) -> Result<(), String> {
     }
 }
 
+/// Eject the cartridge the way Safely Remove Hardware does.
+///
+/// The obvious implementation — lock the volume, dismount it — cannot work on
+/// the hardware this is for. `FSCTL_LOCK_VOLUME` needs administrator on a
+/// volume Windows considers fixed, and `GetDriveTypeW` calls an NVMe stick in a
+/// USB enclosure fixed, exactly like the internal disk. So the lock came back
+/// `ERROR_ACCESS_DENIED` every time, on a cartridge nothing was using, and
+/// `mountvol /P` behind it needed the same rights and failed the same way.
+///
+/// `CM_Request_Device_Eject` is what the notification area's own eject calls.
+/// It asks the PnP manager to stop the device rather than taking the volume by
+/// force: the filesystem is flushed and dismounted on the way, no elevation is
+/// involved, and the device is actually powered down at the end — which the
+/// dismount never did, so "safe to remove" had been describing a drive that was
+/// still spinning.
+///
+/// When something refuses, PnP says what: the veto names the application or
+/// driver holding the device, which is a better answer than any guess made from
+/// an error code.
 #[cfg(target_os = "windows")]
 fn eject_windows(drive_path: &str) -> Result<(), String> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-    use std::time::Duration;
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE,
+    let letter = drive_path.trim_end_matches(['\\', '/']);
+
+    let disk = device_number(letter)
+        .ok_or_else(|| format!("{letter} could not be identified as a disk."))?;
+    let devinst = disk_devinst(disk)
+        .ok_or_else(|| format!("Windows has no device for {letter} to eject."))?;
+
+    // The parent first: for a USB enclosure that is the mass-storage device,
+    // and stopping it is what "Safely Remove Hardware" stops. The disk itself
+    // is the fallback for anything shaped differently — a card reader slot, or
+    // a device that is its own parent as far as PnP is concerned.
+    let mut parent = 0u32;
+    let targets = if unsafe { CM_Get_Parent(&mut parent, devinst, 0) } == CR_SUCCESS {
+        vec![parent, devinst]
+    } else {
+        vec![devinst]
     };
+
+    let mut refusal = None;
+    for target in targets {
+        match request_eject(target) {
+            Ok(()) => return Ok(()),
+            Err(why) => refusal = refusal.or(Some(why)),
+        }
+    }
+
+    Err(refusal.unwrap_or_else(|| format!("Windows would not eject {letter}.")))
+}
+
+/// Ask PnP to stop one device node.
+#[cfg(target_os = "windows")]
+fn request_eject(devinst: u32) -> Result<(), String> {
+    // Aliased in upper case because they are matched on as patterns, and a
+    // constant named in camel case there is read as a fresh binding that
+    // matches everything — the lint that fires on it is warning about a match
+    // arm that would silently swallow every other veto.
+    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
+        PNP_VetoDevice, PNP_VetoDriver, PNP_VetoOutstandingOpen, PNP_VetoPendingClose,
+        PNP_VetoWindowsApp, PNP_VetoWindowsService,
+    };
+    const VETO_APP: i32 = PNP_VetoWindowsApp;
+    const VETO_SERVICE: i32 = PNP_VetoWindowsService;
+    const VETO_OPEN: i32 = PNP_VetoOutstandingOpen;
+    const VETO_CLOSING: i32 = PNP_VetoPendingClose;
+    const VETO_DEVICE: i32 = PNP_VetoDevice;
+    const VETO_DRIVER: i32 = PNP_VetoDriver;
+
+    let mut veto_type = 0;
+    let mut veto_name = [0u16; 260];
+
+    let result = unsafe {
+        CM_Request_Device_EjectW(
+            devinst,
+            &mut veto_type,
+            veto_name.as_mut_ptr(),
+            veto_name.len() as u32,
+            0,
+        )
+    };
+    if result == CR_SUCCESS {
+        return Ok(());
+    }
+
+    let end = veto_name
+        .iter()
+        .position(|c| *c == 0)
+        .unwrap_or(veto_name.len());
+    let name = String::from_utf16_lossy(&veto_name[..end]);
+    let name = name.trim();
+
+    // The veto name is a process name or a driver's, so it is worth printing
+    // verbatim: "Steam is still using the cartridge" is the whole answer, where
+    // an error number would send someone looking for a fault that is not there.
+    Err(match veto_type {
+        VETO_APP | VETO_SERVICE | VETO_OPEN if !name.is_empty() =>
+        {
+            format!("{name} is still using the cartridge. Close it, then Eject.")
+        }
+        VETO_APP | VETO_SERVICE | VETO_OPEN => {
+            "Something is still using the cartridge. Quit the game or Steam, then Eject."
+                .to_string()
+        }
+        VETO_CLOSING => "The cartridge is still finishing up. Try Eject again.".to_string(),
+        VETO_DEVICE | VETO_DRIVER if !name.is_empty() => {
+            format!("{name} would not release the cartridge.")
+        }
+        _ => "Windows would not release the cartridge. Unplug it once the drive light settles."
+            .to_string(),
+    })
+}
+
+/// Which physical disk a drive letter sits on.
+///
+/// Opened with no access rights at all, which is enough for a query and is the
+/// reason none of this prompts: asking for read or write on a fixed volume is
+/// what needed administrator in the first place.
+#[cfg(target_os = "windows")]
+fn device_number(letter: &str) -> Option<u32> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME};
+    use windows_sys::Win32::System::Ioctl::{IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_DEVICE_NUMBER};
     use windows_sys::Win32::System::IO::DeviceIoControl;
 
-    // A drive just plugged in, or a window just closed on it, often still has
-    // Explorer's thumbnail cache or Defender's on-arrival scan holding a
-    // handle for a moment — long enough for the first lock to fail and short
-    // enough that pressing Eject again immediately succeeds. Retried here
-    // instead of surfacing that as a real failure.
-    //
-    // Twelve rather than six because the press that matters is now the one
-    // right after quitting a game: Steam and the game itself let go of the
-    // cartridge over a second or two, and the difference between three seconds
-    // of spinner and a refusal is the difference between one click and two.
-    const ATTEMPTS: u32 = 12;
-    const RETRY_DELAY: Duration = Duration::from_millis(250);
+    let path = wide(&format!("\\\\.\\{letter}"));
+    let handle = unsafe {
+        CreateFileW(
+            path.as_ptr(),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            0,
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return None;
+    }
 
-    let letter = drive_path.trim_end_matches('\\').trim_end_matches('/');
-    let volume_path = format!("\\\\.\\{letter}");
+    let mut number: STORAGE_DEVICE_NUMBER = unsafe { std::mem::zeroed() };
+    let mut returned = 0u32;
+    let ok = unsafe {
+        DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_GET_DEVICE_NUMBER,
+            std::ptr::null(),
+            0,
+            &mut number as *mut _ as *mut std::ffi::c_void,
+            std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
+            &mut returned,
+            std::ptr::null_mut(),
+        )
+    };
+    unsafe { CloseHandle(handle) };
 
-    let wide: Vec<u16> = OsStr::new(&volume_path)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    (ok != 0).then_some(number.DeviceNumber)
+}
 
-    // Which step ran out of attempts, so the failure can name a cause instead
-    // of an exit code. These three fail for different reasons and only one of
-    // them is the user's to fix.
-    let mut stalled_at = Stalled::Opening;
+/// The device node for a physical disk, found by matching its number.
+///
+/// There is no call from a disk number to a device node, so this walks the disk
+/// interfaces, opens each one and asks which disk it is — the same question
+/// `device_number` asked of the volume, from the other end.
+#[cfg(target_os = "windows")]
+fn disk_devinst(disk: u32) -> Option<u32> {
+    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
+        SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW,
+        SetupDiGetDeviceInterfaceDetailW, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT,
+        SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA_W, SP_DEVINFO_DATA,
+    };
 
-    for attempt in 0..ATTEMPTS {
-        if attempt > 0 {
-            std::thread::sleep(RETRY_DELAY);
+    // Written out because windows-sys 0.52 does not export it. It is a fixed
+    // interface class id — {53F56307-B6BF-11D0-94F2-00A0C91EFB8B}, the one
+    // every disk registers — not a value that varies by machine or version.
+    const GUID_DEVINTERFACE_DISK: windows_sys::core::GUID = windows_sys::core::GUID {
+        data1: 0x53F5_6307,
+        data2: 0xB6BF,
+        data3: 0x11D0,
+        data4: [0x94, 0xF2, 0x00, 0xA0, 0xC9, 0x1E, 0xFB, 0x8B],
+    };
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Ioctl::{IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_DEVICE_NUMBER};
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    let set = unsafe {
+        SetupDiGetClassDevsW(
+            &GUID_DEVINTERFACE_DISK,
+            std::ptr::null(),
+            0,
+            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
+        )
+    };
+    if set == INVALID_HANDLE_VALUE {
+        return None;
+    }
+
+    let mut found = None;
+
+    for index in 0.. {
+        let mut interface: SP_DEVICE_INTERFACE_DATA = unsafe { std::mem::zeroed() };
+        interface.cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DATA>() as u32;
+
+        if unsafe {
+            SetupDiEnumDeviceInterfaces(
+                set,
+                std::ptr::null(),
+                &GUID_DEVINTERFACE_DISK,
+                index,
+                &mut interface,
+            )
+        } == 0
+        {
+            break;
+        }
+
+        // The detail struct is variable length: a fixed head and the device
+        // path running off the end of it. `cbSize` describes the head only,
+        // which is why it is not the size of the buffer being passed.
+        let mut buffer = [0u8; 1024];
+        let detail = buffer.as_mut_ptr() as *mut SP_DEVICE_INTERFACE_DETAIL_DATA_W;
+        unsafe {
+            (*detail).cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
+        }
+
+        let mut info: SP_DEVINFO_DATA = unsafe { std::mem::zeroed() };
+        info.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
+
+        if unsafe {
+            SetupDiGetDeviceInterfaceDetailW(
+                set,
+                &mut interface,
+                detail,
+                buffer.len() as u32,
+                std::ptr::null_mut(),
+                &mut info,
+            )
+        } == 0
+        {
+            continue;
         }
 
         let handle = unsafe {
             CreateFileW(
-                wide.as_ptr(),
-                GENERIC_READ | GENERIC_WRITE,
+                (*detail).DevicePath.as_ptr(),
+                0,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 std::ptr::null(),
                 OPEN_EXISTING,
@@ -239,124 +445,45 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
                 0,
             )
         };
-
         if handle == INVALID_HANDLE_VALUE {
-            stalled_at = Stalled::Opening;
             continue;
         }
 
-        let mut bytes_returned: u32 = 0;
-
-        let locked = unsafe {
+        let mut number: STORAGE_DEVICE_NUMBER = unsafe { std::mem::zeroed() };
+        let mut returned = 0u32;
+        let ok = unsafe {
             DeviceIoControl(
                 handle,
-                FSCTL_LOCK_VOLUME,
+                IOCTL_STORAGE_GET_DEVICE_NUMBER,
                 std::ptr::null(),
                 0,
-                std::ptr::null_mut(),
-                0,
-                &mut bytes_returned,
+                &mut number as *mut _ as *mut std::ffi::c_void,
+                std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
+                &mut returned,
                 std::ptr::null_mut(),
             )
         };
-
-        if locked == 0 {
-            // Almost always a program holding a file open on the cartridge.
-            stalled_at = Stalled::Locking;
-            unsafe { CloseHandle(handle) };
-            continue;
-        }
-
-        let dismounted = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_DISMOUNT_VOLUME,
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                0,
-                &mut bytes_returned,
-                std::ptr::null_mut(),
-            )
-        };
-
         unsafe { CloseHandle(handle) };
 
-        if dismounted != 0 {
-            return Ok(());
+        if ok != 0 && number.DeviceNumber == disk {
+            found = Some(info.DevInst);
+            break;
         }
-        stalled_at = Stalled::Dismounting;
     }
 
-    // `mountvol /P` is a second opinion, not a stronger one: it needs the same
-    // exclusive access. When it fails too, the reason is the one recorded above.
-    eject_windows_mountvol(drive_path).map_err(|_| stalled_at.describe(drive_path))
-}
-
-/// How far the eject got before it ran out of attempts.
-#[cfg(target_os = "windows")]
-enum Stalled {
-    /// The volume would not open at all.
-    Opening,
-    /// It opened, but would not lock — something else has a file open on it.
-    Locking,
-    /// It locked, and Windows still would not dismount it.
-    Dismounting,
+    unsafe { SetupDiDestroyDeviceInfoList(set) };
+    found
 }
 
 #[cfg(target_os = "windows")]
-impl Stalled {
-    /// What to tell the user.
-    ///
-    /// One sentence each. This is a toast on a 420px window that appears when
-    /// something has already gone wrong, so it names what to do and stops;
-    /// the earlier version explained the cause at a length nobody reads
-    /// standing in front of a television.
-    fn describe(&self, drive_path: &str) -> String {
-        let drive = drive_path.trim_end_matches(['\\', '/']);
-        match self {
-            // Steam holds the cartridge open the moment the wizard adds it as
-            // a library, so it is worth naming even before the game.
-            Stalled::Locking => {
-                format!("{drive} is still in use. Quit the game or Steam, then Eject.")
-            }
-            Stalled::Opening => format!("{drive} is not there any more."),
-            Stalled::Dismounting => {
-                format!(
-                    "Windows would not unmount {drive}. Unplug it once the drive light settles."
-                )
-            }
-        }
-    }
-}
+fn wide(s: &str) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
 
-#[cfg(target_os = "windows")]
-fn eject_windows_mountvol(drive_path: &str) -> Result<(), String> {
-    use std::time::Duration;
-
-    const ATTEMPTS: u32 = 3;
-    const RETRY_DELAY: Duration = Duration::from_millis(300);
-
-    let letter = drive_path.trim_end_matches('\\').trim_end_matches('/');
-    let mut last_code = None;
-
-    for attempt in 0..ATTEMPTS {
-        if attempt > 0 {
-            std::thread::sleep(RETRY_DELAY);
-        }
-
-        let status = Command::new("mountvol")
-            .args([letter, "/P"])
-            .status()
-            .map_err(|e| format!("mountvol failed: {e}"))?;
-
-        if status.success() {
-            return Ok(());
-        }
-        last_code = status.code();
-    }
-
-    Err(format!("mountvol /P returned exit code {last_code:?}"))
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 #[cfg(not(target_os = "windows"))]
