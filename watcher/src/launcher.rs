@@ -39,6 +39,32 @@ pub fn open(path: &Path) -> Option<Child> {
     }
 }
 
+/// Open the wizard, on its first page or straight on Settings.
+///
+/// The tray is the only door to the wizard that is always there: the launcher
+/// itself only exists while a cartridge is plugged in, and the window that used
+/// to carry this menu went away with it.
+pub fn open_wizard(settings: bool) -> Option<Child> {
+    let Some(launcher) = installed_at() else {
+        log::line("pc-gamepak is not installed anywhere I can find it");
+        return None;
+    };
+
+    match Command::new(&launcher)
+        .arg(if settings { "--settings" } else { "--create" })
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => Some(child),
+        Err(e) => {
+            log::line(&format!("could not start the wizard: {e}"));
+            None
+        }
+    }
+}
+
 /// Close a launcher this watcher started.
 ///
 /// Asked to close rather than killed, so the window goes the way it would if

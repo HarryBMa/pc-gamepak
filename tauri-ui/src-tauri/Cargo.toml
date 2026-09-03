@@ -12,7 +12,10 @@ tauri-build = { version = "2", features = [] }
 gamepak-core = { path = "../../core" }
 # No "protocol-asset": the cover is handed to the webview as a data URI, so the
 # asset protocol stays switched off (see tauri.conf.json).
-tauri = { version = "2", features = ["tray-icon"] }
+# No "tray-icon": the notification-area icon belongs to the watcher, which is
+# resident for the whole session. This process is opened on demand and exits
+# with its window, so an icon here vanished exactly when it was needed.
+tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 tauri-plugin-dialog = "2"
 

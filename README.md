@@ -137,6 +137,22 @@ what it just launched. A cartridge with one game on it has no rail at all.
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
 
+### Getting back to the launcher
+
+Press Play and the launcher does not close — it drops to the taskbar and gives
+up always-on-top, so it is out of the game's way but still there when the game
+is over. Eject is on that window, and quitting a game is exactly when you want
+it.
+
+If you do close it, the cartridge is still plugged in and the notification-area
+icon is the way back. Left-click opens the launcher for the cartridge you have
+in; right-click lists them by name when there is more than one, and carries the
+wizard, Settings, and Quit.
+
+The icon belongs to the watcher rather than to the launcher, which is why it is
+still there after the window has gone. The watcher is a hidden window and a
+message loop and nothing else — see [Idle cost](#idle-cost).
+
 ### With a controller
 
 A cartridge next to a television wants a controller, not a mouse. Plug one in
@@ -460,6 +476,36 @@ The third is worth doing by hand, once per cartridge:
   button is for. It is left as a manual step because the supported way to set it
   is that dialog; the registry keys behind it are per-device and undocumented,
   and this tool does not guess at those.
+
+### If a cartridge gets no drive letter
+
+A volume with no letter has no path, so nothing can see it — not the launcher,
+not the wizard, not Explorer. It is not a fault in the drive and rescanning will
+not find it, because there is nothing to look at.
+
+Windows normally hands out a letter on its own. When it stops, it is usually
+because automount has been turned off, which some disk and imaging tools do
+without saying so, and which is remembered across reboots:
+
+```powershell
+# In an admin PowerShell. 1 means automount is off.
+(Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\mountmgr).NoAutoMount
+
+mountvol /E   # turn it back on
+```
+
+The tell is that drives you have lettered by hand keep coming back and new ones
+never get one at all: the manual assignments are remembered per volume in
+`HKLM\SYSTEM\MountedDevices`, and everything else falls through. Those entries
+key on the partition, not the port, so moving a cartridge to a different socket
+changes nothing.
+
+`mountvol /E` does not letter a drive that is already plugged in — unplug and
+replug it, or use the wizard. Cartridges Windows can read but has not lettered
+show up in **Change media** as a dashed entry; clicking one asks Windows for the
+first free letter, which needs administrator, so there is a UAC prompt. Skip
+`mountvol /R`: it clears every remembered assignment, including the ones you
+made deliberately.
 
 ### Do not put a pagefile or swap on a cartridge
 
@@ -787,7 +833,7 @@ is there a cartridge.conf at the root?    is there one in tags/<UID>/ ?
                               ▼
 launcher opens with the cover art
       │
-      ├─ Play   ──▶ starts what cartridge.conf names, then closes
+      ├─ Play   ──▶ starts what cartridge.conf names, then minimises
       └─ Eject  ──▶ flushes, unmounts, powers the drive down
 ```
 
@@ -840,9 +886,14 @@ allowlist along with it.
   given it a key.
 - **Titles are text, never markup.** They come off an untrusted volume and are
   inserted with `textContent`.
-- **Eject asks twice** when the game lives on the cartridge, since pulling a drive
-  a running game is reading from is a different mistake to pulling one that holds
-  only a text file.
+- **Eject cannot pull a drive out from under a running game.** It takes an
+  exclusive lock before unmounting, which a volume with an open handle on it
+  will not give — so a game still running makes the eject fail and say what to
+  close, rather than being talked out of it by a dialog.
+
+- **Quit on the tray menu stops the watcher**, and nothing restarts it until the
+  next logon. Plugging a cartridge in after that does nothing at all, which is
+  the intended reading of Quit.
 
 ### Cartridges in Steam's library list
 

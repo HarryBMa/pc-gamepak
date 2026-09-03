@@ -54,8 +54,6 @@ use gamepak_core::{create, drives, edit, format, health, settings, sgdb, tuning}
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
@@ -204,7 +202,12 @@ fn eject_windows(drive_path: &str) -> Result<(), String> {
     // handle for a moment — long enough for the first lock to fail and short
     // enough that pressing Eject again immediately succeeds. Retried here
     // instead of surfacing that as a real failure.
-    const ATTEMPTS: u32 = 6;
+    //
+    // Twelve rather than six because the press that matters is now the one
+    // right after quitting a game: Steam and the game itself let go of the
+    // cartridge over a second or two, and the difference between three seconds
+    // of spinner and a refusal is the difference between one click and two.
+    const ATTEMPTS: u32 = 12;
     const RETRY_DELAY: Duration = Duration::from_millis(250);
 
     let letter = drive_path.trim_end_matches('\\').trim_end_matches('/');
@@ -305,27 +308,24 @@ enum Stalled {
 impl Stalled {
     /// What to tell the user.
     ///
-    /// The old message was the exit code of the fallback, which named the tool
-    /// that failed and nothing a user could do about it. Locking is by far the
-    /// common case and it has an obvious fix, so it is worth spelling out —
-    /// Steam in particular holds the cartridge open the moment the wizard adds
-    /// it as a library.
+    /// One sentence each. This is a toast on a 420px window that appears when
+    /// something has already gone wrong, so it names what to do and stops;
+    /// the earlier version explained the cause at a length nobody reads
+    /// standing in front of a television.
     fn describe(&self, drive_path: &str) -> String {
         let drive = drive_path.trim_end_matches(['\\', '/']);
         match self {
-            Stalled::Locking => format!(
-                "Something is still using {drive}. Close Steam and any window or game \
-                 open on the cartridge, then press Eject again."
-            ),
-            Stalled::Opening => format!(
-                "{drive} could not be opened for ejecting. If the cartridge has already \
-                 been unplugged there is nothing left to do; otherwise reconnect it and \
-                 try again."
-            ),
-            Stalled::Dismounting => format!(
-                "Windows would not unmount {drive}. Eject it from the notification area \
-                 instead, or unplug it once the drive light has settled."
-            ),
+            // Steam holds the cartridge open the moment the wizard adds it as
+            // a library, so it is worth naming even before the game.
+            Stalled::Locking => {
+                format!("{drive} is still in use. Quit the game or Steam, then Eject.")
+            }
+            Stalled::Opening => format!("{drive} is not there any more."),
+            Stalled::Dismounting => {
+                format!(
+                    "Windows would not unmount {drive}. Unplug it once the drive light settles."
+                )
+            }
         }
     }
 }
@@ -910,7 +910,12 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
 fn main() {
     // Both windows start hidden; the frontend shows itself once it has drawn,
     // so the user never sees an empty frame.
-    let wizard = std::env::args().skip(1).any(|arg| arg == "--create");
+    // `--settings` is `--create` that lands on the Settings page. The tray is
+    // in another process now, so "open settings" has to survive being asked for
+    // across a process boundary rather than through a menu handler.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let settings = args.iter().any(|arg| arg == "--settings");
+    let wizard = settings || args.iter().any(|arg| arg == "--create");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -950,30 +955,11 @@ fn main() {
             open_wizard_window,
         ])
         .setup(move |app| {
-            let wizard_item =
-                MenuItem::with_id(app, "open-wizard", "Open wizard", true, None::<&str>)?;
-            let open_settings =
-                MenuItem::with_id(app, "open-settings", "Open settings", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&wizard_item, &open_settings, &quit])?;
-
-            TrayIconBuilder::new()
-                .icon(tauri::include_image!("icons/32x32.png"))
-                .menu(&tray_menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "open-wizard" => spawn_open_wizard(app.clone(), false),
-                    "open-settings" => spawn_open_wizard(app.clone(), true),
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .build(app)?;
-
             if wizard {
-                // The same door the tray and the launcher's Settings link use,
-                // rather than a second builder that had drifted to a fixed size
-                // the resizing comment in open_wizard explicitly argues against.
-                open_wizard(app.handle(), false)?;
+                // The same door the launcher's Settings link uses, rather than
+                // a second builder that had drifted to a fixed size the
+                // resizing comment in open_wizard explicitly argues against.
+                open_wizard(app.handle(), settings)?;
             } else {
                 let launcher =
                     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))

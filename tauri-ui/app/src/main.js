@@ -579,6 +579,29 @@ async function closeWindow() {
   if (tauri?.window) await tauri.window.getCurrentWindow().close();
 }
 
+/**
+ * Get out of the way of the game without ending the session.
+ *
+ * Closing here used to be right: the launcher had said everything it had to
+ * say. But Eject is on this window, and quitting a game is exactly when a
+ * person wants it — so closing meant unplugging the cartridge and plugging it
+ * back in to reach the button that exists to make that unnecessary.
+ *
+ * Always-on-top goes with it. It is there so the popup lands in front of
+ * whatever is running; keeping it while a game is running would put the
+ * launcher over the game the moment anything restored it.
+ */
+async function standAside() {
+  if (!tauri?.window) return;
+  const self = tauri.window.getCurrentWindow();
+  try {
+    await self.setAlwaysOnTop(false);
+  } catch {
+    // Older webview, or a platform without it. Minimising still works.
+  }
+  await self.minimize();
+}
+
 /* ==========================================================================
    The rail: which game Play acts on
    ========================================================================== */
@@ -904,8 +927,9 @@ async function doPlay() {
       drivePath: cartridge.drive_path,
     });
     toast("Launched");
-    // The game has the screen now; the launcher has nothing left to say.
-    setTimeout(closeWindow, 900);
+    // The game has the screen now. The launcher steps back to the taskbar
+    // rather than closing, so Eject is still there when the game is over.
+    setTimeout(standAside, 900);
   } catch (error) {
     toast(String(error), true);
     launching = false;
@@ -917,22 +941,19 @@ async function doPlay() {
 
 el.play.addEventListener("click", doPlay);
 
-/** Set once the user has been warned that a game lives on this cartridge. */
-let ejectConfirmed = false;
-
+/**
+ * Eject, on the first press.
+ *
+ * There used to be a confirmation step when the game lived on the cartridge,
+ * on the reasoning that pulling a disc out from under a running game is bad.
+ * It is — but Windows already refuses it: a volume with an open handle on it
+ * will not lock, so a game that is actually running makes the eject fail on
+ * its own, with a message naming what to close. The confirmation was warning
+ * about something that cannot happen, and charging every safe eject two presses
+ * and a paragraph to do it.
+ */
 async function doEject() {
   if (!cartridge || el.eject.disabled) return;
-
-  if (cartridge.holds_game && !ejectConfirmed) {
-    ejectConfirmed = true;
-    el.eject.title = "Eject anyway";
-    el.eject.setAttribute("aria-label", "Eject anyway");
-    el.notice.hidden = false;
-    el.notice.textContent =
-      "The game is installed on this cartridge. Quit it first, then press Eject again.";
-    toast("Eject is waiting for confirmation", true);
-    return;
-  }
 
   setBusy(true);
   toast("Ejecting…");

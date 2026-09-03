@@ -32,6 +32,8 @@ mod log;
 mod mounts;
 mod nfc;
 mod tags;
+#[cfg(windows)]
+mod tray;
 
 #[cfg(not(windows))]
 fn main() {
@@ -49,6 +51,8 @@ mod windows_watcher {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
+    use std::process::Child;
+    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -56,9 +60,11 @@ mod windows_watcher {
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::System::Threading::CreateMutexW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, EnumWindows, GetClassNameW, GetMessageW,
-        GetWindowTextW, PostMessageW, PostQuitMessage, RegisterClassW, MSG, WM_CLOSE, WM_DESTROY,
-        WM_DEVICECHANGE, WNDCLASSW, WS_OVERLAPPED,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, EnumWindows,
+        GetClassNameW, GetMessageW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
+        IsWindowVisible, PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW,
+        SetForegroundWindow, ShowWindow, MSG, SW_RESTORE, WM_CLOSE, WM_DESTROY, WM_DEVICECHANGE,
+        WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
     };
 
     /// A volume has been inserted and is available.
@@ -97,6 +103,18 @@ mod windows_watcher {
         dbcv_unitmask: u32,
         dbcv_flags: u16,
     }
+
+    /// Explorer's "I have restarted, add your icon again" broadcast, whose id
+    /// is only known at runtime. 0 until the icon has been added once.
+    static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
+
+    /// The launcher this tray opened, and the cartridge it was opened on.
+    ///
+    /// Tracked so a second click on the same cartridge brings that window back
+    /// rather than starting a second copy of it — which matters more now than
+    /// it did, because the launcher minimises itself when a game starts instead
+    /// of closing, and the window the user wants is usually already there.
+    static TRAY_LAUNCHER: Mutex<Option<(PathBuf, Child)>> = Mutex::new(None);
 
     /// Last time each drive letter was acted on, for debouncing.
     ///
@@ -174,6 +192,17 @@ mod windows_watcher {
             return;
         }
 
+        if crate::tray::add(hwnd) {
+            // Registered after the first successful add: there is nothing to
+            // restore before then, and the id is the same for the session.
+            TASKBAR_CREATED.store(
+                unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
+                Ordering::Relaxed,
+            );
+        } else {
+            crate::log::line("could not add the tray icon; carrying on without it");
+        }
+
         crate::log::line("listening for volume arrivals");
 
         // Blocks here for the rest of the session. GetMessageW sleeps in the
@@ -212,12 +241,136 @@ mod windows_watcher {
                 }
                 0
             }
+            crate::tray::WM_TRAYICON => {
+                // The mouse message that caused this arrives in the low word of
+                // lparam; everything else the icon reports is movement.
+                match lparam as u32 & 0xffff {
+                    WM_LBUTTONUP => on_tray_clicked(hwnd, true),
+                    WM_RBUTTONUP => on_tray_clicked(hwnd, false),
+                    _ => {}
+                }
+                0
+            }
             WM_DESTROY => {
+                crate::tray::remove(hwnd);
                 PostQuitMessage(0);
                 0
             }
-            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+            other => {
+                // Explorer restarted and threw away every icon in the
+                // notification area, this one included. Nothing says so except
+                // this broadcast, and a watcher with no icon looks to the user
+                // exactly like a watcher that has died.
+                let taskbar = TASKBAR_CREATED.load(Ordering::Relaxed);
+                if taskbar != 0 && other == taskbar {
+                    crate::tray::add(hwnd);
+                    return 0;
+                }
+                DefWindowProcW(hwnd, msg, wparam, lparam)
+            }
         }
+    }
+
+    /// A click on the tray icon.
+    ///
+    /// Left click on a single cartridge opens it, because that is the only
+    /// thing anyone wants in the overwhelmingly common case and a menu to
+    /// choose from a list of one is a menu for its own sake. Everything else —
+    /// no cartridge, several cartridges, or a right click — gets the menu.
+    fn on_tray_clicked(hwnd: HWND, left: bool) {
+        let cartridges: Vec<crate::tray::Volume> = crate::tray::removable_volumes()
+            .into_iter()
+            // The cheap test, not the retrying one: this is a menu being drawn
+            // under the cursor, and a drive that is plugged in is readable.
+            .filter(|volume| MARKERS.iter().any(|name| volume.root.join(name).is_file()))
+            .collect();
+
+        if left && cartridges.len() == 1 {
+            open_cartridge(&cartridges[0].root);
+            return;
+        }
+
+        match crate::tray::show_menu(hwnd, &cartridges) {
+            0 => {}
+            crate::tray::ID_WIZARD => {
+                crate::launcher::open_wizard(false);
+            }
+            crate::tray::ID_SETTINGS => {
+                crate::launcher::open_wizard(true);
+            }
+            crate::tray::ID_QUIT => {
+                crate::log::line("quitting from the tray");
+                unsafe { DestroyWindow(hwnd) };
+            }
+            chosen => {
+                if let Some(cartridge) = cartridges.get(chosen as usize - 1) {
+                    open_cartridge(&cartridge.root);
+                }
+            }
+        }
+    }
+
+    /// Show the launcher for `root`, reusing the window if one is already open.
+    fn open_cartridge(root: &Path) {
+        let mut guard = TRAY_LAUNCHER.lock().expect("no other thread to poison it");
+
+        if let Some((open_root, child)) = guard.as_mut() {
+            if matches!(child.try_wait(), Ok(None)) {
+                // Still running. If it is showing this cartridge, the window is
+                // the answer — minimised behind a game, most likely.
+                if open_root == root && focus_process(child.id()) {
+                    return;
+                }
+                // A different cartridge, or a window that cannot be found. One
+                // launcher at a time either way.
+                crate::launcher::close(child);
+            }
+        }
+
+        *guard = crate::launcher::open(root).map(|child| (root.to_path_buf(), child));
+    }
+
+    /// Bring a window belonging to `pid` to the front. False if it has none.
+    fn focus_process(pid: u32) -> bool {
+        let mut found: (u32, HWND) = (pid, 0);
+        unsafe {
+            EnumWindows(
+                Some(enum_process_windows),
+                &mut found as *mut (u32, HWND) as LPARAM,
+            );
+        }
+
+        let hwnd = found.1;
+        if hwnd == 0 {
+            return false;
+        }
+
+        unsafe {
+            if IsIconic(hwnd) != 0 {
+                ShowWindow(hwnd, SW_RESTORE);
+            }
+            SetForegroundWindow(hwnd);
+        }
+        true
+    }
+
+    unsafe extern "system" fn enum_process_windows(hwnd: HWND, lparam: LPARAM) -> i32 {
+        let found = &mut *(lparam as *mut (u32, HWND));
+
+        // A minimised window is still visible in this sense; a hidden one — the
+        // launcher before it has drawn, or a helper window — is not, and
+        // raising that would flash nothing at the user.
+        if IsWindowVisible(hwnd) == 0 {
+            return 1;
+        }
+
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == found.0 {
+            found.1 = hwnd;
+            return 0; // stop; the first one is the launcher's only window
+        }
+        1
     }
 
     /// Expand a `dbcv_unitmask` bitfield into drive letters.
