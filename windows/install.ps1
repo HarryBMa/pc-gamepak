@@ -266,4 +266,11 @@ Write-Host " the launcher opens and waits for you to press Play."
 Write-Host ""
 Write-Host " Installed to: $InstallFolder"
 Write-Host ""
-PAUSE
+
+# Only when someone is there to press a key. -Mode means this was scripted —
+# by a package manager, or by an installer that already knows what it wants —
+# and PAUSE is a Read-Host underneath, which fails outright with no console
+# and takes the exit code with it. The install had already succeeded.
+if (-not $Mode -and [Environment]::UserInteractive) {
+    try { PAUSE } catch { }
+}
