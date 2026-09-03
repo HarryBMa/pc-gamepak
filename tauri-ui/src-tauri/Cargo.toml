@@ -32,8 +32,17 @@ windows-sys = { version = "0.52", features = [
     # itself.
     "Win32_Graphics_Dwm",
     # CM_Request_Device_Eject and the SetupAPI walk that finds the device to
-    # ask, which is how Eject works without administrator.
+    # ask, which is how Eject works without administrator where it can.
     "Win32_Devices_DeviceAndDriverInstallation",
+    # ShellExecuteExW with the "runas" verb, to re-run this binary elevated for
+    # the eject that cannot be done any other way.
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    # SHELLEXECUTEINFOW carries an HKEY, so it is gated behind the registry
+    # feature even though nothing here touches the registry.
+    "Win32_System_Registry",
+    # Waiting on that elevated run and reading its exit code.
+    "Win32_System_Threading",
 ] }
 
 # The launcher is started on insert and exits when it is dismissed, so start-up
