@@ -787,6 +787,12 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         .resizable(true)
         .decorations(false)
         .transparent(true)
+        // WebView2 installs an OS-level drag-and-drop handler and Tauri turns it
+        // on by default. It swallows the events before the page sees them, so
+        // HTML5 drag-and-drop inside the webview does nothing — a row could be
+        // gripped and then would not move. Nothing here wants files dropped onto
+        // the window; the wizard wants to reorder its own list.
+        .disable_drag_drop_handler()
         .center()
         .visible(false)
         // Built hidden and shown here, once the page has loaded.

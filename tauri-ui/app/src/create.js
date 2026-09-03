@@ -669,6 +669,9 @@ function draggable(list, rowsOf, onChange) {
     dragFrom = Number(row.dataset.index);
     row.classList.add("is-dragging");
     event.dataTransfer.effectAllowed = "move";
+    // WebKitGTK refuses to start a drag whose dataTransfer carries nothing, so
+    // the index goes in even though the drop reads it from `dragFrom`.
+    event.dataTransfer.setData("text/plain", String(dragFrom));
   });
 
   list.addEventListener("dragover", (event) => {
