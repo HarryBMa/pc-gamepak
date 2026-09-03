@@ -37,8 +37,14 @@ pub const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP
 /// The one icon this process owns.
 const ICON_ID: u32 = 1;
 
-/// `DRIVE_REMOVABLE` from `GetDriveTypeW`.
+/// `GetDriveTypeW` results worth looking at.
+///
+/// `DRIVE_FIXED` is in the list because `GetDriveTypeW` describes the volume
+/// rather than the bus, and calls an NVMe stick in a USB enclosure FIXED —
+/// exactly like the internal disk. Which is the whole hardware this project is
+/// built around, so filtering on REMOVABLE alone found no cartridges at all.
 const DRIVE_REMOVABLE: u32 = 2;
+const DRIVE_FIXED: u32 = 3;
 
 /// Menu ids. Cartridges take 1.., so the fixed entries start well clear of any
 /// plausible number of drive letters.
@@ -54,21 +60,41 @@ pub struct Volume {
     pub name: String,
 }
 
-/// Every removable volume currently mounted.
+/// Every mounted volume that could hold a cartridge.
 ///
-/// Deliberately unfiltered: what counts as a cartridge is the watcher's
-/// question, and it already has an answer it uses for arrivals.
-pub fn removable_volumes() -> Vec<Volume> {
+/// Not the bus test `core` uses before offering a drive to the formatter. That
+/// one opens the device and asks it, because getting it wrong there means
+/// erasing the wrong disk. Nothing here erases anything: the caller keeps the
+/// volumes with a cartridge marker at the root, which is the same definition
+/// the watcher uses to decide whether to open the launcher on a drive that has
+/// just arrived. A stricter tray than that would refuse to reopen a cartridge
+/// it had opened by itself ten seconds earlier.
+///
+/// The system drive is dropped regardless, since it is the one volume that is
+/// certainly not a cartridge however it is labelled.
+pub fn candidate_volumes() -> Vec<Volume> {
     let mask = unsafe { GetLogicalDrives() };
+    let system = std::env::var("SystemDrive")
+        .ok()
+        .and_then(|drive| drive.chars().next())
+        .unwrap_or('C')
+        .to_ascii_uppercase();
 
     (0..26u32)
         .filter(|bit| mask & (1 << bit) != 0)
         .filter_map(|bit| {
             let letter = (b'A' + bit as u8) as char;
+            if letter == system {
+                return None;
+            }
+
             let root = format!("{letter}:\\");
             let wide_root = wide(&root);
 
-            if unsafe { GetDriveTypeW(wide_root.as_ptr()) } != DRIVE_REMOVABLE {
+            if !matches!(
+                unsafe { GetDriveTypeW(wide_root.as_ptr()) },
+                DRIVE_REMOVABLE | DRIVE_FIXED
+            ) {
                 return None;
             }
 

@@ -278,7 +278,7 @@ mod windows_watcher {
     /// choose from a list of one is a menu for its own sake. Everything else —
     /// no cartridge, several cartridges, or a right click — gets the menu.
     fn on_tray_clicked(hwnd: HWND, left: bool) {
-        let cartridges: Vec<crate::tray::Volume> = crate::tray::removable_volumes()
+        let cartridges: Vec<crate::tray::Volume> = crate::tray::candidate_volumes()
             .into_iter()
             // The cheap test, not the retrying one: this is a menu being drawn
             // under the cursor, and a drive that is plugged in is readable.
