@@ -20,7 +20,11 @@
   display: grid;
   grid-template-rows: auto auto 1fr;
   overflow: hidden;
-  border-radius: 18px;
+  /* Square. A rounded corner on a transparent, undecorated window leaves a
+     wedge of nothing that Windows fills with its own border, and the two curves
+     never agree — which is the pale hook that kept appearing at every corner.
+     No radius, no wedge. */
+  border-radius: 0;
   background: linear-gradient(180deg, oklch(0.18 0.006 65) 0%, oklch(0.145 0.005 65) 100%);
   box-shadow:
     inset 0 1px 0 oklch(1 0 0 / 0.07),
@@ -2349,4 +2353,13 @@ dialog form {
 
 #panel-edit {
   gap: 18px;
+}
+
+/* The grid keeps its shape when a slot goes: two slots, two columns. */
+.art-slots:has(.art-slot[hidden]) {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.art-slot[hidden] {
+  display: none;
 }

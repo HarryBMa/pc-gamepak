@@ -127,6 +127,7 @@ const el = {
   setRegisterSteam: $("set-register-steam"),
   editTitle: $("edit-title"),
   editArtSlots: $("edit-art-slots"),
+  editCoverSlot: $("edit-cover-slot"),
   editCover: $("edit-cover"),
   editCoverImg: $("edit-cover-img"),
   editLogo: $("edit-logo"),
@@ -153,6 +154,7 @@ const el = {
   buildMediaTitle: $("build-media-title"),
   buildMediaMeta: $("build-media-meta"),
   artSlots: $("art-slots"),
+  coverSlot: $("cover-slot"),
   slotLogo: $("slot-logo"),
   slotLogoImg: $("slot-logo-img"),
   slotIcon: $("slot-icon"),
@@ -1351,6 +1353,7 @@ function renderBuild() {
 
 
   // --- Artwork ----------------------------------------------------------
+  el.coverSlot.hidden = collection;
   setPlate(el.collectionCover, el.collectionCoverImg, coverSrc);
   setPlate(el.slotLogo, el.slotLogoImg, art.logo?.preview);
   setPlate(el.slotIcon, el.slotIconImg, art.icon?.preview ?? coverSrc);
@@ -2054,6 +2057,10 @@ async function showTab(name) {
       await openEditor(preferred.path);
     }
     el.barText.textContent = editing?.title ? `Edit ${editing.title}` : "Edit cartridge";
+    // Coming back to a cartridge that is already open skips openEditor, and
+    // without this the rail keeps whatever Create left in it — which looked
+    // like switching tabs had thrown the preview away.
+    refreshRail();
     return;
   }
 
@@ -2213,9 +2220,21 @@ async function openEditor(drivePath) {
 
 /** The three slots, showing what is chosen or what the cartridge already has. */
 function renderEditArt() {
+  // A collection's cover is written and then never shown: the launcher paints
+  // the selected game's art, not the cartridge's. Until something displays it,
+  // offering the slot is offering work with nowhere to land.
+  const collection = (editing?.games ?? []).length > 1;
+  el.editCoverSlot.hidden = collection;
+
   setPlate(el.editCover, el.editCoverImg, art.cover?.preview ?? editing?.cover);
   setPlate(el.editLogo, el.editLogoImg, art.logo?.preview ?? editing?.logo);
-  setPlate(el.editIcon, el.editIconImg, art.icon?.preview ?? art.cover?.preview ?? editing?.cover);
+  // Falls back to the cover only when the cartridge genuinely has no icon of
+  // its own, which is what autorun.inf does with it.
+  setPlate(
+    el.editIcon,
+    el.editIconImg,
+    art.icon?.preview ?? editing?.icon ?? art.cover?.preview ?? editing?.cover,
+  );
 }
 
 /**

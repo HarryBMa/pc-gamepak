@@ -42,7 +42,7 @@
   --danger: oklch(0.68 0.19 27);
   --good: oklch(0.76 0.15 145);
 
-  --radius: 16px;
+  --radius: 0px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1); /* ease-out-quint */
 
   /* Type scale. A cartridge is as often read from a couch as from a desk, so

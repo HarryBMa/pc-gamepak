@@ -42,6 +42,12 @@ pub struct CartridgeInfo {
     pub logo: String,
     /// Absolute path to the logo image, or empty string if none.
     pub logo_path: String,
+    /// The picture the drive's icon was made from, as a `data:` URI. The
+    /// launcher never shows it — Explorer does — but the editor has to, or its
+    /// icon slot has nothing to display and falls back to the cover.
+    pub icon: String,
+    /// Absolute path to the icon source, or empty string if none.
+    pub icon_path: String,
     /// The value from the `executable` / `open` key — either a URI or a
     /// relative path on the cartridge. For bundles this is the first game's
     /// executable so keyboard shortcuts (Enter = play) still work.
@@ -192,6 +198,9 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             let logo_path = ini_get(&ini, "collection", "logo")
                 .map(|rel| resolve_cover(root, rel))
                 .unwrap_or_default();
+            let icon_path = ini_get(&ini, "collection", "icon")
+                .map(|rel| resolve_cover(root, rel))
+                .unwrap_or_default();
 
             let games: Vec<GameEntry> = game_sections
                 .iter()
@@ -226,6 +235,8 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 background_path,
                 logo: cover_as_data_uri(&logo_path),
                 logo_path,
+                icon: cover_as_data_uri(&icon_path),
+                icon_path,
                 cover_path,
                 executable,
                 drive_path: drive_path.to_string(),
@@ -260,6 +271,9 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
         let logo_path = ini_get(&ini, "general", "logo")
             .map(|rel| resolve_cover(root, rel))
             .unwrap_or_default();
+        let icon_path = ini_get(&ini, "general", "icon")
+            .map(|rel| resolve_cover(root, rel))
+            .unwrap_or_default();
 
         return Ok(CartridgeInfo {
             title,
@@ -268,6 +282,8 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             background_path,
             logo: cover_as_data_uri(&logo_path),
             logo_path,
+            icon: cover_as_data_uri(&icon_path),
+            icon_path,
             cover_path,
             executable,
             drive_path: drive_path.to_string(),
@@ -306,6 +322,10 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             background_path: String::new(),
             logo: String::new(),
             logo_path: String::new(),
+            // An autorun-only drive has one picture and it is the icon, which
+            // is already standing in as the cover above.
+            icon: String::new(),
+            icon_path: String::new(),
             cover_path,
             // Empty: autorun.inf's open= and shellexecute= are not used as the
             // play target; Play is intentionally disabled for autorun-only drives.

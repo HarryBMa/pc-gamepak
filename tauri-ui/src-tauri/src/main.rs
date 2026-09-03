@@ -939,7 +939,7 @@ fn main() {
             } else {
                 let launcher = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("PC GamePak")
-                    .inner_size(420.0, 560.0)
+                    .inner_size(420.0, 630.0)
                     .resizable(false)
                     .decorations(false)
                     .transparent(true)

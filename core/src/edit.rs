@@ -27,6 +27,14 @@ pub struct Editable {
     /// The collection's art, as a data URI for the preview.
     pub cover: String,
     pub cover_path: String,
+    /// The title logo, as a data URI. Without these the editor's slots had
+    /// nothing to show and fell back to the cover, so a cartridge came back
+    /// claiming artwork it did not have.
+    pub logo: String,
+    pub logo_path: String,
+    /// The drive's icon, as a data URI.
+    pub icon: String,
+    pub icon_path: String,
     pub is_bundle: bool,
     pub games: Vec<EditableGame>,
     /// True when the games live on the cartridge, which is what makes removing
@@ -118,6 +126,10 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         title: info.title,
         cover: info.cover,
         cover_path: info.cover_path,
+        logo: info.logo,
+        logo_path: info.logo_path,
+        icon: info.icon,
+        icon_path: info.icon_path,
         is_bundle: info.is_bundle,
         holds_game: info.holds_game,
         games,

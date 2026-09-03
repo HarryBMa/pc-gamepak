@@ -1194,3 +1194,30 @@ body.is-gamepad :focus {
     transform: scale(1.02);
   }
 }
+
+/* A collection's own logo, top left. It identifies the cartridge; the heading
+   below names whichever game is selected. Small and slightly held back, so it
+   reads as a mark on the case rather than as the artwork. */
+#cart-mark {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  z-index: 3;
+  max-width: 44%;
+  max-height: 46px;
+  object-fit: contain;
+  object-position: left top;
+  opacity: 0.92;
+  filter: drop-shadow(0 2px 10px oklch(0 0 0 / 0.6));
+  pointer-events: none;
+}
+
+#cart-mark[hidden] {
+  display: none;
+}
+
+/* The chrome appears on hover in the same corner's opposite side; when it does,
+   the mark steps back so the two never read as one row of clutter. */
+#card:hover #cart-mark {
+  opacity: 0.5;
+}

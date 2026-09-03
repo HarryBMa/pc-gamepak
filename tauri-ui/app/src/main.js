@@ -34,6 +34,7 @@ const el = {
   placeholder: document.getElementById("cover-placeholder"),
   eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
+  cartMark: document.getElementById("cart-mark"),
   title: document.getElementById("game-title"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
@@ -786,11 +787,21 @@ async function init() {
   // A collection's mark names the collection, so the heading under it stays
   // free to name whichever game the rail has picked.
   const collected = isCollection();
+  // On a single game the logo *is* the title, printed instead of it. On a
+  // collection it belongs to the cartridge rather than to whichever game is
+  // selected — printing it over each one put Mirror's Edge's logo across
+  // Hollow Knight — so it becomes a small mark in the corner and the heading
+  // goes back to naming the game.
   renderTitle(
     collected ? games()[0]?.title ?? cartridge.title : cartridge.title,
-    cartridge.logo,
-    collected ? cartridge.title || "Collection" : null,
+    collected ? null : cartridge.logo,
+    null,
   );
+  if (collected && cartridge.logo) {
+    el.cartMark.src = cartridge.logo;
+    el.cartMark.alt = `${cartridge.title || "Collection"} logo`;
+    el.cartMark.hidden = false;
+  }
   renderIdentity(cartridge);
   renderSpecs(cartridge);
   renderPaths(cartridge);
@@ -799,9 +810,10 @@ async function init() {
   // game the one Play acts on, and the title becomes the selected game.
   if (collected) {
     el.card.classList.add("is-collection");
-    // The mark already prints the collection's name. The eyebrow only stands in
-    // when there is no mark to print it.
-    const marked = !el.titleLogo.hidden;
+    // The mark in the corner already prints the collection's name. The eyebrow
+    // only stands in when there is no mark to print it — otherwise the window
+    // says "Tomb Raider Collection" twice, once as a picture and once as type.
+    const marked = !el.cartMark.hidden;
     el.eyebrow.hidden = marked;
     if (!marked) el.eyebrow.textContent = cartridge.title || "Collection";
     el.gameList.hidden = false;
@@ -977,6 +989,20 @@ document.addEventListener("keydown", (event) => {
       event.preventDefault();
       select(index);
       doPlay();
+    }
+    return;
+  }
+
+  // Up and down move the selection, which is what the rail is for. They used
+  // to scroll it, so a collection could be scrolled past a game without ever
+  // choosing one — and Play still acted on whatever was selected before.
+  if (!sheetOpen && isCollection() && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const next = selected + step;
+    if (next >= 0 && next < games().length) {
+      select(next);
+      el.gameList.children[next]?.scrollIntoView({ block: "nearest" });
     }
     return;
   }
