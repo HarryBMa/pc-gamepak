@@ -1762,6 +1762,28 @@ async function write() {
     if (result.registeredWithSteam) parts.push("Registered as a Steam library.");
     for (const warning of result.warnings ?? []) parts.push(warning);
 
+    // Tuning elevates, so it happens here rather than inside the copy: the UAC
+    // prompt lands once, after the long part is over, and declining it costs
+    // nothing that has already been written. Before the eject, because tuning a
+    // cartridge that has just been unmounted does nothing at all.
+    //
+    // It was in the plan and in the summary before it was in the code: the run
+    // showed "Tune Windows for this cartridge", finished, and reported "Windows
+    // tuned" without anything having called apply_tuning. Which is why the
+    // cartridges that had been through this wizard were still being scanned.
+    if (on.tune) {
+      try {
+        const tuned = await invoke("apply_tuning", {
+          drivePath: selectedDrive,
+          tweaks: ["defender", "indexing"],
+          applying: true,
+        });
+        parts.push(...tuned);
+      } catch (error) {
+        parts.push(`Written, but Windows was not tuned: ${error}`);
+      }
+    }
+
     // Ejecting is a step of the plan, not an afterthought, so it reports into
     // the same status line.
     if (on.eject) {
@@ -2651,8 +2673,12 @@ async function demoInvoke(command, args) {
       ];
     case "apply_tuning":
       return args.applying
-        ? ["Excluded the cartridge from Defender scanning."]
-        : ["Defender scans the cartridge again."];
+        ? [
+            "Defender scans D:\\ again — left excluded by a cartridge that has since moved letter.",
+            "Excluded the cartridge from Defender scanning.",
+            "Search indexing switched off for the cartridge.",
+          ]
+        : ["Defender scans the cartridge again.", "Search indexing switched back on."];
     case "pick_cover_image":
       return { path: "/home/harry/Pictures/collection.jpg", preview: "src/demo/gow-collection.jpg" };
     case "game_cover":

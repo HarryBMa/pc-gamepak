@@ -12,6 +12,13 @@
 //! that quietly weakens someone's malware scanning and cannot undo it is not
 //! a tool anyone should trust. Nothing here runs unless it is asked for.
 //!
+//! The Defender exclusion is the one with a memory. `Add-MpPreference` writes a
+//! persistent record keyed on a path, and the only path a cartridge has is a
+//! drive letter Windows hands out from whatever happens to be free — so the
+//! cartridge that was `D:` last week is `H:` today, and `D:` is now something
+//! else that nobody chose to stop scanning. Every apply reconciles that; see
+//! `stale_drive_exclusions`.
+//!
 //! A third setting is worth changing and is deliberately *not* automated:
 //! Windows sets removable drives to "Quick removal", which turns write caching
 //! off. "Better performance" is the right choice for a cartridge that is always
@@ -61,15 +68,124 @@ pub fn script_for(tweak: Tweak, drive: &str, applying: bool) -> Result<String, S
     })
 }
 
+/// Exclusions naming a drive root that is not a cartridge any more.
+///
+/// A cartridge cannot be excluded by anything steadier than its letter.
+/// `\\?\Volume{...}\` would be steady, but Defender does not document
+/// accepting it, and an exclusion that is silently ignored is worse than none:
+/// it reads as protection on a screen while the scanner carries on regardless.
+/// So the letter stays, and the drift it causes is cleaned up instead.
+///
+/// Only bare roots count — `D:\`, which is the shape this tool writes. A path
+/// any deeper was written by somebody else, on purpose, and is not ours to
+/// touch.
+pub fn stale_drive_exclusions(exclusions: &[String], cartridges: &[String]) -> Vec<String> {
+    let live: Vec<char> = cartridges
+        .iter()
+        .filter_map(|root| drive_letter(root).ok())
+        .collect();
+
+    exclusions
+        .iter()
+        .filter(|exclusion| root_letter(exclusion).is_some_and(|letter| !live.contains(&letter)))
+        .cloned()
+        .collect()
+}
+
+/// The letter of an exclusion that is exactly a drive root, and nothing else.
+fn root_letter(exclusion: &str) -> Option<char> {
+    let trimmed = exclusion.trim();
+    let mut chars = trimmed.chars();
+    let letter = chars.next()?;
+    if !letter.is_ascii_alphabetic() {
+        return None;
+    }
+    let rest: String = chars.collect();
+    matches!(rest.as_str(), ":" | ":\\" | ":/").then_some(letter.to_ascii_uppercase())
+}
+
+/// Take one exclusion back off.
+pub fn drop_exclusion_script(path: &str) -> String {
+    format!("Remove-MpPreference -ExclusionPath '{path}'")
+}
+
 /// Everything a run would do, for showing before anything is changed.
 ///
 /// The user sees the actual commands. This is elevated, it touches malware
 /// scanning, and "trust me" is not good enough.
 pub fn plan(drive: &str, tweaks: &[Tweak], applying: bool) -> Result<Vec<String>, String> {
-    tweaks
+    let mut commands: Vec<String> = stale_paths(drive, tweaks, applying)
         .iter()
-        .map(|tweak| script_for(*tweak, drive, applying))
+        .map(|path| drop_exclusion_script(path))
+        .collect();
+
+    for tweak in tweaks {
+        commands.push(script_for(*tweak, drive, applying)?);
+    }
+    Ok(commands)
+}
+
+/// Exclusions this run should take back, or nothing when it should not.
+///
+/// Only while adding one: undoing is already a removal, and a run that put
+/// nothing back would be reaching past what it was asked to do.
+fn stale_paths(drive: &str, tweaks: &[Tweak], applying: bool) -> Vec<String> {
+    if !applying || !tweaks.contains(&Tweak::DefenderExclusion) {
+        return Vec::new();
+    }
+    stale_drive_exclusions(&defender_exclusions(), &cartridge_roots(drive))
+}
+
+/// Every drive that currently holds a cartridge, plus the one being tuned.
+///
+/// The one being tuned is included outright: it counts from the moment the
+/// wizard is pointed at it, which can be before anything has been written on
+/// it, and excluding a drive and then immediately un-excluding it would be a
+/// remarkable way to spend a UAC prompt.
+#[cfg(windows)]
+fn cartridge_roots(drive: &str) -> Vec<String> {
+    crate::drives::list_drives()
+        .into_iter()
+        .filter(|target| target.has_cartridge)
+        .map(|target| target.path)
+        .chain(std::iter::once(drive.to_string()))
         .collect()
+}
+
+#[cfg(not(windows))]
+fn cartridge_roots(drive: &str) -> Vec<String> {
+    vec![drive.to_string()]
+}
+
+/// Every path Defender is currently told to skip.
+///
+/// Read without elevation — `Get-MpPreference` answers to anyone — so the plan
+/// is complete before the prompt that changes anything.
+#[cfg(windows)]
+fn defender_exclusions() -> Vec<String> {
+    let Ok(out) = crate::proc::command("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-MpPreference).ExclusionPath",
+        ])
+        .output()
+    else {
+        return Vec::new();
+    };
+
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn defender_exclusions() -> Vec<String> {
+    Vec::new()
 }
 
 /// A drive letter, from whatever form the window sent.
@@ -86,33 +202,59 @@ fn drive_letter(drive: &str) -> Result<char, String> {
 #[cfg(windows)]
 pub fn apply(drive: &str, tweaks: &[Tweak], applying: bool) -> Result<Vec<String>, String> {
     let mut done = Vec::new();
+
+    let stale = stale_paths(drive, tweaks, applying);
+    for path in &stale {
+        elevate(&drop_exclusion_script(path)).map_err(|e| {
+            format!("{path} could not be taken off Defender's list. Nothing else was changed. {e}")
+        })?;
+    }
+    if !stale.is_empty() {
+        done.push(format!(
+            "Defender scans {} again — left excluded by a cartridge that has since moved letter.",
+            stale.join(", ")
+        ));
+    }
+
     for tweak in tweaks {
         let script = script_for(*tweak, drive, applying)?;
-        // Each tweak is elevated on its own, so the wizard itself never has to
-        // run as administrator.
-        let status = crate::proc::command("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                &format!(
-                    "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden \
-                     -ArgumentList '-NoProfile','-NonInteractive','-Command',\"{}\"",
-                    script.replace('"', "`\"")
-                ),
-            ])
-            .status()
-            .map_err(|e| format!("could not run PowerShell: {e}"))?;
-
-        if !status.success() {
-            return Err(format!(
-                "{} did not go through. Nothing else was changed.",
+        elevate(&script).map_err(|e| {
+            format!(
+                "{} did not go through. Nothing else was changed. {e}",
                 tweak.describe(applying)
-            ));
-        }
+            )
+        })?;
         done.push(tweak.describe(applying).to_string());
     }
     Ok(done)
+}
+
+/// Run one command as administrator.
+///
+/// Each is elevated on its own, so the wizard itself never has to run as
+/// administrator, and a run that is declined halfway leaves behind only the
+/// steps that were already agreed to.
+#[cfg(windows)]
+fn elevate(script: &str) -> Result<(), String> {
+    let status = crate::proc::command("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden \
+                 -ArgumentList '-NoProfile','-NonInteractive','-Command',\"{}\"",
+                script.replace('"', "`\"")
+            ),
+        ])
+        .status()
+        .map_err(|e| format!("could not run PowerShell: {e}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(String::new())
+    }
 }
 
 #[cfg(not(windows))]
@@ -164,6 +306,53 @@ mod tests {
 
         let on = script_for(Tweak::SearchIndexing, "E:", false).unwrap();
         assert!(on.contains("IndexingEnabled=$true"), "{on}");
+    }
+
+    #[test]
+    fn a_root_exclusion_is_stale_unless_a_cartridge_is_on_that_letter() {
+        let excluded = |paths: &[&str]| paths.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+
+        // The case that started this. A cartridge was tuned while it was D:,
+        // Windows gave it H: the next time, and the exclusion stayed pointing
+        // at a letter that now belongs to something else — or to nothing.
+        assert_eq!(
+            stale_drive_exclusions(&excluded(&["D:\\", "H:\\"]), &excluded(&["H:\\", "G:\\"])),
+            vec!["D:\\".to_string()]
+        );
+
+        // Written in any of the shapes Windows hands back.
+        assert_eq!(
+            stale_drive_exclusions(&excluded(&["d:", "E:/"]), &["G:\\".to_string()]),
+            vec!["d:".to_string(), "E:/".to_string()]
+        );
+
+        // Somebody else's exclusion, on purpose, and deeper than a root. Not
+        // this tool's to remove however long it has been there.
+        assert!(stale_drive_exclusions(
+            &excluded(&[
+                r"C:\Users\Harry\.gradle",
+                r"D:\Games",
+                r"\\server\share",
+                "%ProgramData%",
+            ]),
+            &[]
+        )
+        .is_empty());
+
+        // Every cartridge accounted for, nothing to do.
+        assert!(
+            stale_drive_exclusions(&excluded(&["G:\\"]), &excluded(&["G:\\", "H:\\"])).is_empty()
+        );
+    }
+
+    #[test]
+    fn cleaning_up_is_offered_only_while_adding_an_exclusion() {
+        // Undoing is already a removal; sweeping other entries at the same time
+        // would be doing something nobody asked for under cover of a UAC prompt
+        // they agreed to for a different reason.
+        assert!(stale_paths("G:\\", &[Tweak::DefenderExclusion], false).is_empty());
+        // And indexing has no persistent record to go stale in the first place.
+        assert!(stale_paths("G:\\", &[Tweak::SearchIndexing], true).is_empty());
     }
 
     #[test]

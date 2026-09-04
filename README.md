@@ -467,6 +467,19 @@ cartridge, showing the exact commands first and offering to undo them:
   stream over.
 - **Search indexing off** for the volume, for the same reason in the background.
 
+The Defender exclusion is the one with a memory. `Add-MpPreference` records a
+*path*, and the only path a cartridge has is a drive letter Windows hands out
+from whatever is free — so the cartridge that was `D:` last week is `H:` today,
+and `D:` is now something else nobody chose to stop scanning. Tuning a cartridge
+therefore also takes back any exclusion left on a bare drive root that no longer
+holds a cartridge. Those removals are in the plan with everything else, so an
+exclusion you added yourself can be seen before you agree to the prompt; only
+bare roots are ever offered, never a path any deeper.
+
+A cartridge that is unplugged when you tune another one will have its exclusion
+taken back too — there is no way to tell an unplugged cartridge from a letter
+that has moved on. Tuning it again when it is next plugged in puts it back.
+
 The third is worth doing by hand, once per cartridge:
 
 - **Device Manager → Disk drives → your cartridge → Policies → Better
