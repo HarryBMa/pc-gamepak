@@ -137,6 +137,12 @@ const el = {
   editIcon: $("edit-icon"),
   editIconImg: $("edit-icon-img"),
   editGames: $("edit-games"),
+  editTuneGroup: $("edit-tune-group"),
+  editTunePlan: $("edit-tune-plan"),
+  btnTune: $("btn-tune"),
+  btnUntune: $("btn-untune"),
+  btnTuneRun: $("btn-tune-run"),
+  btnTuneCancel: $("btn-tune-cancel"),
   editStatus: $("edit-status"),
 
   changeGame: $("btn-change-game"),
@@ -2298,6 +2304,10 @@ async function openEditor(drivePath) {
   renderEditArt();
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
+  // Windows settings, on Windows. A cartridge opened on Linux has neither
+  // Defender nor Search to switch off.
+  el.editTuneGroup.hidden = platform !== "windows";
+  resetTune();
   if (el.pickDialog.open) el.pickDialog.close();
   renderEditGames();
   renderEditMedia();
@@ -2363,6 +2373,99 @@ function renderEditGames() {
 }
 
 
+
+/* --------------------------------------------------------------------------
+   Tuning a cartridge that already exists
+
+   The same two settings the create flow offers, reachable for a cartridge that
+   was written before anyone thought to ask for them — which is every cartridge
+   made while the create flow was reporting "Windows tuned" without calling
+   anything. It also carries the reconciliation, so the exclusion an older
+   cartridge left on a drive letter that has since moved is taken back from
+   here too.
+   -------------------------------------------------------------------------- */
+
+/** Which direction the shown plan is for, or null when none is shown. */
+let tunePending = null;
+
+const TWEAKS = ["defender", "indexing"];
+
+/**
+ * Show the commands, and nothing else, until they are agreed to.
+ *
+ * This is elevated and one of the two commands weakens malware scanning, so it
+ * is the commands themselves that get shown — not a description of them, and
+ * not a checkbox that stands in for having read anything.
+ */
+async function showTunePlan(applying) {
+  if (!editing?.drivePath) return;
+  el.editStatus.textContent = "Reading what would change…";
+
+  let commands;
+  try {
+    commands = await invoke("tuning_plan", {
+      drivePath: editing.drivePath,
+      tweaks: TWEAKS,
+      applying,
+    });
+  } catch (error) {
+    el.editStatus.textContent = String(error);
+    return;
+  }
+
+  tunePending = applying;
+  el.editTunePlan.replaceChildren();
+  for (const command of commands) {
+    const li = document.createElement("li");
+    li.textContent = command;
+    el.editTunePlan.append(li);
+  }
+  el.editTunePlan.hidden = commands.length === 0;
+  el.editStatus.textContent =
+    "These run as administrator, one prompt each.";
+  showTuneButtons(true);
+}
+
+function showTuneButtons(pending) {
+  el.btnTune.hidden = pending;
+  el.btnUntune.hidden = pending;
+  el.btnTuneRun.hidden = !pending;
+  el.btnTuneCancel.hidden = !pending;
+}
+
+function resetTune() {
+  tunePending = null;
+  el.editTunePlan.hidden = true;
+  el.editTunePlan.replaceChildren();
+  el.editStatus.textContent = "";
+  showTuneButtons(false);
+}
+
+async function runTuning() {
+  if (tunePending === null) return;
+  const applying = tunePending;
+  el.btnTuneRun.disabled = true;
+  el.editStatus.textContent = "Waiting for Windows…";
+
+  try {
+    const done = await invoke("apply_tuning", {
+      drivePath: editing.drivePath,
+      tweaks: TWEAKS,
+      applying,
+    });
+    resetTune();
+    status(done.join(" "), "good");
+  } catch (error) {
+    el.editStatus.textContent = String(error);
+  } finally {
+    el.btnTuneRun.disabled = false;
+  }
+}
+
+el.btnTune.addEventListener("click", () => showTunePlan(true));
+el.btnUntune.addEventListener("click", () => showTunePlan(false));
+el.btnTuneRun.addEventListener("click", runTuning);
+el.btnTuneCancel.addEventListener("click", resetTune);
 
 async function saveEdits() {
   el.editStatus.textContent = "Saving…";

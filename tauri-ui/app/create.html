@@ -316,6 +316,33 @@
               <ul id="edit-games" aria-label="Games on this cartridge"></ul>
             </div>
 
+            <div class="build-group" id="edit-tune-group" hidden>
+              <p class="build-label">Windows</p>
+              <p class="hint">
+                Defender's real-time scanner and Search indexing both walk a
+                cartridge whenever it is plugged in, competing for the slowest
+                link in the machine — and a volume Defender is mid-scan on is a
+                volume that will not eject. Switching them off for this drive
+                needs administrator, so Windows will ask.
+              </p>
+              <ul id="edit-tune-plan" class="tune-plan" aria-label="Commands that will run" hidden></ul>
+              <div class="tune-actions">
+                <button id="btn-tune" class="link" type="button">
+                  Tune Windows for this cartridge
+                </button>
+                <button id="btn-untune" class="link" type="button"
+                        title="Put Defender scanning and Search indexing back">
+                  Put it back
+                </button>
+                <button id="btn-tune-run" class="link" type="button" hidden>
+                  Run these commands
+                </button>
+                <button id="btn-tune-cancel" class="link" type="button" hidden>
+                  Cancel
+                </button>
+              </div>
+            </div>
+
             <p id="edit-status" class="hint" role="status" aria-live="polite"></p>
           </div>
         </div>

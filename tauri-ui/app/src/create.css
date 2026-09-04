@@ -2370,3 +2370,29 @@ dialog form {
 .drive--unmounted {
   border-style: dashed;
 }
+
+/* The commands a tuning run would execute, printed before it runs. Monospace
+   and wrapped rather than scrolled: this is the thing the user is being asked
+   to agree to, so none of it should be off the edge of the box. */
+.tune-plan {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  list-style: none;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  border-radius: 8px;
+  background: oklch(0 0 0 / 0.26);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tune-plan li + li {
+  margin-top: 6px;
+}
+
+.tune-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
