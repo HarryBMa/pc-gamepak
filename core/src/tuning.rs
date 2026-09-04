@@ -234,6 +234,14 @@ pub fn apply(drive: &str, tweaks: &[Tweak], applying: bool) -> Result<Vec<String
 /// Each is elevated on its own, so the wizard itself never has to run as
 /// administrator, and a run that is declined halfway leaves behind only the
 /// steps that were already agreed to.
+///
+/// `-PassThru` and the explicit `exit` are the whole point of the shape.
+/// `Start-Process -Wait` reports whether *it* managed to start something, not
+/// what that something then did — so without them a cmdlet that failed inside
+/// the elevated window was indistinguishable from one that worked, which is how
+/// a `Remove-MpPreference` that removed nothing got reported as a tidied-up
+/// exclusion. `$ErrorActionPreference` is escaped so the outer shell hands it
+/// on rather than expanding it here, where it would mean nothing.
 #[cfg(windows)]
 fn elevate(script: &str) -> Result<(), String> {
     let status = crate::proc::command("powershell.exe")
@@ -242,18 +250,23 @@ fn elevate(script: &str) -> Result<(), String> {
             "-NonInteractive",
             "-Command",
             &format!(
-                "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden \
-                 -ArgumentList '-NoProfile','-NonInteractive','-Command',\"{}\"",
+                "$p = Start-Process powershell -Verb RunAs -Wait -PassThru -WindowStyle Hidden \
+                 -ArgumentList '-NoProfile','-NonInteractive','-Command',\
+                 \"`$ErrorActionPreference='Stop'; {}\"; exit $p.ExitCode",
                 script.replace('"', "`\"")
             ),
         ])
         .status()
         .map_err(|e| format!("could not run PowerShell: {e}"))?;
 
-    if status.success() {
-        Ok(())
-    } else {
-        Err(String::new())
+    match status.code() {
+        Some(0) => Ok(()),
+        // 1223 is ERROR_CANCELLED arriving through Start-Process: the prompt
+        // appeared and was dismissed, which is an answer rather than a fault
+        // and should not be read out as one.
+        Some(1223) => Err("the administrator prompt was dismissed.".to_string()),
+        Some(code) => Err(format!("PowerShell exited with {code}.")),
+        None => Err("PowerShell was stopped before it finished.".to_string()),
     }
 }
 

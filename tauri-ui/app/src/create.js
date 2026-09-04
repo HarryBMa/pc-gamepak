@@ -137,13 +137,14 @@ const el = {
   editIcon: $("edit-icon"),
   editIconImg: $("edit-icon-img"),
   editGames: $("edit-games"),
-  editTuneGroup: $("edit-tune-group"),
-  editTunePlan: $("edit-tune-plan"),
+  editStatus: $("edit-status"),
+  tuneNow: $("tune-now"),
+  tunePlan: $("tune-plan"),
+  tuneStatus: $("tune-status"),
   btnTune: $("btn-tune"),
   btnUntune: $("btn-untune"),
   btnTuneRun: $("btn-tune-run"),
   btnTuneCancel: $("btn-tune-cancel"),
-  editStatus: $("edit-status"),
 
   changeGame: $("btn-change-game"),
   changeMedia: $("btn-change-media"),
@@ -2117,6 +2118,8 @@ function applySettings() {
   el.setFormat.checked = Boolean(settings.defaultFormat);
   // Tuning edits Defender and Search, which exist on one platform.
   el.setTuneRow.hidden = platform !== "windows";
+  el.tuneNow.hidden = platform !== "windows";
+  resetTune();
 }
 
 /** Settings changed, so anything derived from them is stale. */
@@ -2304,10 +2307,6 @@ async function openEditor(drivePath) {
   renderEditArt();
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
-  // Windows settings, on Windows. A cartridge opened on Linux has neither
-  // Defender nor Search to switch off.
-  el.editTuneGroup.hidden = platform !== "windows";
-  resetTune();
   if (el.pickDialog.open) el.pickDialog.close();
   renderEditGames();
   renderEditMedia();
@@ -2377,12 +2376,16 @@ function renderEditGames() {
 /* --------------------------------------------------------------------------
    Tuning a cartridge that already exists
 
-   The same two settings the create flow offers, reachable for a cartridge that
-   was written before anyone thought to ask for them — which is every cartridge
-   made while the create flow was reporting "Windows tuned" without calling
-   anything. It also carries the reconciliation, so the exclusion an older
-   cartridge left on a drive letter that has since moved is taken back from
-   here too.
+   Under the switch in Settings that says cartridges should be tuned, because
+   that switch only governs cartridges not written yet — and the ones that need
+   it are the ones already on the shelf, written while the create flow was
+   reporting "Windows tuned" without calling anything. It also carries the
+   reconciliation, so the exclusion an older cartridge left on a drive letter
+   that has since moved is taken back from here too.
+
+   It acts on the drive chosen on the Create tab. Tuning is per-volume and
+   there is no such thing as tuning in general, so the alternative was picking a
+   cartridge for the user or asking them twice.
    -------------------------------------------------------------------------- */
 
 /** Which direction the shown plan is for, or null when none is shown. */
@@ -2398,31 +2401,34 @@ const TWEAKS = ["defender", "indexing"];
  * not a checkbox that stands in for having read anything.
  */
 async function showTunePlan(applying) {
-  if (!editing?.drivePath) return;
-  el.editStatus.textContent = "Reading what would change…";
+  if (!selectedDrive) {
+    el.tuneStatus.textContent =
+      "Choose a cartridge on the Create tab first — this is set per drive.";
+    return;
+  }
+  el.tuneStatus.textContent = "Reading what would change…";
 
   let commands;
   try {
     commands = await invoke("tuning_plan", {
-      drivePath: editing.drivePath,
+      drivePath: selectedDrive,
       tweaks: TWEAKS,
       applying,
     });
   } catch (error) {
-    el.editStatus.textContent = String(error);
+    el.tuneStatus.textContent = String(error);
     return;
   }
 
   tunePending = applying;
-  el.editTunePlan.replaceChildren();
+  el.tunePlan.replaceChildren();
   for (const command of commands) {
     const li = document.createElement("li");
     li.textContent = command;
-    el.editTunePlan.append(li);
+    el.tunePlan.append(li);
   }
-  el.editTunePlan.hidden = commands.length === 0;
-  el.editStatus.textContent =
-    "These run as administrator, one prompt each.";
+  el.tunePlan.hidden = commands.length === 0;
+  el.tuneStatus.textContent = "These run as administrator, one prompt each.";
   showTuneButtons(true);
 }
 
@@ -2435,9 +2441,9 @@ function showTuneButtons(pending) {
 
 function resetTune() {
   tunePending = null;
-  el.editTunePlan.hidden = true;
-  el.editTunePlan.replaceChildren();
-  el.editStatus.textContent = "";
+  el.tunePlan.hidden = true;
+  el.tunePlan.replaceChildren();
+  el.tuneStatus.textContent = "";
   showTuneButtons(false);
 }
 
@@ -2445,18 +2451,18 @@ async function runTuning() {
   if (tunePending === null) return;
   const applying = tunePending;
   el.btnTuneRun.disabled = true;
-  el.editStatus.textContent = "Waiting for Windows…";
+  el.tuneStatus.textContent = "Waiting for Windows…";
 
   try {
     const done = await invoke("apply_tuning", {
-      drivePath: editing.drivePath,
+      drivePath: selectedDrive,
       tweaks: TWEAKS,
       applying,
     });
     resetTune();
-    status(done.join(" "), "good");
+    el.tuneStatus.textContent = done.join(" ");
   } catch (error) {
-    el.editStatus.textContent = String(error);
+    el.tuneStatus.textContent = String(error);
   } finally {
     el.btnTuneRun.disabled = false;
   }

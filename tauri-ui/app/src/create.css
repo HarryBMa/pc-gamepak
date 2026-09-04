@@ -2396,3 +2396,9 @@ dialog form {
   flex-wrap: wrap;
   gap: 14px;
 }
+
+/* Indented under the switch it belongs to, so it reads as that switch's
+   "and do it now" rather than as another setting of its own. */
+.tune-now {
+  margin: -4px 0 4px 30px;
+}
