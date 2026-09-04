@@ -1,0 +1,261 @@
+/* ==========================================================================
+   PC-GAMEPAK: RETRO ARCADE & CRT TERMINAL SKIN (retro.css)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+:root {
+  --retro-bg: #0d0f12;
+  --retro-surface: #141820;
+  --retro-card-bg: #181d28;
+  --retro-card-hover: #222836;
+  --retro-border: #333d52;
+  --retro-border-active: #ffb000;
+  --retro-amber: #ffb000;
+  --retro-amber-glow: rgba(255, 176, 0, 0.4);
+  --retro-green: #33ff66;
+  --retro-cyan: #00e5ff;
+  --retro-red: #ff3344;
+  --retro-text: #c5cbd3;
+  --retro-text-bright: #ffffff;
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-term: 'VT323', monospace;
+}
+
+/* Base Skin Container */
+.skin-retro {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--retro-bg);
+  color: var(--retro-text);
+  font-family: var(--font-term);
+  overflow: hidden;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 4px solid #202633;
+}
+
+/* CRT Scanlines & Screen Curvature Effect */
+.skin-retro::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: 
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+  z-index: 999;
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+}
+
+.skin-retro::after {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Window Titlebar / Header */
+.skin-retro .retro-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--retro-surface);
+  border-bottom: 2px solid var(--retro-border);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--retro-amber);
+  text-shadow: 0 0 8px var(--retro-amber-glow);
+}
+
+/* Cartridge / Game List View */
+.skin-retro .game-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Custom Scrollbar for Retro List */
+.skin-retro .game-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+.skin-retro .game-list-container::-webkit-scrollbar-track {
+  background: var(--retro-bg);
+  border-left: 1px solid var(--retro-border);
+}
+.skin-retro .game-list-container::-webkit-scrollbar-thumb {
+  background: var(--retro-border);
+  border: 1px solid var(--retro-bg);
+}
+.skin-retro .game-list-container::-webkit-scrollbar-thumb:hover {
+  background: var(--retro-amber);
+}
+
+/* Game / Cartridge Card Item */
+.skin-retro .game-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--retro-card-bg);
+  border: 2px solid var(--retro-border);
+  cursor: pointer;
+  transition: all 0.08s ease;
+  position: relative;
+}
+
+.skin-retro .game-card:hover {
+  border-color: var(--retro-cyan);
+  background: var(--retro-card-hover);
+}
+
+.skin-retro .game-card.active {
+  border: 2px solid var(--retro-amber);
+  background: #241e12;
+  box-shadow: inset 0 0 12px rgba(255, 176, 0, 0.15), 0 0 10px rgba(255, 176, 0, 0.25);
+}
+
+/* Cartridge Thumbnail / Cover */
+.skin-retro .game-card .thumb {
+  width: 40px;
+  height: 52px;
+  object-fit: cover;
+  border: 1px solid #000;
+  filter: contrast(1.15) saturate(0.85);
+}
+
+/* Game Info / Title */
+.skin-retro .game-card .game-info {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.skin-retro .game-card .game-title {
+  font-family: var(--font-term);
+  font-size: 22px;
+  color: var(--retro-text-bright);
+  letter-spacing: 0.5px;
+}
+
+.skin-retro .game-card.active .game-title {
+  color: var(--retro-amber);
+  text-shadow: 0 0 6px var(--retro-amber-glow);
+}
+
+.skin-retro .game-card .cartridge-meta {
+  font-family: var(--font-term);
+  font-size: 14px;
+  color: #727d94;
+}
+
+/* Hardware LED Drive Status Indicator */
+.skin-retro .drive-led {
+  width: 10px;
+  height: 10px;
+  background-color: #222b3d;
+  border: 1px solid #0f141d;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+}
+
+.skin-retro .game-card.active .drive-led {
+  background-color: var(--retro-amber);
+  box-shadow: 0 0 8px var(--retro-amber), inset 0 1px 1px rgba(255,255,255,0.5);
+  animation: led-pulse 2s infinite ease-in-out;
+}
+
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Active Banner / Selected Title Display */
+.skin-retro .selected-banner {
+  padding: 8px 16px;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--retro-cyan);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+  border-top: 1px dashed var(--retro-border);
+  background: rgba(0, 229, 255, 0.03);
+  text-transform: uppercase;
+}
+
+/* Action Control Bar (Play & Eject Cartridge) */
+.skin-retro .controls-bar {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: var(--retro-surface);
+  border-top: 2px solid var(--retro-border);
+}
+
+/* Chunky Arcade Play Button */
+.skin-retro .btn-arcade-play {
+  flex-grow: 1;
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  background: var(--retro-amber);
+  color: #111;
+  border: 3px solid #ffca4d;
+  border-right-color: #b37b00;
+  border-bottom-color: #b37b00;
+  padding: 14px;
+  text-align: center;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-weight: bold;
+  box-shadow: 0 5px 0 #805800, 0 8px 12px rgba(0, 0, 0, 0.6);
+  transition: all 0.05s ease;
+}
+
+.skin-retro .btn-arcade-play:hover {
+  background: #ffc233;
+  box-shadow: 0 5px 0 #805800, 0 0 16px rgba(255, 176, 0, 0.6);
+}
+
+.skin-retro .btn-arcade-play:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #805800, 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Hardware Eject / Unmount Button */
+.skin-retro .btn-arcade-eject {
+  width: 56px;
+  background: #232a3a;
+  border: 3px solid #3c4966;
+  border-right-color: #151a24;
+  border-bottom-color: #151a24;
+  color: #8fa0b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  box-shadow: 0 5px 0 #0d1017, 0 8px 12px rgba(0, 0, 0, 0.6);
+  transition: all 0.05s ease;
+}
+
+.skin-retro .btn-arcade-eject:hover {
+  color: var(--retro-red);
+  border-color: #58688f;
+  background: #2a3346;
+}
+
+.skin-retro .btn-arcade-eject:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #0d1017, 0 2px 4px rgba(0, 0, 0, 0.5);
+}
