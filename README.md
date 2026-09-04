@@ -92,6 +92,11 @@ A shelf of cartridges is a library you can hold. Each one carries a game, its
 cover art and nothing else, so what is on it is obvious from across the room and
 from the drive's own name in Explorer.
 
+<img width="480" alt="A cartridge is pushed into its enclosure; the launcher appears on the screen behind it showing Stardew Valley's cover art, and then reports Ejecting" src="docs/cartridge-demo.gif" />
+
+That is the whole loop: plug it in, the launcher is there, press Play, press
+Eject, take it out.
+
 The build documented here uses an **M.2 2230 NVMe** stick in a USB enclosure, but
 nothing in the software requires that: any removable drive your OS automounts
 will do — a SATA SSD in a dock, an SD card, a USB stick, an external HDD. The
@@ -156,8 +161,9 @@ message loop and nothing else — see [Idle cost](#idle-cost).
 ### With a controller
 
 A cartridge next to a television wants a controller, not a mouse. Plug one in
-and the launcher picks it up — no setting, and nothing resident: the polling
-loop only exists while a pad is connected and the window is open.
+and the launcher picks it up — no setting, nothing to install, and nothing
+resident: the polling loop exists only while a pad is connected and the window
+is open, which is a few seconds per insert.
 
 | Control | Action |
 |---|---|
@@ -168,18 +174,31 @@ loop only exists while a pad is connected and the window is open.
 | **Start** | Play the selected game |
 
 The cursor starts on Play — on a collection too, since one game is already
-selected — so a pad and a cartridge is: plug in, press A. The rail is one
-d-pad press away when you want a different game. Holding a direction repeats
-after a pause, and a controller can only move focus and click — exactly what a
-person at the keyboard can reach, and nothing more.
+selected — so a pad and a cartridge is: plug in, press A. The rail is one d-pad
+press away when you want a different game, and holding a direction repeats after
+a pause. A controller can only move focus and press what is focused, which is
+exactly what a person at the keyboard can reach and nothing more.
 
 With a pad connected the prompts change with it: the keycaps give way to each
 action's own icon, because face-button lettering differs between Xbox,
 PlayStation and Switch and a printed **A** would be wrong on two of the three.
 The chip in the corner overrides the guess when the hardware gets it wrong.
 
-The wizard is deliberately not controller-driven. Making a cartridge is a
-desk job.
+**The window takes the keyboard when it opens**, which matters more than it
+sounds. The launcher is opened by the watcher — a background process — and
+Windows will let a background process put a window in front without giving it
+focus, on the reasonable grounds that programs should not be able to steal your
+typing. The result was a launcher sitting on top of whatever you were doing
+while Enter still went to the window underneath it, and a controller that was
+worse off than that: browsers only report gamepad state to a focused document,
+so a pad would announce itself, light up the indicator in the corner, and then
+read as though every button were resting. Connected, visible, and completely
+dead, with no way out but reaching for the mouse — on the one setup where the
+mouse is across the room. The launcher now asks for the foreground properly on
+the way up.
+
+The wizard is deliberately not controller-driven. Making a cartridge is a desk
+job.
 
 </details>
 
@@ -562,100 +581,16 @@ takes, not how the game runs.
 
 <a id="tags"></a>
 <details>
-<summary><b>Tags instead of drives</b> — NFC, for the games already installed</summary>
+<summary><b>Tags instead of drives</b> — NFC, which now lives in its own project</summary>
 <br />
 
-A GamePak carries the game. A **tag** only points at one that is already
-installed: put it on a reader and the same launcher opens, with the same artwork
-and the same Play button. Lift it off and the window closes.
+A cartridge carries the game. A tag only points at one that is already
+installed, which is the right answer for a shelf of thirty titles or a 150 GB
+install that would never fit on a 2230.
 
-The two are not competing. A drive is the only one that travels; a tag is the
-only one that makes sense for a shelf of thirty games, or for a 150 GB install
-that would never fit on a 2230.
+That idea has grown up somewhere else and is better looked after there:
 
-| | Drive cartridge | Tag |
-|---|---|---|
-| Carries the game | yes | no — must already be installed |
-| Works on someone else's PC | yes | only if they own the game too |
-| Cost per title | the price of a drive | pennies |
-| A 150 GB game | needs a big cartridge | fine |
-| Extra hardware | none | a reader |
-
-### What you need
-
-**A reader.** Anything that speaks PC/SC, which is essentially all of them — the
-ACS ACR122U is the common one. Nothing to install on Windows, where `WinSCard`
-is part of the OS; on Linux install `pcscd` (`pcsc-lite` on Arch,
-`libpcsclite1` + `pcscd` on Debian and Ubuntu).
-
-**Tags.** NTAG213/215/216 stickers or cards are the cheap, reliable choice.
-MIFARE Classic works too — only the UID is read, never the memory — so the
-blue cards that come with an RC522 kit are fine.
-
-### Turning it on
-
-Off until the directory exists, because a card reader is usually bought for
-something else and reading whatever is sitting on it uninvited would be rude:
-
-```bash
-mkdir -p ~/.local/state/pc-gamepak/tags          # Linux
-mkdir "%LOCALAPPDATA%\PC-GamePak\tags"           # Windows
-```
-
-Restart the watcher, or log out and back in. `PC_GAMEPAK_NFC=on` or `=off`
-overrides the directory check either way.
-
-### Setting up a tag
-
-There is **no wizard step for this yet** — a tag is a directory you create, named
-after its UID. The way to learn the UID is to tap the tag and read the log
-(`~/.local/state/pc-gamepak/watcher.log`, or `%LOCALAPPDATA%\PC-GamePak\`):
-
-```
-Virtual PCD 00 00: tag 04A224B2 is not set up. To use it, put a
-cartridge.conf in /home/you/.local/state/pc-gamepak/tags/04A224B2
-```
-
-Do exactly that. The file is the same `cartridge.conf` a real cartridge carries —
-see [Cartridge format](#cartridge-format) — so a tag can hold a collection as
-easily as a single game:
-
-```
-tags/04A224B2/cartridge.conf
-tags/04A224B2/cover.jpg
-```
-
-```ini
-title=God of War
-executable=steam://rungameid/1593500
-cover=cover.jpg
-```
-
-### A reader you build yourself
-
-Set `PC_GAMEPAK_NFC_SOURCE` to a serial device, a FIFO or a file, and anything
-that can print two kinds of line becomes a reader:
-
-```
-UID 04A224B2      a tag is on the reader
-GONE              it has been lifted off
-```
-
-Blank lines and `#` comments are ignored. That is an ESP32 and an RC522 —
-about six pounds of parts — in a few lines of firmware. On Windows this reads
-files rather than COM ports, which do not open usefully without baud settings;
-use a PC/SC reader there.
-
-### What it does not do
-
-- **Write tags.** Only the UID is read, and nothing is ever written to a card.
-  NDEF — putting the game *on* the tag, so it works on any PC that owns it — is
-  the obvious next step and is not built.
-- **Stop the game** when the tag is lifted. The window closes; a running game is
-  left alone, the same as pulling a drive.
-- **Authenticate anything.** A UID is a name, not a secret, and it can be cloned.
-  It decides which of *your* installed games to open, which is all it should be
-  trusted with.
+**[TheStockPot/NFC-Cartridge-Player](https://github.com/TheStockPot/NFC-Cartridge-Player)**
 
 </details>
 
@@ -1033,8 +968,8 @@ is where the tag idea above comes from, and it is worth seeing on its own terms:
 an ESP32 and an RC522 in a 3D-printed shell, reporting tag IDs to Home Assistant,
 which then dims the lights and starts the film. It is a smart-home project rather
 than a PC one, and no code is shared with it — its licence is GPL-3.0 against our
-MIT — but [the line-source protocol](#tags) exists so hardware built to that guide
-can drive this launcher instead.
+MIT. Tags are its subject rather than ours, which is why this README now points
+at it instead of explaining them again.
 
 **[Uplinkpro/CartLaunchCompanion](https://github.com/Uplinkpro/CartLaunchCompanion)**
 takes the opposite half of this problem, and takes it further than this project

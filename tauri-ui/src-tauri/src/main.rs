@@ -13,6 +13,7 @@
 //   parse_cartridge(drive_path)              -> CartridgeInfo (cover included)
 //   launch_game(executable, drive_path)      -> ()
 //   eject_drive(drive_path)                  -> ()
+//   focus_window()                           -> ()
 //   cartridge_health(drive_path)             -> Health
 //   read_cartridge_for_edit(drive_path)      -> Editable
 //   update_cartridge(request)                -> UpdateResult
@@ -158,6 +159,75 @@ fn open_uri(uri: &str) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
         Ok(())
+    }
+}
+
+/// Take the keyboard, not just the front of the screen.
+///
+/// The popup is `always_on_top` and is opened by the watcher, which is a
+/// background process. Windows lets a background process show a window but not
+/// take focus — the foreground lock is there to stop programs stealing your
+/// typing — so the launcher landed in front of whatever you were doing while
+/// your keystrokes carried on going to the window behind it.
+///
+/// That is worse than untidy for a controller. Chromium only reports gamepad
+/// state to a focused document, so a pad would raise `gamepadconnected`,
+/// light up the indicator, and then read as though every button were resting:
+/// connected, visible, and completely dead.
+#[tauri::command]
+fn focus_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    let _ = window.set_focus();
+
+    #[cfg(target_os = "windows")]
+    {
+        let target = window.clone();
+        window
+            .run_on_main_thread(move || take_foreground(&target))
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+/// Ask Windows for the foreground the way it will actually grant it.
+///
+/// `SetForegroundWindow` on its own is refused for a process that is not
+/// already in front; it flashes the taskbar button instead. Attaching to the
+/// input queue of the window that *is* in front makes the two threads share a
+/// focus state, at which point the call is allowed — which is the long-standing
+/// way to do this, and what the foreground lock leaves available.
+#[cfg(target_os = "windows")]
+fn take_foreground(window: &tauri::WebviewWindow) {
+    // AttachThreadInput is declared under Threading rather than beside the other
+    // input calls, which is where it looks like it should be.
+    use windows_sys::Win32::System::Threading::AttachThreadInput;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+
+    let Ok(handle) = window.hwnd() else {
+        return;
+    };
+    let hwnd = handle.0 as isize;
+
+    unsafe {
+        let foreground = GetForegroundWindow();
+        let theirs = GetWindowThreadProcessId(foreground, std::ptr::null_mut());
+        let ours = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
+
+        let attached = theirs != 0 && ours != 0 && theirs != ours;
+        if attached {
+            AttachThreadInput(theirs, ours, 1);
+        }
+
+        BringWindowToTop(hwnd);
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+
+        if attached {
+            AttachThreadInput(theirs, ours, 0);
+        }
     }
 }
 
@@ -1302,6 +1372,7 @@ fn main() {
             parse_cartridge,
             launch_game,
             eject_drive,
+            focus_window,
             can_eject,
             list_games,
             game_cover,

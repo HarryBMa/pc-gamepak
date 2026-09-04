@@ -8,6 +8,7 @@
  *   parse_cartridge({ drivePath })            -> { title, cover, cover_path, background, logo, executable, drive_path }
  *   launch_game({ executable, drivePath })    -> ()
  *   eject_drive({ drivePath })                -> ()
+ *   focus_window()                            -> ()
  *   can_eject({ drivePath })                  -> bool
  *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
  *
@@ -903,6 +904,17 @@ function showCover(src) {
 
 async function showWindow() {
   if (tauri?.window) await tauri.window.getCurrentWindow().show();
+
+  // Showing is not focusing. The watcher opens this window from the
+  // background, and Windows lets a background process put a window in front
+  // without giving it the keyboard — so Enter went to whatever was behind it,
+  // and a controller reported every button unpressed, because Chromium only
+  // tells a focused document what a gamepad is doing.
+  try {
+    await invoke("focus_window");
+  } catch {
+    // Nothing to do about it here; the window is up either way.
+  }
 }
 
 /* ==========================================================================

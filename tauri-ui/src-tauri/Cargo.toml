@@ -43,6 +43,9 @@ windows-sys = { version = "0.52", features = [
     "Win32_System_Registry",
     # Waiting on that elevated run and reading its exit code.
     "Win32_System_Threading",
+    # AttachThreadInput and SetFocus, for taking the keyboard on a window
+    # Windows put in front without giving it focus.
+    "Win32_UI_Input_KeyboardAndMouse",
 ] }
 
 # The launcher is started on insert and exits when it is dismissed, so start-up
