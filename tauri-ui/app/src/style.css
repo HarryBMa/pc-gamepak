@@ -513,6 +513,8 @@ body.is-gamepad #play-ring:has(:focus) {
 
 /* Eject drops its text for an icon, so Play owns the width. */
 .btn--eject {
+  /* The pad badge hangs off the corner, so it needs something to hang from. */
+  position: relative;
   display: grid;
   place-items: center;
   width: 50px;

@@ -650,12 +650,29 @@ function select(index) {
     row.setAttribute("aria-selected", String(Number(row.dataset.index) === index));
   }
 
+  el.gameList
+    .querySelector(`.game-row[data-index="${index}"]`)
+    ?.scrollIntoView({ block: "nearest" });
+
   const game = list[index];
   setGameTitle(game.title);
   if (game.cover) crossfadeCover(game.cover);
   setBusy(false);
 }
 
+
+/**
+ * Move the selection by one, wrapping.
+ *
+ * What up and down do on a pad. Wraps because a list of three on a television
+ * is a ring, not a form: pressing up on the first game should reach the last
+ * one rather than stop.
+ */
+function step(delta) {
+  const list = games();
+  if (list.length < 2) return;
+  select((selected + delta + list.length) % list.length);
+}
 
 /** Bring the next game's art up behind the current one, then swap. */
 function crossfadeCover(src) {
@@ -880,7 +897,6 @@ async function init() {
   seat();
   // Only now is there something to point at: with a pad connected the cursor
   // starts on Play.
-  gamepad.focusFirst();
 }
 
 function renderSpecs(info) {
@@ -1046,7 +1062,10 @@ invoke("debug_logging")
 
 const gamepad = connectGamepad({
   play: doPlay,
+  eject: doEject,
   details: () => toggleSheet(),
+  previous: () => step(-1),
+  next: () => step(1),
   log: debugLog,
   back: () => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);

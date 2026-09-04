@@ -204,17 +204,33 @@ is open, which is a few seconds per insert.
 
 | Control | Action |
 |---|---|
-| D-pad or left stick | Move between the buttons |
-| **A** | Press the focused button |
-| **B** | Back out of details, or dismiss |
+| D-pad or left stick | Move up and down the game list |
+| **A** | Play |
+| **X** | Eject |
 | **Y** | Details |
-| **Start** | Play the selected game |
+| **B** | Back out of details, or dismiss |
+| **Start** | Play |
 
-The cursor starts on Play — on a collection too, since one game is already
-selected — so a pad and a cartridge is: plug in, press A. The rail is one d-pad
-press away when you want a different game, and holding a direction repeats after
-a pause. A controller can only move focus and press what is focused, which is
-exactly what a person at the keyboard can reach and nothing more.
+Every action has its own button, and the stick only ever changes which game is
+selected. So a pad and a cartridge is: plug in, press A — and on a collection,
+up and down first. Holding a direction repeats after a pause, and the list wraps,
+because three games on a television is a ring rather than a form.
+
+It used to move focus between the controls instead, which meant reaching Eject
+by pressing down past Play and the rail. That is how a form works, not how a
+thing plugged into a television works: on a console the buttons *are* the
+actions. There are four controls and four face buttons, so nothing has to be
+navigated to. Each one calls the same function the mouse and the keyboard call,
+so a controller can do exactly what a person at the keyboard can and nothing
+more.
+
+**Anything that calls itself a gamepad is not necessarily one.** Plenty of
+devices enumerate as gamepads — a Keychron keyboard's own dongle reports sixteen
+buttons that are never pressed — so the launcher prefers a pad reporting the
+standard layout, and reads all of them at once when several are plugged in. If a
+controller is ever ignored, `PC_GAMEPAK_DEBUG=1` makes the launcher write what it
+sees to `launcher.log` next to the watcher's, which names every device it found
+and what each one reported.
 
 With a pad connected the prompts change with it: the keycaps give way to each
 action's own icon, because face-button lettering differs between Xbox,

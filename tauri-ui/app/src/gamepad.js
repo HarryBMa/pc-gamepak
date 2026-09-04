@@ -6,18 +6,25 @@
  * side and nothing resident: the polling loop only exists while a pad is
  * connected and the window is open, which is a few seconds per insert.
  *
- * The mapping is the obvious one, using the standard layout every modern pad
- * reports:
+ * Every action has its own button, and the stick only ever changes which game
+ * is selected:
  *
- *   D-pad / left stick   move between the buttons on screen
- *   A (south)            press the focused button
+ *   D-pad / left stick   move up and down the game list
+ *   A (south)            Play
+ *   X (west)             Eject
+ *   Y (north)            Details
  *   B (east)             back out of details, or dismiss the window
- *   Y (north)            details
- *   Start                Play, or the first game of a collection
+ *   Start                Play
  *
- * Nothing here launches anything by itself — it moves focus and clicks, exactly
- * as the keyboard does, so a controller cannot do more than a person at the
- * keyboard could.
+ * The window used to move focus between its controls instead, so reaching Eject
+ * meant pressing down past Play and the rail. That is how a form works, not how
+ * a thing plugged into a television works: on a console the buttons *are* the
+ * actions, and up and down are for choosing. Four controls fit on four face
+ * buttons exactly, so nothing has to be navigated to.
+ *
+ * Nothing here launches anything by itself — each button calls the same
+ * function the mouse and the keyboard call, so a controller cannot do more than
+ * a person at the keyboard could.
  */
 
 /** Standard-layout indices, named so the mapping below reads as English. */
@@ -29,51 +36,6 @@ const DEADZONE = 0.55;
 /** How long a held direction waits before repeating, then how fast. */
 const REPEAT_DELAY = 420;
 const REPEAT_RATE = 140;
-
-/**
- * Which controls a person can reach right now, in the order they appear.
- *
- * Read from the DOM each time rather than cached: the launcher rebuilds its
- * buttons when it learns what is on the cartridge, and a collection has a
- * different set from a single game.
- */
-export function focusable(root = document) {
-  // Queried one selector at a time and concatenated, because a combined
-  // querySelectorAll returns document order — which would put the window's
-  // chrome first and land the cursor on the close button instead of the game.
-  // Play first, deliberately. A collection already has a game selected, so the
-  // cursor landing on Play keeps "plug in, press A" true for a cartridge with
-  // one game and one with six; the rail is a d-pad move away for changing
-  // which game that is.
-  const order = [
-    "#btn-play",
-    "#game-list .game-row",
-    "#btn-eject",
-    "#btn-details",
-    "#btn-close",
-  ];
-
-  const reachable = [];
-  for (const selector of order) {
-    for (const el of root.querySelectorAll(selector)) {
-      if (el.disabled || el.getAttribute("aria-disabled") === "true") continue;
-      // offsetParent is null for anything display:none, which is how the
-      // single-game row and the collection list hide each other.
-      if (el.offsetParent === null) continue;
-      if (!reachable.includes(el)) reachable.push(el);
-    }
-  }
-  return reachable;
-}
-
-/** Where the cursor should go, given where it is and which way was pressed. */
-export function nextIndex(current, direction, count) {
-  if (count === 0) return -1;
-  if (current < 0) return direction > 0 ? 0 : count - 1;
-  // Wraps deliberately: on a two-button window, down from Eject should be Play
-  // rather than nothing at all.
-  return (current + direction + count) % count;
-}
 
 /**
  * Turn a snapshot of a pad into the buttons that went down this frame.
@@ -160,20 +122,8 @@ export function connect(actions) {
   let lastReport = 0;
 
   function move(direction) {
-    const buttons = focusable();
-    if (buttons.length === 0) return;
-    const current = buttons.indexOf(document.activeElement);
-    const next = buttons[nextIndex(current, direction, buttons.length)];
-    next?.focus({ preventScroll: true });
-    next?.scrollIntoView({ block: "nearest" });
-  }
-
-  function press() {
-    const buttons = focusable();
-    const target = buttons.includes(document.activeElement)
-      ? document.activeElement
-      : buttons[0];
-    target?.click();
+    if (direction < 0) actions.previous();
+    else actions.next();
   }
 
   function frame(now) {
@@ -186,8 +136,7 @@ export function connect(actions) {
     if (now - lastReport > 1000) {
       lastReport = now;
       log(
-        `pads=[${list.map((p) => p.id)}] frames=${frames} focus=${document.hasFocus()} ` +
-          `focusable=${focusable().length} active=${document.activeElement?.id || "none"}`,
+        `pads=[${list.map((p) => p.id)}] frames=${frames} focus=${document.hasFocus()}`,
       );
       frames = 0;
     }
@@ -200,16 +149,17 @@ export function connect(actions) {
       for (const button of down) {
         switch (button) {
           case BUTTON.SOUTH:
-            press();
+          case BUTTON.START:
+            actions.play();
             break;
-          case BUTTON.EAST:
-            actions.back();
+          case BUTTON.WEST:
+            actions.eject();
             break;
           case BUTTON.NORTH:
             actions.details();
             break;
-          case BUTTON.START:
-            actions.play();
+          case BUTTON.EAST:
+            actions.back();
             break;
           case BUTTON.UP:
           case BUTTON.LEFT:
@@ -256,21 +206,6 @@ export function connect(actions) {
     requestAnimationFrame(frame);
   }
 
-  /**
-   * Put the cursor on the first thing worth pressing.
-   *
-   * Called by the launcher once it knows what is on the cartridge, not when the
-   * pad connects: at connect time the window is still empty, and the cursor
-   * would land on the close button and stay there.
-   */
-  function focusFirst() {
-    if (!running) return;
-    const buttons = focusable();
-    if (!buttons.includes(document.activeElement)) {
-      buttons[0]?.focus({ preventScroll: true });
-    }
-  }
-
   function stop() {
     running = false;
     previous = [];
@@ -296,5 +231,5 @@ export function connect(actions) {
   // until a button is pressed, so look once at startup.
   if ([...(navigator.getGamepads?.() ?? [])].some(Boolean)) start();
 
-  return { start, stop, focusFirst };
+  return { start, stop };
 }
