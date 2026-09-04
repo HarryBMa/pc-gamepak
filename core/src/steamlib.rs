@@ -139,6 +139,94 @@ pub fn register_library(steam_root: &Path, drive: &Path) -> Result<Option<PathBu
     Ok(written)
 }
 
+/// Manifests in other libraries for games this cartridge carries, whose files
+/// are not there any more.
+///
+/// Steam records an app as installed in exactly one library. A game copied to a
+/// cartridge is therefore invisible until the library it came from stops
+/// claiming it — and deleting the local files does not do that, because the
+/// `appmanifest` stays behind. Steam reads it, sees `FullyInstalled` with
+/// `FilesMissing`, and offers to download the game again into the library that
+/// no longer has it, right past the cartridge holding a perfect copy.
+///
+/// Only manifests whose `common/<installdir>` is gone are returned. One whose
+/// files are still there is a real second install, and choosing between two
+/// real copies is not this function's business.
+pub fn dead_manifests_elsewhere(steam_root: &Path, drive: &Path) -> Vec<PathBuf> {
+    let cartridge = drive.join("steamapps");
+    let ours: Vec<String> = manifest_ids(&cartridge);
+    if ours.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    for library in steam::library_paths(steam_root) {
+        if paths_match(&library.to_string_lossy(), &cartridge.to_string_lossy()) {
+            continue;
+        }
+        for app_id in &ours {
+            let manifest = library.join(format!("appmanifest_{app_id}.acf"));
+            let Ok(text) = std::fs::read_to_string(&manifest) else {
+                continue;
+            };
+            let Some(install_dir) = install_dir_in(&text) else {
+                continue;
+            };
+            if !library.join("common").join(install_dir).is_dir() {
+                out.push(manifest);
+            }
+        }
+    }
+    out
+}
+
+/// Move those manifests aside, and return the ones that moved.
+///
+/// Renamed rather than deleted: Steam globs `appmanifest_*.acf`, so a file
+/// ending in anything else is already invisible to it, and a rename is undone
+/// with a rename. Nothing here should be hard to take back — it is somebody's
+/// game library.
+pub fn retire_manifests(manifests: &[PathBuf]) -> Vec<PathBuf> {
+    manifests
+        .iter()
+        .filter(|manifest| {
+            let aside = manifest.with_extension("acf.bak-cartridge");
+            std::fs::rename(manifest, &aside).is_ok()
+        })
+        .cloned()
+        .collect()
+}
+
+/// The app ids of every manifest in a `steamapps` directory.
+fn manifest_ids(steamapps: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(steamapps) else {
+        return Vec::new();
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let id = name
+                .strip_prefix("appmanifest_")?
+                .strip_suffix(".acf")?
+                .to_string();
+            id.bytes().all(|b| b.is_ascii_digit()).then_some(id)
+        })
+        .collect()
+}
+
+/// The `installdir` a manifest names, which is relative to `common`.
+fn install_dir_in(text: &str) -> Option<String> {
+    steam::parse_keyvalues(text)
+        .get("AppState")?
+        .get("installdir")?
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.contains(['/', '\\']))
+        .map(str::to_string)
+}
+
 /// Every `libraryfolders.vdf` this Steam install keeps.
 ///
 /// Steam has moved the file between `steamapps/` and `config/` over the years
@@ -651,6 +739,77 @@ mod tests {
         assert!(updated.contains("D:\\\\SteamLibrary"), "{updated}");
         // Round-trips back to the unescaped form.
         assert!(library_paths_in(&updated).contains(&"D:\\SteamLibrary".to_string()));
+    }
+
+    #[test]
+    fn only_a_manifest_whose_files_are_gone_is_moved_aside() {
+        let scratch = crate::testutil::Scratch::new("steam-dead-manifests");
+        let root = scratch.path();
+
+        let manifest = |app_id: &str, install_dir: &str| {
+            format!(
+                "\"AppState\"\n{{\n\t\"appid\"\t\t\"{app_id}\"\n\t\"name\"\t\t\"Game\"\n\t\"StateFlags\"\t\t\"4\"\n\t\"installdir\"\t\t\"{install_dir}\"\n}}\n"
+            )
+        };
+
+        // Steam itself, plus a second library on F:, plus the cartridge.
+        let library = root.join("F/Steam/steamapps");
+        std::fs::create_dir_all(library.join("common")).unwrap();
+        std::fs::create_dir_all(root.join("steamapps")).unwrap();
+        std::fs::create_dir_all(root.join("config")).unwrap();
+
+        let vdf = format!(
+            "\"libraryfolders\"\n{{\n\t\"0\"\n\t{{\n\t\t\"path\"\t\t\"{}\"\n\t}}\n}}\n",
+            root.join("F/Steam")
+                .display()
+                .to_string()
+                .replace('\\', "\\\\")
+        );
+        std::fs::write(root.join("steamapps/libraryfolders.vdf"), &vdf).unwrap();
+        std::fs::write(root.join("config/libraryfolders.vdf"), &vdf).unwrap();
+
+        // 413150 was copied to the cartridge and its local files deleted; the
+        // manifest F: left behind is what keeps Steam pointed at F:.
+        std::fs::write(
+            library.join("appmanifest_413150.acf"),
+            manifest("413150", "Stardew Valley"),
+        )
+        .unwrap();
+
+        // 220 is a second, real install on F: that nobody has touched.
+        std::fs::write(
+            library.join("appmanifest_220.acf"),
+            manifest("220", "Half-Life 2"),
+        )
+        .unwrap();
+        std::fs::create_dir_all(library.join("common/Half-Life 2")).unwrap();
+
+        let cart = scratch.path().join("cart");
+        std::fs::create_dir_all(cart.join("steamapps/common/Stardew Valley")).unwrap();
+        for id in ["413150", "220"] {
+            std::fs::write(
+                cart.join("steamapps").join(format!("appmanifest_{id}.acf")),
+                manifest(id, "whatever"),
+            )
+            .unwrap();
+        }
+
+        let dead = dead_manifests_elsewhere(root, &cart);
+        assert_eq!(
+            dead,
+            vec![library.join("appmanifest_413150.acf")],
+            "{dead:?}"
+        );
+
+        let moved = retire_manifests(&dead);
+        assert_eq!(moved.len(), 1);
+        assert!(!library.join("appmanifest_413150.acf").exists());
+        // Renamed, not destroyed: Steam only globs .acf, and a rename undoes.
+        assert!(library
+            .join("appmanifest_413150.acf.bak-cartridge")
+            .is_file());
+        // The one with its files still there was never in question.
+        assert!(library.join("appmanifest_220.acf").is_file());
     }
 
     #[test]

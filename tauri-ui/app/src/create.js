@@ -19,6 +19,7 @@
  *   format_plan({ drivePath })       -> { currentLabel, device, totalBytes, warning }
  *   steam_registration({ drivePath })-> bool
  *   holds_steam_games({ drivePath })  -> bool
+ *   steam_registration_plan({ drivePath }) -> [string]
  *   register_with_steam({ drivePath })-> bool
  *   suggest_collection_name({ titles }) -> string
  *   pick_cover_image()               -> { path, preview } | null
@@ -229,6 +230,8 @@ let platform = "";
 let driveIsSteamLibrary = false;
 /** Whether the drive carries Steam games, registered or not. */
 let driveHoldsSteamGames = false;
+/** What registering would change, once it has been asked for and shown. */
+let steamPlan = [];
 let scannedAt = null;
 
 /** Artwork chosen by hand, per role. */
@@ -1021,6 +1024,11 @@ async function selectDrive(drive) {
   // library whose drive was missing when it started, which for a cartridge is
   // most of the time. The game is still there; Steam has just stopped believing
   // in it, and will re-download rather than use it.
+  //
+  // Being listed is not enough either. Steam records a game as installed in one
+  // library, so the one it was copied from has to stop claiming it — which is
+  // why the plan can have something to say about a cartridge that is already
+  // registered.
   try {
     driveHoldsSteamGames = Boolean(
       await invoke("holds_steam_games", { drivePath: drive.path }),
@@ -1029,10 +1037,20 @@ async function selectDrive(drive) {
     driveHoldsSteamGames = false;
   }
 
+  try {
+    steamPlan = driveHoldsSteamGames
+      ? await invoke("steam_registration_plan", { drivePath: drive.path })
+      : [];
+  } catch {
+    steamPlan = [];
+  }
+  steamConfirmed = false;
+  el.btnRegister.textContent = "Fix this cartridge in Steam";
+
   await readLinkRate(drive.path);
 
   el.btnUnregister.hidden = !driveIsSteamLibrary;
-  el.btnRegister.hidden = driveIsSteamLibrary || !driveHoldsSteamGames;
+  el.btnRegister.hidden = steamPlan.length === 0;
   refreshRail();
 }
 
@@ -2608,14 +2626,31 @@ el.editArtSlots.addEventListener("click", (event) => {
 });
 // The preview is the reason to type a name here, so it keeps up with the typing.
 el.editTitle.addEventListener("input", refreshRail);
+/** Set once the plan has been shown, so the second press is the one that acts. */
+let steamConfirmed = false;
+
+// Shown before it runs. Registering the cartridge is harmless, but the other
+// half moves a manifest out of another Steam library, and a game library is not
+// somewhere to make silent changes.
 el.btnRegister.addEventListener("click", async () => {
+  if (!steamConfirmed) {
+    steamConfirmed = true;
+    el.btnRegister.textContent = "Do it";
+    status(steamPlan.join(" "), "");
+    return;
+  }
+
   try {
     await invoke("register_with_steam", { drivePath: selectedDrive });
     driveIsSteamLibrary = true;
+    steamPlan = [];
+    steamConfirmed = false;
     el.btnRegister.hidden = true;
     el.btnUnregister.hidden = false;
-    status("Added to Steam's library list. Start Steam and the game is there.", "good");
+    status("Done. Start Steam and the game is on the cartridge.", "good");
   } catch (error) {
+    steamConfirmed = false;
+    el.btnRegister.textContent = "Fix this cartridge in Steam";
     status(String(error), "error");
   }
 });
@@ -2868,6 +2903,11 @@ async function demoInvoke(command, args) {
       return true;
     case "register_with_steam":
       return true;
+    case "steam_registration_plan":
+      return [
+        "Add H:\\ to Steam's library list.",
+        "Move F:\\Games\\Steam\\steamapps\\appmanifest_413150.acf aside — it says the game is installed there, and the files are gone.",
+      ];
     case "steam_registration":
       return args.drivePath.endsWith("HOLLOW");
     case "unregister_from_steam":

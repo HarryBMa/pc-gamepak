@@ -677,9 +677,43 @@ pub fn register_with_steam(drive_path: &str) -> Result<bool, String> {
         return Err(steamlib::LibraryError::SteamRunning.to_string());
     }
 
-    steamlib::register_library(&root, Path::new(drive_path))
+    let drive = Path::new(drive_path);
+    let added = steamlib::register_library(&root, drive)
         .map(|written| written.is_some())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Registering is only half of it. Steam records an app as installed in one
+    // library, so while the library it was copied from still claims this game,
+    // the cartridge is a folder Steam never looks in — and deleting the local
+    // files makes that worse rather than better, because the manifest stays and
+    // Steam reads it as "installed, files missing" and offers to download.
+    let retired = steamlib::retire_manifests(&steamlib::dead_manifests_elsewhere(&root, drive));
+
+    Ok(added || !retired.is_empty())
+}
+
+/// What registering this cartridge would put right, in words.
+///
+/// Read before anything is changed: moving another library's manifest aside is
+/// a change to somebody's game library, and it should be visible before it
+/// happens rather than explained afterwards.
+pub fn steam_registration_plan(drive_path: &str) -> Vec<String> {
+    let Some(root) = steam::steam_root() else {
+        return Vec::new();
+    };
+    let drive = Path::new(drive_path);
+
+    let mut out = Vec::new();
+    if !steamlib::is_registered(&root, drive) {
+        out.push(format!("Add {drive_path} to Steam's library list."));
+    }
+    for manifest in steamlib::dead_manifests_elsewhere(&root, drive) {
+        out.push(format!(
+            "Move {} aside — it says the game is installed there, and the files are gone.",
+            manifest.display()
+        ));
+    }
+    out
 }
 
 /// Take a cartridge back out of Steam's library list.
