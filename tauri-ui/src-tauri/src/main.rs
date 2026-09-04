@@ -261,6 +261,44 @@ fn take_foreground(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Whether the window should write what it is doing to a log.
+///
+/// Off unless `PC_GAMEPAK_DEBUG` is set, and asked once at start-up rather than
+/// per line, so a launcher nobody is debugging pays a single call for it.
+#[tauri::command]
+fn debug_logging() -> bool {
+    std::env::var_os("PC_GAMEPAK_DEBUG").is_some_and(|value| value != "0")
+}
+
+/// Append one line to the launcher log.
+///
+/// The webview has no console anyone can reach in a release build — there are
+/// no devtools, and a window that opens on insert and closes on eject is gone
+/// before anything could be attached to it. So it writes next to the watcher's
+/// log, which is where someone would already be looking.
+#[tauri::command]
+fn debug_log(line: String) {
+    if !debug_logging() {
+        return;
+    }
+    let Some(base) = std::env::var_os("LOCALAPPDATA") else {
+        return;
+    };
+
+    let path = PathBuf::from(base).join("PC-GamePak").join("launcher.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        use std::io::Write;
+        // Truncated hard: this is a diagnostic, not somewhere for a cartridge's
+        // title to be written at whatever length it happens to be.
+        let line: String = line.chars().take(400).collect();
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 /// The looks the launcher ships with, for the Settings list.
 ///
 /// Sent as data rather than hardcoded in the window, so adding one means adding
@@ -1413,6 +1451,8 @@ fn main() {
             eject_drive,
             focus_window,
             list_skins,
+            debug_logging,
+            debug_log,
             can_eject,
             list_games,
             game_cover,

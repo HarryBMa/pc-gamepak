@@ -89,6 +89,42 @@ export function pressed(previous, current) {
   return down;
 }
 
+/**
+ * The pads worth listening to.
+ *
+ * Not simply the first one connected, which is what this used to take. Plenty
+ * of things that are not controllers enumerate as gamepads — a Keychron
+ * keyboard's own dongle does, reporting sixteen buttons that are never pressed
+ * and an empty `mapping` — and if one of those sorts ahead of the real pad, the
+ * launcher polls it forever and every button on the actual controller does
+ * nothing. That is a silent failure: the pad raises `gamepadconnected`, the
+ * prompts change to pad icons, and then nothing works.
+ *
+ * So: anything reporting the standard layout, if anything does. Only when
+ * nothing does is everything considered, which keeps an unusual but real pad
+ * working rather than trading one exclusion for another.
+ */
+export function pads() {
+  const all = [...(navigator.getGamepads?.() ?? [])].filter(Boolean);
+  const standard = all.filter((pad) => pad.mapping === "standard");
+  return standard.length > 0 ? standard : all;
+}
+
+/**
+ * One state from several pads: a button is down if it is down on any of them.
+ *
+ * Two controllers plugged into a machine by a television is normal, and which
+ * one somebody picks up is not worth having an opinion about.
+ */
+export function merge(list) {
+  const state = [];
+  for (const pad of list) {
+    const one = snapshot(pad);
+    for (let i = 0; i < one.length; i += 1) state[i] = state[i] || one[i];
+  }
+  return state;
+}
+
 /** A pad's buttons and sticks, flattened into one array of booleans. */
 export function snapshot(pad) {
   const state = pad.buttons.map((b) => b.pressed || b.value > 0.5);
@@ -115,6 +151,14 @@ export function connect(actions) {
   let heldSince = 0;
   let lastRepeat = 0;
 
+  // Diagnostics. A pad that reports as connected and then reads as though every
+  // button were resting looks identical, from in here, to a pad nobody is
+  // touching — so the only way to tell them apart is to write down what each
+  // frame actually saw.
+  const log = actions.log ?? (() => {});
+  let frames = 0;
+  let lastReport = 0;
+
   function move(direction) {
     const buttons = focusable();
     if (buttons.length === 0) return;
@@ -134,12 +178,26 @@ export function connect(actions) {
 
   function frame(now) {
     if (!running) return;
+    frames += 1;
 
-    const pad = [...(navigator.getGamepads?.() ?? [])].find(Boolean);
-    if (pad) {
-      const state = snapshot(pad);
+    const list = pads();
 
-      for (const button of pressed(previous, state)) {
+    // Once a second, and only while something is listening.
+    if (now - lastReport > 1000) {
+      lastReport = now;
+      log(
+        `pads=[${list.map((p) => p.id)}] frames=${frames} focus=${document.hasFocus()} ` +
+          `focusable=${focusable().length} active=${document.activeElement?.id || "none"}`,
+      );
+      frames = 0;
+    }
+
+    if (list.length > 0) {
+      const state = merge(list);
+
+      const down = pressed(previous, state);
+      if (down.length > 0) log(`pressed ${down}`);
+      for (const button of down) {
         switch (button) {
           case BUTTON.SOUTH:
             press();
@@ -221,7 +279,13 @@ export function connect(actions) {
     actions.changed?.();
   }
 
-  window.addEventListener("gamepadconnected", start);
+  window.addEventListener("gamepadconnected", (event) => {
+    log(
+      `gamepadconnected index=${event.gamepad?.index} id=${event.gamepad?.id} ` +
+        `mapping=${event.gamepad?.mapping} buttons=${event.gamepad?.buttons?.length}`,
+    );
+    start();
+  });
   window.addEventListener("gamepaddisconnected", () => {
     // Only stop once the last pad has gone.
     const any = [...(navigator.getGamepads?.() ?? [])].some(Boolean);

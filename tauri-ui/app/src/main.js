@@ -9,6 +9,7 @@
  *   launch_game({ executable, drivePath })    -> ()
  *   eject_drive({ drivePath })                -> ()
  *   focus_window()                            -> ()
+ *   debug_logging() / debug_log(line)         -> diagnostics, off by default
  *   get_settings()                            -> Settings (for defaultSkin)
  *   can_eject({ drivePath })                  -> bool
  *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
@@ -1024,9 +1025,29 @@ el.eject.addEventListener("click", doEject);
 // A controller reaches the same four things the keyboard does, and nothing
 // more: it moves focus and clicks, so it cannot start anything a person at the
 // keyboard could not.
+/**
+ * Write a line to the launcher log, when there is one.
+ *
+ * A no-op unless PC_GAMEPAK_DEBUG is set, which is decided once below rather
+ * than on every call — a gamepad poll runs sixty times a second and is not
+ * somewhere to put a round trip.
+ */
+let debugOn = false;
+function debugLog(line) {
+  if (debugOn) invoke("debug_log", { line: `[${new Date().toISOString()}] ${line}` });
+}
+
+invoke("debug_logging")
+  .then((on) => {
+    debugOn = Boolean(on);
+    if (debugOn) debugLog("launcher started");
+  })
+  .catch(() => {});
+
 const gamepad = connectGamepad({
   play: doPlay,
   details: () => toggleSheet(),
+  log: debugLog,
   back: () => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
     else closeWindow();
