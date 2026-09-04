@@ -272,11 +272,19 @@ fn elevated_eject(letter: &str, refusal: &str) -> Result<(), String> {
 
     match code {
         EJECT_OK => Ok(()),
-        // Reached with administrator already granted, so this is a real open
-        // handle rather than a rights problem — and often not a game at all:
-        // Defender scans a cartridge it has no exclusion for, and holds it.
+        // Administrator was already granted, so `FSCTL_LOCK_VOLUME` refusing
+        // means what it says: files are open on the volume. Not a rights
+        // problem, and not one a Defender exclusion fixes — that was tried on
+        // a cartridge that would not eject, and changed nothing.
+        //
+        // What holds it is whatever has read the cartridge since it arrived.
+        // A drive only just plugged in ejects every time; the same drive
+        // after a game has been played from it often will not, and does not
+        // let go until it is replugged. So the second half of the message is
+        // the thing that always works, rather than a second guess at who.
         EJECT_IN_USE => Err(format!(
-            "{letter} is still in use. Quit the game or Steam — or, if nothing is running, \n             add a Defender exclusion with Tune Windows."
+            "{letter} is still in use. Close the game, Steam, or any folder open on it, \
+             or replug the cartridge — one that has just arrived always ejects."
         )),
         EJECT_MISSING => Err(format!("{letter} is not there any more.")),
         _ => Err(refusal.to_string()),

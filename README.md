@@ -490,6 +490,25 @@ The third is worth doing by hand, once per cartridge:
   is that dialog; the registry keys behind it are per-device and undocumented,
   and this tool does not guess at those.
 
+### If a cartridge will not eject
+
+Eject asks the PnP manager to stop the device, the same way Safely Remove
+Hardware does. When that is refused it elevates and takes the volume by force,
+locking and unmounting the filesystem — because Windows calls an NVMe stick in a
+USB enclosure a *fixed* disk and will not give a fixed volume write access to
+anyone else. That is what the UAC prompt is for, on a drive you are only trying
+to unplug.
+
+If it still reports the cartridge in use with administrator already granted,
+then files really are open on it, and the obvious candidates are not always the
+ones holding it. A cartridge that has just been plugged in ejects every time; a
+cartridge that has had a game played from it can stay busy afterwards and, on
+some machines, does not let go until it is replugged. A Defender exclusion does
+not change this — that was tried.
+
+So when one refuses: unplug it, plug it back in, and eject before opening
+anything on it.
+
 ### If a cartridge gets no drive letter
 
 A volume with no letter has no path, so nothing can see it — not the launcher,
