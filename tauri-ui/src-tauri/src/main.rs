@@ -36,6 +36,8 @@
 //   format_plan(drive_path)                  -> FormatPlan
 //   executable_choices(playnite_id?, source_dir?, title?) -> Vec<Candidate>
 //   steam_registration(drive_path)           -> bool
+//   holds_steam_games(drive_path)            -> bool
+//   register_with_steam(drive_path)          -> bool
 //   unregister_from_steam(drive_path)        -> bool
 //   create_cartridge(request)                -> CartridgeResult,
 //                                               emitting cartridge://progress
@@ -1046,6 +1048,22 @@ fn steam_registration(drive_path: String) -> bool {
     create::steam_registration(&drive_path)
 }
 
+/// Does this cartridge carry Steam games?
+///
+/// Asked alongside `steam_registration` so the picker can offer to register a
+/// cartridge that needs it, and stay quiet about one that has nothing to
+/// register.
+#[tauri::command]
+fn holds_steam_games(drive_path: String) -> bool {
+    create::holds_steam_games(&drive_path)
+}
+
+/// Add the cartridge to Steam's library list.
+#[tauri::command]
+fn register_with_steam(drive_path: String) -> Result<bool, String> {
+    create::register_with_steam(&drive_path)
+}
+
 /// Remove the cartridge from Steam's library list.
 #[tauri::command]
 fn unregister_from_steam(drive_path: String) -> Result<bool, String> {
@@ -1302,6 +1320,8 @@ fn main() {
             format_plan,
             executable_choices,
             steam_registration,
+            holds_steam_games,
+            register_with_steam,
             unregister_from_steam,
             create_cartridge,
             open_wizard_settings,

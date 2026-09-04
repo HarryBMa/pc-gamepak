@@ -653,6 +653,35 @@ pub fn steam_registration(drive_path: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether this cartridge carries Steam games at all.
+///
+/// A drive with no `steamapps/common` on it has nothing for Steam to find, so
+/// offering to register it would be offering to add an empty library.
+pub fn holds_steam_games(drive_path: &str) -> bool {
+    Path::new(drive_path).join("steamapps/common").is_dir()
+}
+
+/// Put a cartridge back into Steam's library list.
+///
+/// Registration normally happens once, while the game is being copied. It needs
+/// doing again more often than that: Steam drops a library whose drive was
+/// missing when it started, which for a cartridge — a thing designed to spend
+/// most of its life unplugged — is most of the time. Without this the only way
+/// back was to copy the whole game again.
+pub fn register_with_steam(drive_path: &str) -> Result<bool, String> {
+    let root = steam::steam_root().ok_or_else(|| "Could not find Steam.".to_string())?;
+
+    // Steam rewrites its library list from memory when it exits, so an entry
+    // added now would be silently undone. Same reason the copy refuses.
+    if steamlib::steam_is_running() {
+        return Err(steamlib::LibraryError::SteamRunning.to_string());
+    }
+
+    steamlib::register_library(&root, Path::new(drive_path))
+        .map(|written| written.is_some())
+        .map_err(|e| e.to_string())
+}
+
 /// Take a cartridge back out of Steam's library list.
 ///
 /// For a cartridge that has been reformatted or repurposed. Entries are never

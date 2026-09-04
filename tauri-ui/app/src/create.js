@@ -18,6 +18,8 @@
  *   executable_choices({ ... })      -> [{ relative, name, score }]
  *   format_plan({ drivePath })       -> { currentLabel, device, totalBytes, warning }
  *   steam_registration({ drivePath })-> bool
+ *   holds_steam_games({ drivePath })  -> bool
+ *   register_with_steam({ drivePath })-> bool
  *   suggest_collection_name({ titles }) -> string
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
@@ -105,6 +107,7 @@ const el = {
   railBar: $("rail-bar"),
   drives: $("drives"),
   drivesEmpty: $("drives-empty"),
+  btnRegister: $("btn-register"),
   btnUnregister: $("btn-unregister"),
   railPlan: $("rail-plan"),
   plan: $("plan"),
@@ -224,6 +227,8 @@ let formatPlan = null;
 let building = false;
 let platform = "";
 let driveIsSteamLibrary = false;
+/** Whether the drive carries Steam games, registered or not. */
+let driveHoldsSteamGames = false;
 let scannedAt = null;
 
 /** Artwork chosen by hand, per role. */
@@ -1012,9 +1017,22 @@ async function selectDrive(drive) {
     driveIsSteamLibrary = false;
   }
 
+  // A cartridge can hold a Steam game and not be a Steam library: Steam drops a
+  // library whose drive was missing when it started, which for a cartridge is
+  // most of the time. The game is still there; Steam has just stopped believing
+  // in it, and will re-download rather than use it.
+  try {
+    driveHoldsSteamGames = Boolean(
+      await invoke("holds_steam_games", { drivePath: drive.path }),
+    );
+  } catch {
+    driveHoldsSteamGames = false;
+  }
+
   await readLinkRate(drive.path);
 
   el.btnUnregister.hidden = !driveIsSteamLibrary;
+  el.btnRegister.hidden = driveIsSteamLibrary || !driveHoldsSteamGames;
   refreshRail();
 }
 
@@ -2590,6 +2608,18 @@ el.editArtSlots.addEventListener("click", (event) => {
 });
 // The preview is the reason to type a name here, so it keeps up with the typing.
 el.editTitle.addEventListener("input", refreshRail);
+el.btnRegister.addEventListener("click", async () => {
+  try {
+    await invoke("register_with_steam", { drivePath: selectedDrive });
+    driveIsSteamLibrary = true;
+    el.btnRegister.hidden = true;
+    el.btnUnregister.hidden = false;
+    status("Added to Steam's library list. Start Steam and the game is there.", "good");
+  } catch (error) {
+    status(String(error), "error");
+  }
+});
+
 el.btnUnregister.addEventListener("click", async () => {
   try {
     await invoke("unregister_from_steam", { drivePath: selectedDrive });
@@ -2834,6 +2864,10 @@ async function demoInvoke(command, args) {
                label: args.drivePath.split("/").pop(), filesystem: "exFAT",
                totalBytes: 128_035_676_160, freeBytes: 119_014_128_640,
                usedPercent: 7, warnings: [] };
+    case "holds_steam_games":
+      return true;
+    case "register_with_steam":
+      return true;
     case "steam_registration":
       return args.drivePath.endsWith("HOLLOW");
     case "unregister_from_steam":

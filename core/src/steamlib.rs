@@ -107,30 +107,56 @@ pub fn locate(steam_root: &Path, app_id: &str) -> Option<InstalledGame> {
 /// Returns the file that was written, or `None` when the drive was already
 /// registered.
 pub fn register_library(steam_root: &Path, drive: &Path) -> Result<Option<PathBuf>, LibraryError> {
-    let vdf = steam_root.join("config/libraryfolders.vdf");
-    let text = std::fs::read_to_string(&vdf)
-        .map_err(|e| LibraryError::Io(format!("{}: {e}", vdf.display())))?;
-
     let drive_str = drive.to_string_lossy().to_string();
-    if library_paths_in(&text)
+    let mut written = None;
+
+    for vdf in library_files(steam_root) {
+        let text = std::fs::read_to_string(&vdf)
+            .map_err(|e| LibraryError::Io(format!("{}: {e}", vdf.display())))?;
+
+        if library_paths_in(&text)
+            .iter()
+            .any(|p| paths_match(p, &drive_str))
+        {
+            continue;
+        }
+
+        // Keep a copy before touching Steam's own configuration.
+        let backup = vdf.with_extension("vdf.bak-cartridge");
+        if !backup.exists() {
+            std::fs::copy(&vdf, &backup).map_err(|e| {
+                LibraryError::Io(format!("could not back up {}: {e}", vdf.display()))
+            })?;
+        }
+
+        let updated = append_library_entry(&text, &drive_str);
+        std::fs::write(&vdf, updated)
+            .map_err(|e| LibraryError::Io(format!("could not write {}: {e}", vdf.display())))?;
+
+        written = written.or(Some(vdf));
+    }
+
+    Ok(written)
+}
+
+/// Every `libraryfolders.vdf` this Steam install keeps.
+///
+/// Steam has moved the file between `steamapps/` and `config/` over the years
+/// and now writes both, holding them identical. The one it *reads* at start-up
+/// is the modern one under `steamapps/`, so writing only `config/` — which is
+/// what this used to do — registered a cartridge in a file Steam does not
+/// consult, and the edit was then erased the next time Steam exited and rewrote
+/// both from memory. A cartridge could be copied, reported as registered, and
+/// still be invisible to Steam, which would go on believing the game lived
+/// wherever it was copied from and re-download it if that copy was deleted.
+///
+/// Both are written now rather than guessing which this client reads.
+pub fn library_files(steam_root: &Path) -> Vec<PathBuf> {
+    ["steamapps/libraryfolders.vdf", "config/libraryfolders.vdf"]
         .iter()
-        .any(|p| paths_match(p, &drive_str))
-    {
-        return Ok(None);
-    }
-
-    // Keep a copy before touching Steam's own configuration.
-    let backup = vdf.with_extension("vdf.bak-cartridge");
-    if !backup.exists() {
-        std::fs::copy(&vdf, &backup)
-            .map_err(|e| LibraryError::Io(format!("could not back up {}: {e}", vdf.display())))?;
-    }
-
-    let updated = append_library_entry(&text, &drive_str);
-    std::fs::write(&vdf, updated)
-        .map_err(|e| LibraryError::Io(format!("could not write {}: {e}", vdf.display())))?;
-
-    Ok(Some(vdf))
+        .map(|rel| steam_root.join(rel))
+        .filter(|path| path.is_file())
+        .collect()
 }
 
 /// The `path` of every entry in a `libraryfolders.vdf`.
@@ -194,16 +220,27 @@ pub fn append_library_entry(text: &str, drive: &str) -> String {
 /// is the normal state, not stale cruft.
 pub const CARTRIDGE_LABEL: &str = "PC GamePak";
 
-/// Whether `drive` is currently listed in Steam's library folders.
+/// Whether `drive` is listed in *every* one of Steam's library files.
+///
+/// Every, not any: a cartridge listed in one file and missing from the other is
+/// a cartridge Steam may or may not see depending on which it reads, and
+/// answering "registered" to that is how a game ends up copied to a drive
+/// nothing ever launches from. Saying no here means the next registration puts
+/// the missing entry back.
 pub fn is_registered(steam_root: &Path, drive: &Path) -> bool {
-    let vdf = steam_root.join("config/libraryfolders.vdf");
-    let Ok(text) = std::fs::read_to_string(vdf) else {
+    let files = library_files(steam_root);
+    if files.is_empty() {
         return false;
-    };
+    }
+
     let drive_str = drive.to_string_lossy().to_string();
-    library_paths_in(&text)
-        .iter()
-        .any(|p| paths_match(p, &drive_str))
+    files.iter().all(|vdf| {
+        std::fs::read_to_string(vdf).is_ok_and(|text| {
+            library_paths_in(&text)
+                .iter()
+                .any(|p| paths_match(p, &drive_str))
+        })
+    })
 }
 
 /// Remove a cartridge from Steam's library folders.
@@ -216,23 +253,32 @@ pub fn unregister_library(steam_root: &Path, drive: &Path) -> Result<bool, Libra
         return Err(LibraryError::SteamRunning);
     }
 
-    let vdf = steam_root.join("config/libraryfolders.vdf");
-    let text = std::fs::read_to_string(&vdf)
-        .map_err(|e| LibraryError::Io(format!("{}: {e}", vdf.display())))?;
-
     let drive_str = drive.to_string_lossy().to_string();
-    let Some(updated) = remove_library_entry(&text, &drive_str) else {
-        return Ok(false);
-    };
+    let mut removed = false;
 
-    let backup = vdf.with_extension("vdf.bak-cartridge");
-    if !backup.exists() {
-        std::fs::copy(&vdf, &backup)
-            .map_err(|e| LibraryError::Io(format!("could not back up {}: {e}", vdf.display())))?;
+    // Every file it was written to, for the same reason it is written to every
+    // file: leaving the entry in one of them puts the cartridge back the next
+    // time Steam reads that one.
+    for vdf in library_files(steam_root) {
+        let text = std::fs::read_to_string(&vdf)
+            .map_err(|e| LibraryError::Io(format!("{}: {e}", vdf.display())))?;
+
+        let Some(updated) = remove_library_entry(&text, &drive_str) else {
+            continue;
+        };
+
+        let backup = vdf.with_extension("vdf.bak-cartridge");
+        if !backup.exists() {
+            std::fs::copy(&vdf, &backup).map_err(|e| {
+                LibraryError::Io(format!("could not back up {}: {e}", vdf.display()))
+            })?;
+        }
+        std::fs::write(&vdf, updated)
+            .map_err(|e| LibraryError::Io(format!("could not write {}: {e}", vdf.display())))?;
+        removed = true;
     }
-    std::fs::write(&vdf, updated)
-        .map_err(|e| LibraryError::Io(format!("could not write {}: {e}", vdf.display())))?;
-    Ok(true)
+
+    Ok(removed)
 }
 
 /// Cut the entry whose `path` matches, and renumber the ones after it.
@@ -605,6 +651,66 @@ mod tests {
         assert!(updated.contains("D:\\\\SteamLibrary"), "{updated}");
         // Round-trips back to the unescaped form.
         assert!(library_paths_in(&updated).contains(&"D:\\SteamLibrary".to_string()));
+    }
+
+    #[test]
+    fn registration_reaches_the_file_steam_actually_reads() {
+        let scratch = crate::testutil::Scratch::new("steam-both-vdfs");
+        let root = scratch.path();
+
+        // A modern Steam install keeps the list in both places and holds them
+        // identical. It reads the one under steamapps.
+        let original =
+            "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"C:\\\\Steam\"\n\t}\n}\n";
+        for rel in ["steamapps", "config"] {
+            std::fs::create_dir_all(root.join(rel)).unwrap();
+            std::fs::write(root.join(rel).join("libraryfolders.vdf"), original).unwrap();
+        }
+
+        let drive = std::path::Path::new("H:\\");
+        assert!(!is_registered(root, drive));
+        assert!(register_library(root, drive).unwrap().is_some());
+
+        // Both, not just config: writing only config registered the cartridge
+        // in a file Steam does not read, so the game was copied and then never
+        // launched from — and Steam erased the entry the next time it exited.
+        for rel in ["steamapps/libraryfolders.vdf", "config/libraryfolders.vdf"] {
+            let text = std::fs::read_to_string(root.join(rel)).unwrap();
+            assert!(
+                library_paths_in(&text)
+                    .iter()
+                    .any(|p| paths_match(p, "H:\\")),
+                "{rel} was left without the cartridge"
+            );
+        }
+        assert!(is_registered(root, drive));
+
+        // A second pass has nothing left to do.
+        assert!(register_library(root, drive).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_drive_in_only_one_of_the_two_files_is_not_registered() {
+        let scratch = crate::testutil::Scratch::new("steam-half-registered");
+        let root = scratch.path();
+
+        let bare = "\"libraryfolders\"\n{\n}\n";
+        let with_drive =
+            "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"H:\\\\\"\n\t}\n}\n";
+
+        std::fs::create_dir_all(root.join("steamapps")).unwrap();
+        std::fs::create_dir_all(root.join("config")).unwrap();
+        std::fs::write(root.join("config/libraryfolders.vdf"), with_drive).unwrap();
+        std::fs::write(root.join("steamapps/libraryfolders.vdf"), bare).unwrap();
+
+        // Listed in one file and missing from the other is not registered: it
+        // depends on which file this client reads, and saying yes to that is
+        // how a cartridge gets copied to and never launched from.
+        let drive = std::path::Path::new("H:\\");
+        assert!(!is_registered(root, drive));
+
+        register_library(root, drive).unwrap();
+        assert!(is_registered(root, drive));
     }
 
     #[test]
