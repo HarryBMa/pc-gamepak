@@ -658,7 +658,11 @@ pub fn steam_registration(drive_path: &str) -> bool {
 /// A drive with no `steamapps/common` on it has nothing for Steam to find, so
 /// offering to register it would be offering to add an empty library.
 pub fn holds_steam_games(drive_path: &str) -> bool {
-    Path::new(drive_path).join("steamapps/common").is_dir()
+    let drive = Path::new(drive_path);
+    steamlib::library_root(drive).join("steamapps/common").is_dir()
+        // A cartridge written before the library moved into a folder of its
+        // own still counts: it is exactly the one that needs fixing.
+        || drive.join("steamapps/common").is_dir()
 }
 
 /// Put a cartridge back into Steam's library list.
@@ -678,7 +682,17 @@ pub fn register_with_steam(drive_path: &str) -> Result<bool, String> {
     }
 
     let drive = Path::new(drive_path);
-    let added = steamlib::register_library(&root, drive)
+
+    // A cartridge written before the library had a folder of its own has its
+    // steamapps at the root, which is the shape Steam will not take. Moving it
+    // is a rename inside the volume, so the size of the game does not matter.
+    steamlib::migrate_root_library(drive);
+
+    // The drive itself may still be listed from that older layout, pointing at
+    // a library Steam was never going to read.
+    let _ = steamlib::unregister_library(&root, drive);
+
+    let added = steamlib::register_library(&root, &steamlib::library_root(drive))
         .map(|written| written.is_some())
         .map_err(|e| e.to_string())?;
 
@@ -703,9 +717,26 @@ pub fn steam_registration_plan(drive_path: &str) -> Vec<String> {
     };
     let drive = Path::new(drive_path);
 
+    let library = steamlib::library_root(drive);
     let mut out = Vec::new();
-    if !steamlib::is_registered(&root, drive) {
-        out.push(format!("Add {drive_path} to Steam's library list."));
+
+    if drive.join("steamapps").is_dir() && !library.exists() {
+        out.push(format!(
+            "Move {}\\steamapps into {} — Steam will not read a library at a drive root.",
+            drive_path.trim_end_matches(['\\', '/']),
+            library.display()
+        ));
+    }
+    if steamlib::is_registered(&root, drive) {
+        out.push(format!(
+            "Drop {drive_path} from Steam's library list — a drive root is not a library."
+        ));
+    }
+    if !steamlib::is_registered(&root, &library) {
+        out.push(format!(
+            "Add {} to Steam's library list.",
+            library.display()
+        ));
     }
     for manifest in steamlib::dead_manifests_elsewhere(&root, drive) {
         out.push(format!(
@@ -723,7 +754,14 @@ pub fn steam_registration_plan(drive_path: &str) -> Vec<String> {
 /// unplugged, so a missing folder is normal rather than stale.
 pub fn unregister_from_steam(drive_path: &str) -> Result<bool, String> {
     let root = steam::steam_root().ok_or_else(|| "Could not find Steam.".to_string())?;
-    steamlib::unregister_library(&root, Path::new(drive_path)).map_err(|e| e.to_string())
+    let drive = Path::new(drive_path);
+
+    // Both shapes: the library folder, and the drive root that older cartridges
+    // were registered as before Steam's refusal of drive roots was understood.
+    let library = steamlib::unregister_library(&root, &steamlib::library_root(drive))
+        .map_err(|e| e.to_string())?;
+    let bare = steamlib::unregister_library(&root, drive).map_err(|e| e.to_string())?;
+    Ok(library || bare)
 }
 
 /// Describe what formatting a drive would destroy.
@@ -1833,7 +1871,9 @@ fn copy_steam_game(
         .install_path
         .file_name()
         .ok_or_else(|| "the game's install directory has no name".to_string())?;
-    let destination = root.join("steamapps/common").join(install_dir_name);
+    let destination = steamlib::library_root(root)
+        .join("steamapps/common")
+        .join(install_dir_name);
 
     progress(Progress {
         step: "copy",
@@ -1860,12 +1900,13 @@ fn copy_steam_game(
     .map_err(|e| format!("{}: {e}", game.install_path.display()))?;
 
     // The manifest is how Steam recognises the game in this library.
-    let manifest_destination = root.join("steamapps").join(
+    let steamapps = steamlib::library_root(root).join("steamapps");
+    let manifest_destination = steamapps.join(
         game.manifest_path
             .file_name()
             .ok_or_else(|| "the manifest has no filename".to_string())?,
     );
-    std::fs::create_dir_all(root.join("steamapps"))
+    std::fs::create_dir_all(&steamapps)
         .and_then(|_| copy_small_file(&game.manifest_path, &manifest_destination))
         .map_err(|e| format!("could not copy the app manifest: {e}"))?;
 
@@ -1876,7 +1917,8 @@ fn copy_steam_game(
         total_bytes: total,
     });
 
-    let registered = steamlib::register_library(&steam_root, root)
+    // The library folder, not the drive: Steam refuses a drive root outright.
+    let registered = steamlib::register_library(&steam_root, &steamlib::library_root(root))
         .map_err(|e| e.to_string())?
         .is_some();
 
@@ -1885,7 +1927,7 @@ fn copy_steam_game(
         // Steam launches by app id wherever the library lives, so the launch
         // target is unchanged.
         executable: None,
-        folder: Some("steamapps/common".to_string()),
+        folder: Some(format!("{}/steamapps/common", steamlib::LIBRARY_DIR)),
         registered_with_steam: registered,
         digests: digests.map(|d| d.into_manifest().files).unwrap_or_default(),
     }))

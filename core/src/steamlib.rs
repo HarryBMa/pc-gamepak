@@ -139,6 +139,37 @@ pub fn register_library(steam_root: &Path, drive: &Path) -> Result<Option<PathBu
     Ok(written)
 }
 
+/// The folder on a cartridge that holds its Steam library.
+///
+/// Steam will not accept a drive root as a library — the client says so
+/// outright: "New Steam library folder can't be the drive root." Putting
+/// `steamapps` at the root of a cartridge therefore produced a library Steam
+/// would write into `libraryfolders.vdf` when asked directly, and then scan and
+/// find nothing in, leaving the copied game invisible and the original still
+/// claiming it.
+///
+/// Named the way Steam names its own, because it is the same thing and someone
+/// looking at the drive should recognise it.
+pub const LIBRARY_DIR: &str = "SteamLibrary";
+
+/// Where this cartridge's Steam library lives.
+pub fn library_root(drive: &Path) -> PathBuf {
+    drive.join(LIBRARY_DIR)
+}
+
+/// Move a cartridge written before the library had a folder of its own.
+///
+/// A rename inside one volume, so it costs nothing however large the game is.
+/// Returns whether anything moved.
+pub fn migrate_root_library(drive: &Path) -> bool {
+    let old = drive.join("steamapps");
+    let new = library_root(drive);
+    if !old.is_dir() || new.exists() {
+        return false;
+    }
+    std::fs::create_dir_all(&new).is_ok() && std::fs::rename(&old, new.join("steamapps")).is_ok()
+}
+
 /// Manifests in other libraries for games this cartridge carries, whose files
 /// are not there any more.
 ///
@@ -153,7 +184,7 @@ pub fn register_library(steam_root: &Path, drive: &Path) -> Result<Option<PathBu
 /// files are still there is a real second install, and choosing between two
 /// real copies is not this function's business.
 pub fn dead_manifests_elsewhere(steam_root: &Path, drive: &Path) -> Vec<PathBuf> {
-    let cartridge = drive.join("steamapps");
+    let cartridge = library_root(drive).join("steamapps");
     let ours: Vec<String> = manifest_ids(&cartridge);
     if ours.is_empty() {
         return Vec::new();
@@ -784,11 +815,14 @@ mod tests {
         .unwrap();
         std::fs::create_dir_all(library.join("common/Half-Life 2")).unwrap();
 
+        // The cartridge's library lives in a folder of its own, because Steam
+        // will not read one at a drive root.
         let cart = scratch.path().join("cart");
-        std::fs::create_dir_all(cart.join("steamapps/common/Stardew Valley")).unwrap();
+        let cart_apps = library_root(&cart).join("steamapps");
+        std::fs::create_dir_all(cart_apps.join("common/Stardew Valley")).unwrap();
         for id in ["413150", "220"] {
             std::fs::write(
-                cart.join("steamapps").join(format!("appmanifest_{id}.acf")),
+                cart_apps.join(format!("appmanifest_{id}.acf")),
                 manifest(id, "whatever"),
             )
             .unwrap();
@@ -810,6 +844,37 @@ mod tests {
             .is_file());
         // The one with its files still there was never in question.
         assert!(library.join("appmanifest_220.acf").is_file());
+    }
+
+    #[test]
+    fn an_old_cartridge_moves_its_library_off_the_drive_root() {
+        let scratch = crate::testutil::Scratch::new("steam-migrate-root");
+        let drive = scratch.path();
+
+        // How every cartridge written before this was laid out: steamapps at
+        // the root, which is the one place Steam refuses to read a library.
+        std::fs::create_dir_all(drive.join("steamapps/common/Stardew Valley")).unwrap();
+        std::fs::write(drive.join("steamapps/appmanifest_413150.acf"), "x").unwrap();
+
+        assert!(migrate_root_library(drive));
+
+        let moved = library_root(drive).join("steamapps");
+        assert!(moved.join("common/Stardew Valley").is_dir());
+        assert!(moved.join("appmanifest_413150.acf").is_file());
+        assert!(!drive.join("steamapps").exists());
+
+        // Nothing left to move, and nothing broken by asking twice.
+        assert!(!migrate_root_library(drive));
+    }
+
+    #[test]
+    fn a_cartridge_already_in_the_new_shape_is_left_alone() {
+        let scratch = crate::testutil::Scratch::new("steam-migrate-noop");
+        let drive = scratch.path();
+        std::fs::create_dir_all(library_root(drive).join("steamapps/common")).unwrap();
+
+        assert!(!migrate_root_library(drive));
+        assert!(library_root(drive).join("steamapps/common").is_dir());
     }
 
     #[test]

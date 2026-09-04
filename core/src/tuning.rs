@@ -114,7 +114,27 @@ pub fn drop_exclusion_script(path: &str) -> String {
 /// The user sees the actual commands. This is elevated, it touches malware
 /// scanning, and "trust me" is not good enough.
 pub fn plan(drive: &str, tweaks: &[Tweak], applying: bool) -> Result<Vec<String>, String> {
-    let mut commands: Vec<String> = stale_paths(drive, tweaks, applying)
+    plan_with(
+        &stale_paths(drive, tweaks, applying),
+        drive,
+        tweaks,
+        applying,
+    )
+}
+
+/// The plan, given the exclusions to take back.
+///
+/// Split out so it can be tested: the list of stale exclusions comes from
+/// whatever Defender happens to be configured with on the machine running the
+/// test, and a test that reads that is a test that passes or fails depending on
+/// which drives are plugged in.
+fn plan_with(
+    stale: &[String],
+    drive: &str,
+    tweaks: &[Tweak],
+    applying: bool,
+) -> Result<Vec<String>, String> {
+    let mut commands: Vec<String> = stale
         .iter()
         .map(|path| drop_exclusion_script(path))
         .collect();
@@ -370,15 +390,20 @@ mod tests {
 
     #[test]
     fn the_plan_is_the_commands_themselves() {
-        let commands = plan(
-            "D:\\",
-            &[Tweak::DefenderExclusion, Tweak::SearchIndexing],
-            true,
-        )
-        .unwrap();
+        let tweaks = [Tweak::DefenderExclusion, Tweak::SearchIndexing];
+
+        let commands = plan_with(&[], "D:\\", &tweaks, true).unwrap();
         assert_eq!(commands.len(), 2);
         assert!(commands[0].starts_with("Add-MpPreference"));
+
+        // Anything to take back comes first, so the drive is not excluded and
+        // then un-excluded by a later line in the same run.
+        let with_stale = plan_with(&["E:\\".to_string()], "D:\\", &tweaks, true).unwrap();
+        assert_eq!(with_stale.len(), 3);
+        assert_eq!(with_stale[0], "Remove-MpPreference -ExclusionPath 'E:\\'");
+        assert!(with_stale[1].starts_with("Add-MpPreference"));
+
         // A bad drive fails the whole plan rather than half of it.
-        assert!(plan("nonsense", &[Tweak::DefenderExclusion], true).is_err());
+        assert!(plan_with(&[], "nonsense", &[Tweak::DefenderExclusion], true).is_err());
     }
 }

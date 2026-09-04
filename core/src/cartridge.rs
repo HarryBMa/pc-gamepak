@@ -73,7 +73,12 @@ pub struct CartridgeInfo {
 pub fn holds_game(root: &Path) -> bool {
     // Written by the wizard's "copy the game" step: the Steam library layout
     // for a Steam game, or the wizard's own Games/ folder for a portable one.
-    root.join("steamapps").join("common").is_dir() || root.join("Games").is_dir()
+    root.join("steamapps").join("common").is_dir()
+        || root
+            .join(crate::steamlib::LIBRARY_DIR)
+            .join("steamapps/common")
+            .is_dir()
+        || root.join("Games").is_dir()
 }
 
 /// Largest cover we will base64 into the webview. A cartridge is not a trusted

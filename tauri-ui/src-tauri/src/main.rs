@@ -192,18 +192,30 @@ fn focus_window(window: tauri::WebviewWindow) -> Result<(), String> {
 /// Ask Windows for the foreground the way it will actually grant it.
 ///
 /// `SetForegroundWindow` on its own is refused for a process that is not
-/// already in front; it flashes the taskbar button instead. Attaching to the
-/// input queue of the window that *is* in front makes the two threads share a
-/// focus state, at which point the call is allowed — which is the long-standing
-/// way to do this, and what the foreground lock leaves available.
+/// already in front; it flashes the taskbar button instead. Three things are
+/// tried in turn, because which of them works depends on what has the
+/// foreground and how it got it:
+///
+/// 1. Attach to the input queue of the window that is currently in front. Two
+///    threads sharing a focus state may hand it between themselves, which is
+///    the long-standing way through the lock.
+/// 2. `SwitchToThisWindow`, which is what Alt-Tab uses and is not bound by the
+///    same rule.
+/// 3. A synthetic Alt tap. The lock is lifted for the process that owns the
+///    most recent input event, so producing one is enough — Alt on its own
+///    presses nothing.
+///
+/// Each step is followed by asking whether it worked, so the noisier ones only
+/// happen when the quiet one was not enough.
 #[cfg(target_os = "windows")]
 fn take_foreground(window: &tauri::WebviewWindow) {
-    // AttachThreadInput is declared under Threading rather than beside the other
-    // input calls, which is where it looks like it should be.
     use windows_sys::Win32::System::Threading::AttachThreadInput;
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        keybd_event, SetFocus, KEYEVENTF_KEYUP, VK_MENU,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+        SwitchToThisWindow,
     };
 
     let Ok(handle) = window.hwnd() else {
@@ -211,23 +223,40 @@ fn take_foreground(window: &tauri::WebviewWindow) {
     };
     let hwnd = handle.0 as isize;
 
+    let ours = unsafe { GetWindowThreadProcessId(hwnd, std::ptr::null_mut()) };
+    let holds_it = || unsafe { GetForegroundWindow() } == hwnd;
+
     unsafe {
+        BringWindowToTop(hwnd);
+
         let foreground = GetForegroundWindow();
         let theirs = GetWindowThreadProcessId(foreground, std::ptr::null_mut());
-        let ours = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
-
         let attached = theirs != 0 && ours != 0 && theirs != ours;
         if attached {
             AttachThreadInput(theirs, ours, 1);
         }
-
-        BringWindowToTop(hwnd);
         SetForegroundWindow(hwnd);
         SetFocus(hwnd);
-
         if attached {
             AttachThreadInput(theirs, ours, 0);
         }
+
+        if holds_it() {
+            return;
+        }
+
+        SwitchToThisWindow(hwnd, 1);
+        if holds_it() {
+            return;
+        }
+
+        // Alt down and straight back up. Nothing is typed by it; it exists so
+        // that this process owns the last input event, which is one of the
+        // conditions under which Windows allows the foreground to be taken.
+        keybd_event(VK_MENU as u8, 0, 0, 0);
+        keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
     }
 }
 
