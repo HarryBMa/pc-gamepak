@@ -60,6 +60,11 @@ pub struct Settings {
     /// Apply the per-cartridge Windows tweaks. Windows-only, and off: it edits
     /// Defender and Search settings, which is not something to do unasked.
     pub default_tune: bool,
+    /// The look the launcher wears when a cartridge does not ask for one.
+    ///
+    /// A cartridge's own `skin=` wins, because the cartridge is the thing being
+    /// shown; this is the answer for every cartridge that has no opinion.
+    pub default_skin: String,
     /// Tell the drive which blocks it no longer has to keep.
     pub default_trim: bool,
     /// Cap the copy at this many MB/s. Zero writes as fast as the link allows.
@@ -95,6 +100,7 @@ impl Default for Settings {
             default_copy: true,
             default_close_steam: true,
             default_tune: false,
+            default_skin: crate::skins::DEFAULT.to_string(),
             default_trim: false,
             // Off: a drive with a heatsink, or a link too slow to trouble it,
             // should not be slowed for a problem it does not have.

@@ -142,6 +142,43 @@ what it just launched. A cartridge with one game on it has no rail at all.
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
 
+### Skins
+
+The launcher ships with more than one look, and a cartridge can ask for the one
+it wants:
+
+```ini
+title=Stardew Valley
+executable=steam://rungameid/413150
+skin=retro
+```
+
+| Skin | |
+|---|---|
+| `default` | Dark, quiet, and out of the way of the artwork |
+| `retro` | A beige CRT: scanlines, chunky buttons, orange and teal |
+
+A cartridge that says nothing wears whatever **Launcher look** is set to in the
+wizard's Settings. A cartridge that asks wins, because the cartridge is the
+thing being shown.
+
+**A cartridge picks a skin; it cannot bring one.** The name is looked up in the
+list above and an unknown one quietly becomes `default` — `../../evil`,
+`http://…`, and `retro.css` all match nothing. That is deliberate. Everything
+else a cartridge supplies is content the launcher puts inside a frame it
+controls: titles go in as text, artwork is read and handed over as a `data:`
+URI, and nothing is executed. A stylesheet is a different animal — it cannot run
+code, but it can move, cover and restyle anything on screen, including making
+Eject look like Play or putting a convincing false sentence where a real one
+was. A cartridge is a drive somebody handed you, and letting one repaint the
+window that is asking whether to trust it is a poor trade for a nicer
+background.
+
+Adding a skin is a stylesheet in `tauri-ui/app/skins/` and a line in
+`core/src/skins.rs`. The file is loaded *on top of* the stock one rather than
+instead of it, so a skin is only the difference — `retro.css` is about 150 lines
+and changes no markup at all.
+
 ### Getting back to the launcher
 
 Press Play and the launcher does not close — it drops to the taskbar and gives

@@ -9,6 +9,7 @@
  *   launch_game({ executable, drivePath })    -> ()
  *   eject_drive({ drivePath })                -> ()
  *   focus_window()                            -> ()
+ *   get_settings()                            -> Settings (for defaultSkin)
  *   can_eject({ drivePath })                  -> bool
  *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
  *
@@ -30,6 +31,7 @@ const el = {
   slot: document.getElementById("slot"),
   slotLabel: document.getElementById("slot-label"),
   insert: document.getElementById("btn-insert"),
+  skin: document.getElementById("skin"),
   cover: document.getElementById("cover-img"),
   coverB: document.getElementById("cover-img-b"),
   placeholder: document.getElementById("cover-placeholder"),
@@ -807,6 +809,10 @@ async function init() {
     return;
   }
 
+  // Before the window is shown, so the cartridge never appears in the stock
+  // look and then changes its mind a frame later.
+  wearSkin(cartridge.skin);
+
   // A tag has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
   // build that does not know the command should keep the button it had.
@@ -900,6 +906,24 @@ function showCover(src) {
     }, { once: true });
     el.cover.src = src;
   });
+}
+
+/**
+ * Wear the look this cartridge asked for.
+ *
+ * The name has already been checked against the list the launcher ships with,
+ * by the time it reaches here — see `skins.rs`. That is what makes this safe to
+ * put in an href: a cartridge picks from what is installed, it does not supply
+ * a stylesheet, so there is nothing here that a drive someone handed you can
+ * point at.
+ *
+ * "default" is the stylesheet already loaded, so it clears the link rather than
+ * loading an empty file.
+ */
+function wearSkin(name) {
+  if (!el.skin) return;
+  const wanted = name && name !== "default" ? `skins/${name}.css` : "";
+  if (el.skin.getAttribute("href") !== wanted) el.skin.setAttribute("href", wanted);
 }
 
 async function showWindow() {

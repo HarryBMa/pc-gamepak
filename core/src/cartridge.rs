@@ -67,6 +67,25 @@ pub struct CartridgeInfo {
     pub is_bundle: bool,
     /// Individual games, populated only for bundles (`is_bundle == true`).
     pub games: Vec<GameEntry>,
+    /// Which of the launcher's own looks this cartridge asks for.
+    ///
+    /// A name, never a path: it is resolved against the list the launcher ships
+    /// with, so a cartridge chooses between skins rather than supplying one.
+    /// See `skins`.
+    pub skin: String,
+}
+
+/// The look this cartridge asks for, resolved to one the launcher ships.
+///
+/// Resolved here rather than in the window, so an unknown or hostile value has
+/// already become a known name by the time anything is asked to load it.
+fn skin_from(ini: &IniMap, section: &str) -> String {
+    match ini_get(ini, section, "skin") {
+        // The cartridge asked. It is the thing being shown, so it wins.
+        Some(asked) => crate::skins::resolve(asked).to_string(),
+        // It did not, so the answer is whatever the machine was told to prefer.
+        None => crate::skins::resolve(&crate::settings::load().default_skin).to_string(),
+    }
 }
 
 /// Does this cartridge carry the game, or just point at it?
@@ -248,6 +267,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 holds_game: holds_game(root),
                 is_bundle: true,
                 games,
+                skin: skin_from(&ini, "collection"),
             });
         }
 
@@ -295,6 +315,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             holds_game: holds_game(root),
             is_bundle: false,
             games: Vec::new(),
+            skin: skin_from(&ini, "general"),
         });
     }
 
@@ -338,6 +359,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             drive_path: drive_path.to_string(),
             holds_game: holds_game(root),
             is_bundle: false,
+            skin: crate::skins::DEFAULT.to_string(),
             games: Vec::new(),
         });
     }

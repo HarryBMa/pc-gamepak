@@ -188,6 +188,7 @@ const el = {
   setCloseSteam: $("set-close-steam"),
   setTune: $("set-tune"),
   setTuneRow: $("set-tune-row"),
+  setSkin: $("set-skin"),
   setTrim: $("set-trim"),
   setCopyRate: $("set-copy-rate"),
   settingsSave: $("settings-save"),
@@ -2149,6 +2150,7 @@ function applySettings() {
   el.setCopy.checked = settings.defaultCopy !== false;
   el.setCloseSteam.checked = settings.defaultCloseSteam !== false;
   el.setTune.checked = Boolean(settings.defaultTune);
+  renderSkins(settings.defaultSkin);
   el.setTrim.checked = Boolean(settings.defaultTrim);
   el.setCopyRate.value = String(settings.defaultCopyRateMbS ?? 0);
   el.setFormat.checked = Boolean(settings.defaultFormat);
@@ -2255,6 +2257,31 @@ function openCartridgePicker() {
   el.pickDialog.showModal();
 }
 
+/**
+ * Fill the skin list from the backend rather than the markup.
+ *
+ * Adding a look should mean a line in `skins.rs` and a stylesheet, not a fourth
+ * place to remember — so the names and the descriptions come from the same list
+ * the launcher validates a cartridge's choice against.
+ */
+async function renderSkins(chosen) {
+  let skins;
+  try {
+    skins = await invoke("list_skins");
+  } catch {
+    skins = [["default", ""]];
+  }
+
+  el.setSkin.replaceChildren();
+  for (const [name, description] of skins) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = description ? `${name} — ${description}` : name;
+    el.setSkin.append(option);
+  }
+  el.setSkin.value = skins.some(([name]) => name === chosen) ? chosen : "default";
+}
+
 function openSettings() {
   applySettings();
   renderSources();
@@ -2302,6 +2329,7 @@ async function saveSettings() {
         defaultCopy: el.setCopy.checked,
         defaultCloseSteam: el.setCloseSteam.checked,
         defaultTune: el.setTune.checked,
+        defaultSkin: el.setSkin.value,
         defaultTrim: el.setTrim.checked,
         defaultCopyRateMbS: Number(el.setCopyRate.value) || 0,
         defaultFormat: el.setFormat.checked,
@@ -2903,6 +2931,11 @@ async function demoInvoke(command, args) {
       return true;
     case "register_with_steam":
       return true;
+    case "list_skins":
+      return [
+        ["default", "Dark, quiet, and out of the way of the artwork"],
+        ["retro", "A beige CRT: scanlines, chunky buttons, orange and teal"],
+      ];
     case "steam_registration_plan":
       return [
         "Add H:\\ to Steam's library list.",

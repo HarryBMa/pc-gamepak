@@ -1,0 +1,164 @@
+/* ==========================================================================
+   Retro — a beige CRT with the cartridge behind the glass.
+
+   Loaded on top of style.css, never instead of it, so this file is only the
+   difference: the chassis, the tube, and the two chunky buttons. Everything
+   about how the launcher behaves is unchanged, which is the point of a skin
+   being a stylesheet and nothing else.
+
+   No new markup. #card becomes the plastic case, #face the screen inside its
+   bezel, and the scanlines are a pseudo-element over the top — so this can be
+   swapped in and out at runtime without the window rebuilding anything.
+   ========================================================================== */
+
+:root {
+  /* The single accent is normally sampled from the cover art. A CRT front
+     panel is painted, not printed, so it stays put. */
+  --accent: oklch(0.68 0.15 52);
+  --accent-ink: oklch(0.2 0.03 52);
+
+  --crt-case: oklch(0.83 0.024 85);
+  --crt-case-lit: oklch(0.9 0.022 85);
+  --crt-case-shade: oklch(0.66 0.025 85);
+  --crt-bezel: oklch(0.19 0.006 60);
+  --crt-bezel-edge: oklch(0.12 0.005 60);
+
+  --crt-play: oklch(0.66 0.148 52);
+  --crt-play-lit: oklch(0.78 0.12 55);
+  --crt-play-shade: oklch(0.45 0.11 48);
+
+  --crt-eject: oklch(0.66 0.072 195);
+  --crt-eject-lit: oklch(0.78 0.06 195);
+  --crt-eject-shade: oklch(0.45 0.055 195);
+}
+
+/* -------------------------------------------------------------- the chassis */
+
+body {
+  background: transparent;
+}
+
+#card {
+  background: var(--crt-case);
+  border-radius: 18px;
+  padding: 13px 13px 15px;
+  border: 1px solid oklch(0.32 0.02 85);
+  box-shadow:
+    inset 0 -5px 0 var(--crt-case-shade),
+    inset 0 5px 0 var(--crt-case-lit),
+    0 14px 30px oklch(0 0 0 / 0.55);
+}
+
+/* ------------------------------------------------------------- the tube */
+
+#face {
+  border-radius: 11px;
+  border: 3px solid var(--crt-bezel-edge);
+  outline: 6px solid var(--crt-bezel);
+  outline-offset: -9px;
+  box-shadow: inset 0 0 26px oklch(0 0 0 / 0.85);
+}
+
+/* Scanlines and the corner falloff a tube has, over everything but the
+   controls — the buttons are on the case, not behind the glass. */
+#face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background:
+    repeating-linear-gradient(
+      oklch(0 0 0 / 0) 0 2px,
+      oklch(0 0 0 / 0.26) 2px 4px
+    ),
+    radial-gradient(120% 90% at 50% 50%, transparent 55%, oklch(0 0 0 / 0.5) 100%);
+}
+
+/* The art sits behind the glass, so it takes the tube's slight green cast. */
+#plate img {
+  filter: saturate(1.08) contrast(1.04) hue-rotate(-4deg);
+}
+
+/* --------------------------------------------------------------- the type */
+
+#game-title,
+#slot-label,
+.btn__label {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+#game-title {
+  font-size: 21px;
+  line-height: 1.15;
+  text-shadow: 2px 2px 0 oklch(0 0 0 / 0.75);
+}
+
+/* ------------------------------------------------------------ the controls */
+
+#button-row {
+  gap: 10px;
+  padding-top: 11px;
+}
+
+.btn {
+  border-radius: 7px;
+  border: 2px solid oklch(0.18 0.01 85);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  /* Pressed is a real 2px of travel, which is most of why a moulded button
+     reads as one. */
+  transition: transform 60ms ease, box-shadow 60ms ease;
+}
+
+.btn--play {
+  background: var(--crt-play);
+  color: oklch(0.16 0.02 52);
+  box-shadow:
+    inset 0 -4px 0 var(--crt-play-shade),
+    inset 0 4px 0 var(--crt-play-lit);
+}
+
+.btn--eject {
+  background: var(--crt-eject);
+  color: oklch(0.16 0.02 195);
+  box-shadow:
+    inset 0 -4px 0 var(--crt-eject-shade),
+    inset 0 4px 0 var(--crt-eject-lit);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 -1px 0 oklch(0 0 0 / 0.4);
+}
+
+.btn:disabled {
+  background: oklch(0.6 0.008 85);
+  color: oklch(0.4 0.006 85);
+  box-shadow:
+    inset 0 -4px 0 oklch(0.48 0.008 85),
+    inset 0 4px 0 oklch(0.7 0.006 85);
+}
+
+/* The focus ring has to read against beige plastic rather than dark glass. */
+body.is-gamepad :focus,
+.btn:focus-visible {
+  outline: 3px solid oklch(0.32 0.02 85);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------- the slot */
+
+#slot {
+  background: var(--crt-bezel);
+  border-radius: 11px;
+}
+
+/* ------------------------------------------------------------ reduced motion
+
+   The scanlines do not move, so there is nothing here to switch off — noted so
+   the next skin remembers that a moving one would need to. */
