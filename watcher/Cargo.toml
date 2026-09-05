@@ -1,6 +1,6 @@
 [package]
 name = "pc-gamepak-watcher"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "Waits for a cartridge to be plugged in and opens the launcher"
 license = "MIT"

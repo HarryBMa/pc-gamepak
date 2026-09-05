@@ -7,9 +7,9 @@ that layout, and keeping this README outside them is deliberate: `winget
 validate` parses every file in the directory it is given and fails on anything
 that is not a manifest.
 
-Validated with `winget validate --manifest packaging\winget\0.1.0`.
+Validated with `winget validate --manifest packaging\winget\1.0.0`.
 
-## State of the 0.1.0 manifests
+## State of the 1.0.0 manifests
 
 Ready to submit. Everything that can be checked without publishing has been:
 
@@ -17,7 +17,7 @@ Ready to submit. Everything that can be checked without publishing has been:
 - `InstallerSha256` is the real hash, taken from a fresh download of the
   published asset and cross-checked against the `.sha256` GitHub serves.
 - Both `NestedInstallerFiles` paths were checked against the actual zip; the
-  archive nests under `pc-gamepak-0.1.0-windows-x86_64/` and both executables
+  archive nests under `pc-gamepak-1.0.0-windows-x86_64/` and both executables
   are there.
 - `wingetcreate show HarryBMa.PCGamePak` returns not-found, so this is a first
   submission and will go through human moderation rather than the automatic
@@ -27,7 +27,7 @@ The one step left is the submission itself, which opens a public pull request
 against microsoft/winget-pkgs from your GitHub account:
 
 ```powershell
-wingetcreate submit --token <github-pat> packaging\winget\0.1.0
+wingetcreate submit --token <github-pat> packaging\winget\1.0.0
 ```
 
 The token needs `public_repo`. `wingetcreate token --store` caches it so later
@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Mode Watcher
 That script lives inside the installed package, at roughly:
 
 ```
-%LOCALAPPDATA%\Microsoft\WinGet\Packages\HarryBMa.PCGamePak_<hash>\pc-gamepak-0.1.0-windows-x86_64\windows\install.ps1
+%LOCALAPPDATA%\Microsoft\WinGet\Packages\HarryBMa.PCGamePak_<hash>\pc-gamepak-1.0.0-windows-x86_64\windows\install.ps1
 ```
 
 `-Mode Watcher` matters: without it the script prompts, and a non-interactive
@@ -67,8 +67,8 @@ host cannot answer.
 4. Validate and submit:
 
    ```powershell
-   winget validate --manifest packaging\winget\0.1.0
-   wingetcreate submit --token <pat> packaging\winget\0.1.0
+   winget validate --manifest packaging\winget\1.0.0
+   wingetcreate submit --token <pat> packaging\winget\1.0.0
    ```
 
    `wingetcreate update HarryBMa.PCGamePak --version <v> --urls <zip url>` does

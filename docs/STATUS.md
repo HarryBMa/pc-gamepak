@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 194 tests
+### `core/` — `gamepak-core`, 214 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -53,7 +53,7 @@ and turns them into a numbered plan with a time estimate; the write itself
 happens in the same window, as a log that ticks itself off. Formatting, copying,
 artwork by file picker or SteamGridDB, per-cartridge Windows tuning.
 
-### `watcher/` — both platforms, 28 tests
+### `watcher/` — both platforms, 21 tests
 
 **Windows:** a hidden top-level window blocking on `WM_DEVICECHANGE`. No polling,
 no timer, about 2 MB resident.

@@ -1,13 +1,13 @@
 {
-    "version": "0.1.0",
+    "version": "1.0.0",
     "description": "Turn removable storage into physical game cartridges",
     "homepage": "https://github.com/HarryBMa/pc-gamepak",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/HarryBMa/pc-gamepak/releases/download/v0.1.0/pc-gamepak-0.1.0-windows-x86_64.zip",
-            "hash": "f7208a20f470dc000396d46854f00eea3932bd185a93f3a0dcdbdf48d33a81a6",
-            "extract_dir": "pc-gamepak-0.1.0-windows-x86_64"
+            "url": "https://github.com/HarryBMa/pc-gamepak/releases/download/v1.0.0/pc-gamepak-1.0.0-windows-x86_64.zip",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "extract_dir": "pc-gamepak-1.0.0-windows-x86_64"
         }
     },
     "bin": [
