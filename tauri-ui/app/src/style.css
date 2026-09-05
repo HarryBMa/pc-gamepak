@@ -237,12 +237,12 @@
     );
 }
 
-/* A collection reads as one plate rather than two scrims: the rail needs an
-   even ground to sit on all the way up the window. */
-#card.is-collection #scrim-top {
-  display: none;
-}
-
+/* A collection's rail starts higher up the window than a single game's title
+   does, so its ground has to start higher too — but only where the rail is.
+   This used to be one sheet across the whole card, never below 30% black at
+   any point, which left the artwork veiled from edge to edge with nothing in
+   front of most of it. The top half is the picture; darken from where the
+   rail begins. */
 #card.is-collection #scrim-bottom {
   inset: 0;
   height: auto;
@@ -255,10 +255,11 @@
     ),
     linear-gradient(
       to bottom,
-      oklch(0.09 0.004 65 / 0.72) 0%,
-      oklch(0.09 0.004 65 / 0.3) 22%,
-      oklch(0.09 0.004 65 / 0.45) 46%,
-      oklch(0.09 0.004 65 / 0.93) 72%,
+      transparent 0%,
+      transparent 34%,
+      oklch(0.09 0.004 65 / 0.28) 46%,
+      oklch(0.09 0.004 65 / 0.78) 62%,
+      oklch(0.09 0.004 65 / 0.95) 78%,
       oklch(0.085 0.004 65 / 0.985) 100%
     );
 }

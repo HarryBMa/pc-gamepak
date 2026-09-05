@@ -244,6 +244,30 @@ from Settings or the ★.
 
 ---
 
+## Seeing it without a cartridge
+
+The launcher is plain HTML and falls back to a preview harness when there is no
+Tauri behind it, so a browser will run it:
+
+```bash
+cd tauri-ui/app && python -m http.server 8731
+```
+
+- `localhost:8731/index.html?drive=D:\` — one game
+- `localhost:8731/index.html?drive=D:\&state=bundle` — a collection
+- `&state=noexec` — a cartridge with nothing to play
+
+The browser window will not be 420x630, and a skin that sets its own size cannot
+resize a tab, so put it in an iframe of the right size to judge proportions:
+
+```html
+<iframe src="index.html?drive=D:\&state=bundle" style="width:420px;height:630px;border:0"></iframe>
+```
+
+The content security policy is Tauri's, not the server's, so a remote `@import`
+that works here will still load nothing in the real window. Check that against
+the list above rather than against the preview.
+
 ## When it does not work
 
 ```
