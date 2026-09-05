@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.HarryBMa.PCGamePak</id>
+
+  <name>PC GamePak</name>
+  <summary>Turn removable storage into physical game cartridges</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <developer id="io.github.harrybma">
+    <name>Harry Malmgren</name>
+  </developer>
+
+  <description>
+    <p>
+      PC GamePak turns a removable drive into a game cartridge. Plug it in and a
+      launcher opens showing the cover art and the games on it. Nothing runs on
+      its own: the window waits for you to press Play.
+    </p>
+    <p>
+      A cartridge is an ordinary exFAT drive with one small file at the root, so
+      the same cartridge works on Windows and Linux without conversion. Games can
+      live on the cartridge itself or be a link to one already installed through
+      Steam, Heroic, GOG or Epic.
+    </p>
+    <p>The wizard writes cartridges: pick a drive, pick games, pick artwork.</p>
+    <p>
+      Cartridges are mounted by your desktop. If yours does not mount removable
+      drives on its own, install and run something like udiskie, or nothing will
+      appear when you plug one in.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.HarryBMa.PCGamePak.desktop</launchable>
+
+  <url type="homepage">https://github.com/HarryBMa/pc-gamepak</url>
+  <url type="bugtracker">https://github.com/HarryBMa/pc-gamepak/issues</url>
+  <url type="vcs-browser">https://github.com/HarryBMa/pc-gamepak</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <categories>
+    <category>Game</category>
+  </categories>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <releases>
+    <release version="1.0.0" date="2026-09-05">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
