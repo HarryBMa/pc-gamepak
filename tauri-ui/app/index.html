@@ -47,6 +47,16 @@
         </div>
       </div>
 
+      <!--
+        The skin's own layer. Empty, and empty on purpose: a stylesheet cannot
+        add elements, so without somewhere to put them a skin can only recolour
+        what is already here. Two boxes it owns outright — one over the artwork,
+        one under the controls — are enough for a CRT's knobs and its power LED,
+        or a terminal's header bar, drawn with pseudo-elements on these.
+      -->
+      <div id="skin-chrome" aria-hidden="true"></div>
+      <div id="skin-panel" aria-hidden="true"></div>
+
       <!-- Scrims: the art is arbitrary, so the type cannot rely on it being dark. -->
       <div id="scrim-top" aria-hidden="true"></div>
       <div id="scrim-bottom" aria-hidden="true"></div>
@@ -58,6 +68,14 @@
       <!-- Top chrome. Present only while the pointer is in the window. -->
       <header id="chrome" data-tauri-drag-region>
         <div id="chrome-actions">
+          <button id="btn-skin" class="icon-btn" type="button"
+                  aria-label="Change the launcher's look" title="Skin">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14"
+                 aria-hidden="true">
+              <path d="M8 1.8l2 3.4 3.8.7-2.6 2.8.5 3.9L8 10.9l-3.7 1.7.5-3.9L2.2 5.9l3.8-.7z" />
+            </svg>
+          </button>
           <button id="btn-details" class="icon-btn" type="button"
                   aria-expanded="false" aria-controls="sheet"
                   aria-label="Cartridge details" title="Details">

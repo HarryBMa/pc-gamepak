@@ -162,3 +162,46 @@ body.is-gamepad :focus,
 
    The scanlines do not move, so there is nothing here to switch off — noted so
    the next skin remembers that a moving one would need to. */
+
+/* --------------------------------------------------------- the front panel
+
+   What a stylesheet could not do before there was a layer to put it in: the
+   case gets a speaker grille and a power lamp, so the chassis is a piece of
+   hardware rather than a beige rectangle. Drawn on #skin-panel, which sits
+   behind the controls and takes no clicks. */
+
+#skin-panel {
+  height: 26px;
+  bottom: 74px;
+  left: 20px;
+  right: 20px;
+}
+
+#skin-panel::before {
+  content: "";
+  position: absolute;
+  inset: 6px 44px 6px 0;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--crt-case-shade) 0 2px,
+    transparent 2px 5px
+  );
+  opacity: 0.55;
+}
+
+/* The power lamp, at the end of the grille where a set would have one. */
+#skin-panel::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: oklch(0.72 0.18 30);
+  box-shadow:
+    0 0 9px oklch(0.72 0.18 30 / 0.8),
+    inset 0 1px 1px oklch(1 0 0 / 0.55);
+}

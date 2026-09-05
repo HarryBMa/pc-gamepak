@@ -1223,3 +1223,30 @@ body.is-gamepad :focus {
 #card:hover #cart-mark {
   opacity: 0.5;
 }
+
+/* ==========================================================================
+   The skin's layer
+
+   Nothing in the stock look, and nothing here draws itself. A skin fills these
+   with pseudo-elements: `#skin-chrome` sits over the artwork for anything a
+   frame would carry, and `#skin-panel` sits behind the controls for anything a
+   front panel would. Both ignore the pointer, so whatever a skin puts there
+   cannot get between anyone and a button.
+   ========================================================================== */
+
+#skin-chrome,
+#skin-panel {
+  position: absolute;
+  pointer-events: none;
+}
+
+#skin-chrome {
+  inset: 0;
+  z-index: 5;
+}
+
+#skin-panel {
+  inset: auto 0 0 0;
+  height: 0;
+  z-index: 2;
+}

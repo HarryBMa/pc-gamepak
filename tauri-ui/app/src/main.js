@@ -10,7 +10,8 @@
  *   eject_drive({ drivePath })                -> ()
  *   focus_window()                            -> ()
  *   debug_logging() / debug_log(line)         -> diagnostics, off by default
- *   get_settings()                            -> Settings (for defaultSkin)
+ *   get_settings() / set_settings(settings)   -> Settings
+ *   list_skins()                              -> [(name, description)]
  *   can_eject({ drivePath })                  -> bool
  *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
  *
@@ -33,6 +34,7 @@ const el = {
   slotLabel: document.getElementById("slot-label"),
   insert: document.getElementById("btn-insert"),
   skin: document.getElementById("skin"),
+  btnSkin: document.getElementById("btn-skin"),
   cover: document.getElementById("cover-img"),
   coverB: document.getElementById("cover-img-b"),
   placeholder: document.getElementById("cover-placeholder"),
@@ -939,8 +941,47 @@ function showCover(src) {
  */
 function wearSkin(name) {
   if (!el.skin) return;
-  const wanted = name && name !== "default" ? `skins/${name}.css` : "";
+  worn = name || "default";
+  const wanted = worn !== "default" ? `skins/${worn}.css` : "";
   if (el.skin.getAttribute("href") !== wanted) el.skin.setAttribute("href", wanted);
+}
+
+/** What is on now, so the button knows what comes next. */
+let worn = "default";
+
+/** Every look this build ships, filled in once the backend has been asked. */
+let skins = [];
+
+invoke("list_skins")
+  .then((list) => {
+    skins = list.map(([name]) => name);
+  })
+  .catch(() => {});
+
+/**
+ * Put on the next skin, and remember it.
+ *
+ * A cycle rather than a menu. Five looks and a 420px window: a list would be a
+ * popup covering the artwork it is meant to be showing off, where pressing a
+ * button repeatedly shows the same thing faster and never hides anything.
+ *
+ * Saved as the default for cartridges that do not ask for one — pressing this
+ * is a preference, not a fidget. A cartridge with its own `skin=` still wins
+ * next time it is plugged in, which is why the toast says what it changed.
+ */
+async function cycleSkin() {
+  if (skins.length < 2) return;
+
+  const next = skins[(Math.max(0, skins.indexOf(worn)) + 1) % skins.length];
+  wearSkin(next);
+  toast(`Skin: ${next}`);
+
+  try {
+    const current = await invoke("get_settings");
+    await invoke("set_settings", { settings: { ...current, defaultSkin: next } });
+  } catch {
+    // The look changed either way; it just will not be remembered.
+  }
 }
 
 async function showWindow() {
@@ -1074,6 +1115,7 @@ const gamepad = connectGamepad({
 });
 
 el.close.addEventListener("click", closeWindow);
+el.btnSkin.addEventListener("click", cycleSkin);
 el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
 el.sheetBack.addEventListener("click", () => toggleSheet(false));

@@ -234,3 +234,37 @@
   background: var(--phos);
   color: var(--accent-ink);
 }
+
+/* ------------------------------------------------------------- the header
+
+   A title bar across the top of the screen, the way a terminal has one. It is
+   the clearest thing a skin gains from having a layer of its own: this is
+   structure, not colour, and there is nowhere in the stock markup it could
+   have gone. */
+
+#skin-chrome::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 26px;
+  background: var(--term-panel);
+  border-bottom: 2px solid var(--term-line);
+}
+
+#skin-chrome::after {
+  content: "PC-GAMEPAK";
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  color: var(--phos);
+  text-shadow: 0 0 10px oklch(0.79 0.16 78 / 0.55);
+}
+
+/* The chrome buttons move below the bar rather than sitting on top of it. */
+#chrome {
+  padding-top: 32px;
+}

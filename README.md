@@ -186,6 +186,17 @@ was. A cartridge is a drive somebody handed you, and letting one repaint the
 window that is asking whether to trust it is a poor trade for a nicer
 background.
 
+The star in the corner of the launcher cycles through them, live, and
+remembers the one you stop on as the default. It is a cycle rather than a menu
+because five looks in a 420px window means a list would cover the artwork it is
+meant to be showing off.
+
+A skin gets two boxes of its own — one over the artwork, one behind the
+controls — which is what lets it add things rather than only recolour them: the
+retro skin's speaker grille and power lamp are drawn in one, and the terminal
+skin's title bar in the other. A stylesheet cannot add elements, so without
+somewhere to put them a skin could only ever be a palette.
+
 Adding a skin is a stylesheet in `tauri-ui/app/skins/` and a line in
 `core/src/skins.rs`. The file is loaded *on top of* the stock one rather than
 instead of it, so a skin is only the difference — `retro.css` is about 150 lines
