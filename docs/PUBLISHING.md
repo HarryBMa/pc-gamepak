@@ -30,7 +30,7 @@ switch.
 | Channel | Why it fits | Effort |
 |---|---|---|
 | **GitHub Releases** | The source of truth every other channel points at. Tag `v0.1.0`, CI builds Linux and Windows artefacts with checksums. | Done — `.github/workflows/release.yml` |
-| **AUR** (`pc-gamepak`, `pc-gamepak-git`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` and `packaging/aur/pc-gamepak-git/` are written |
+| **AUR** (`pc-gamepak`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` is written |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
 | **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. `packaging/scoop/pc-gamepak.json` is written. | Low |
 
@@ -108,9 +108,9 @@ of a Windows autorun policy, and it will be the top support question.
 1. **Tag `v1.0.0`.** Nothing below can start without artefacts to point at.
    `cargo build --release` is confirmed on Linux (above) and on Windows — CI
    covers `check`, not `build`.
-2. **AUR `pc-gamepak-git`** first: it builds from `main`, so it needs no
-   checksums and no release cadence, and it puts the project in front of the
-   Steam Deck audience immediately. Then the versioned `pc-gamepak`.
+2. **AUR `pc-gamepak`**, built from the release tarball with a real checksum.
+   One package, under the plain name: the `-git` suffix is what the AUR
+   reserves for a package that tracks a branch, and this one does not.
 3. **Scoop**, in a personal bucket (`HarryBMa/scoop-bucket`). One JSON file, and
    `checkver`/`autoupdate` keep it current on their own.
 4. **WinGet**, via `wingetcreate` for the first submission and the
