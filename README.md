@@ -9,7 +9,6 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 
 [![CI](https://github.com/HarryBMa/pc-gamepak/actions/workflows/ci.yml/badge.svg)](https://github.com/HarryBMa/pc-gamepak/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/HarryBMa/pc-gamepak)](https://github.com/HarryBMa/pc-gamepak/releases)
-[![AUR version](https://img.shields.io/aur/version/pc-gamepak)](https://aur.archlinux.org/packages/pc-gamepak)
 [![WinGet version](https://img.shields.io/winget/v/HarryBMa.PCGamePak)](https://github.com/microsoft/winget-pkgs)
 [![License](https://img.shields.io/github/license/HarryBMa/pc-gamepak)](LICENSE)
 [![Support on Ko-Fi](https://img.shields.io/badge/Support-Ko--Fi-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/harrybma)
@@ -81,21 +80,28 @@ stick. exFAT for cross-platform cartridges, btrfs for Linux-only ones.
 
 ## Install
 
-**Windows** — [WinGet](https://github.com/microsoft/winget-pkgs), Scoop, or the
-installer from [Releases](https://github.com/HarryBMa/pc-gamepak/releases):
+**Windows** — [Scoop](https://scoop.sh), which is the one that works today:
 
 ```powershell
-winget install HarryBMa.PCGamePak
+scoop bucket add harrybma https://github.com/HarryBMa/scoop-bucket
+scoop install pc-gamepak
 ```
 
-**Arch / Steam Deck** — from the [AUR](https://aur.archlinux.org/packages/pc-gamepak):
+Scoop puts both binaries on your PATH but cannot register the watcher to start
+at logon, so run the installer once to do that:
 
-```bash
-paru -S pc-gamepak
+```powershell
+powershell -ExecutionPolicy Bypass -File "$(scoop prefix pc-gamepak)\windows\install.ps1" -Mode Watcher
 ```
 
-**Other Linux** — clone and run `sudo linux/install.sh`, or
-`linux/install-user.sh` for a rootless install under `~/.local`.
+Or take the installer from
+[Releases](https://github.com/HarryBMa/pc-gamepak/releases) and skip Scoop
+entirely. A [WinGet](https://github.com/microsoft/winget-pkgs) package is in
+review; once it lands, `winget install HarryBMa.PCGamePak` does the lot.
+
+**Linux** — clone and run `sudo linux/install.sh`, or `linux/install-user.sh`
+for a rootless install under `~/.local`. An AUR package is written and waiting
+on the AUR reopening registrations.
 
 ## Usage
 
