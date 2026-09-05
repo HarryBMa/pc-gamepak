@@ -54,7 +54,7 @@ options=(!lto)
 makedepends=('rust' 'pkgconf')
 install="$pkgname.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')  # replaced at release time by the checksum from the workflow
+sha256sums=('3b11d4872ca9f024c008dbdaa97246c4cb6f114e2e22dd1bee45e9b19af13f58')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"

@@ -20,6 +20,6 @@ pkgbase = pc-gamepak
 	optdepends = udiskie: automount cartridges on desktops that do not do it themselves
 	options = !lto
 	source = pc-gamepak-1.0.0.tar.gz::https://github.com/HarryBMa/pc-gamepak/archive/refs/tags/v1.0.0.tar.gz
-	sha256sums = SKIP
+	sha256sums = 3b11d4872ca9f024c008dbdaa97246c4cb6f114e2e22dd1bee45e9b19af13f58
 
 pkgname = pc-gamepak
