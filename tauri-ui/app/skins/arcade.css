@@ -1,263 +1,395 @@
 /* ==========================================================================
-   Arcade — a cabinet: marquee at the top, a strip of games, a big round button.
+   Arcade — a cabinet: a marquee, a strip of games, and two plunger buttons.
 
-   The one skin where the list runs sideways rather than down, and the one with
-   a Play button that is not a rectangle. Everything else here has been a
-   window; this is a machine you would put a coin in.
+   The one skin whose list runs **sideways** rather than down, so left and right
+   are the keys that move and the launcher works that out from where the tiles
+   sit. The one with a Play button that is not a rectangle, and the one drawn
+   over scanlines rather than over somebody's artwork.
 
-   Portrait and narrow, because a cabinet is.
+   Wide and short, because a marquee is.
    ========================================================================== */
 
 :root {
-  --skin-width: 372;
-  --skin-height: 620;
+  --skin-width: 640;
+  --skin-height: 420;
+
+  /* The tiles are 104x130, which is a cover's shape. A hero in that box is a
+     sliver of a banner and an icon is a stamp in the middle of it. */
   --skin-art: grid;
 
-  --accent: oklch(0.86 0.17 92);
-  --accent-ink: oklch(0.2 0.04 92);
+  --accent: #ffe600;
+  --accent-ink: #1a0f00;
+  --radius: 6px;
 
-  --arc-marquee: oklch(0.86 0.17 92);
-  --arc-red: oklch(0.55 0.22 27);
-  --arc-red-lit: oklch(0.64 0.23 30);
-  --arc-red-deep: oklch(0.33 0.14 27);
-  --arc-body: oklch(0.14 0.004 60);
-  --arc-body-2: oklch(0.1 0.003 60);
-  --arc-line: oklch(0.28 0.006 60);
+  --arcade-bg: #0f0a1c;
+  --arcade-surface: #1a1230;
+  --arcade-yellow: #ffe600;
+  --arcade-red: #ff2255;
+  --arcade-cyan: #00f0ff;
+  --arcade-border: #442878;
+  --arcade-font: Impact, "Arial Black", "Trebuchet MS", sans-serif;
 }
 
-/* ---------------------------------------------------------------- the cabinet */
-
 #card {
-  background: var(--arc-body-2);
-  border-radius: 6px;
-  border: 3px solid oklch(0.22 0.005 60);
-  box-shadow:
-    0 0 0 5px oklch(0.11 0.003 60),
-    0 0 0 7px oklch(0.26 0.006 60),
-    0 22px 56px -14px oklch(0 0 0 / 0.9);
+  background-color: var(--arcade-bg);
+  /* CRT scanlines, and the phosphor triad under them. */
+  background-image:
+    linear-gradient(rgb(18 16 16 / 0) 50%, rgb(0 0 0 / 0.25) 50%),
+    linear-gradient(90deg, rgb(255 0 0 / 0.03), rgb(0 255 0 / 0.01), rgb(0 0 255 / 0.03));
+  background-size: 100% 4px, 6px 100%;
+  color: #ffffff;
+  font-family: var(--arcade-font);
+  border: 4px solid var(--arcade-yellow);
+  border-radius: 4px;
+  box-shadow: 0 0 20px rgb(255 230 0 / 0.2), inset 0 0 15px rgb(0 0 0 / 0.8);
 }
 
 #face {
-  border-radius: 3px;
+  border-radius: 2px;
+}
+
+/* The cabinet is the scanlines. Cover art fills the tiles instead. */
+#plate,
+#scrim-top,
+#scrim-bottom,
+#cart-mark {
+  display: none;
 }
 
 /* --------------------------------------------------------------- the marquee
 
-   Lit from behind, the way the sign over a cabinet is. Drawn on the skin's own
-   layer, since the stock markup has no sign. */
+   Drawn on `#skin-panel`, the lower of the two skin layers, because `#chrome`
+   holds only the three corner buttons and `#skin-chrome` would paint over the
+   name printed on the bar. */
 
-#skin-chrome::before {
-  content: "";
-  position: absolute;
+#skin-panel {
   inset: 0 0 auto 0;
-  height: 56px;
-  background: linear-gradient(180deg, oklch(0.2 0.09 27) 0%, oklch(0.11 0.05 27) 100%);
-  border-bottom: 2px solid var(--arc-red);
-}
-
-#skin-chrome::after {
-  content: "INSERT COIN TO CONTINUE";
-  position: absolute;
-  top: 34px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 7px;
-  letter-spacing: 0.3em;
-  color: var(--arc-red-lit);
+  height: 44px;
+  background: linear-gradient(180deg, #ff0055 0%, #990033 100%);
+  border-bottom: 3px solid var(--arcade-yellow);
+  border-radius: 2px 2px 0 0;
 }
 
 #chrome {
-  padding: 8px 10px 0 0;
-  z-index: 7;
+  height: 44px;
+  padding: 0 12px 0 0;
+  align-items: center;
 }
 
-/* ------------------------------------------------------------- the game strip
+/* Always on: on a marquee these are part of the cabinet, not chrome floating
+   over artwork that they would otherwise be hiding. */
+#chrome-actions {
+  opacity: 1;
+  transform: none;
+}
 
-   Sideways. A cabinet shows the next game along, not a list of them. */
+/* Matched to `#chrome .icon-btn` in the base, which a bare class loses to. */
+#chrome .icon-btn {
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0.25);
+  border: 2px solid rgb(255 255 255 / 0.35);
+  color: #ffffff;
+}
+
+#chrome .icon-btn:hover {
+  background: rgb(0 0 0 / 0.4);
+  border-color: var(--arcade-yellow);
+  color: var(--arcade-yellow);
+}
+
+#chrome .icon-btn--close:hover {
+  background: #cc0033;
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+/* -------------------------------------------------------------- the layout */
 
 #stage {
   position: absolute;
-  inset: 56px 0 0 0;
+  inset: 44px 0 0 0;
   margin-top: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
 }
 
-#game-list {
+/* The cartridge's name goes on the marquee, which is what a marquee is for. */
+#eyebrow {
+  position: absolute;
+  top: -44px;
+  left: 16px;
+  right: 120px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-family: var(--arcade-font);
+  font-size: 14px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 2px 2px 0 #000000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The selected game is named on its own tile, so this is the attract line
+   under the strip rather than a poster title. */
+#game-title {
   flex: none;
-  order: -1;
+  margin: 0;
+  padding: 12px 20px 0;
+  font-family: var(--arcade-font);
+  font-size: 20px;
+  font-weight: 400;
+  font-stretch: 100%;
+  line-height: 1.2;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--arcade-yellow);
+  text-shadow: 0 0 10px rgb(255 230 0 / 0.6), 2px 2px 0 #000000;
+}
+
+#title-logo {
+  max-height: 26px;
+}
+
+#notice {
+  flex: none;
+  padding: 4px 20px 0;
+  color: var(--arcade-cyan);
+}
+
+/* ---------------------------------------------------------------- the strip */
+
+#game-list {
+  flex: 1;
+  max-height: none;
+  margin: 0;
+  padding: 16px 12px;
   display: flex;
   flex-direction: row;
-  gap: 0;
-  margin: 0;
-  padding: 9px 0;
-  max-height: none;
+  align-items: center;
+  gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  background: oklch(0.06 0.002 60);
-  border-bottom: 2px solid var(--arc-line);
-  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--arcade-border) transparent;
 }
 
 .game-row {
-  flex: none;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  width: 84px;
-  gap: 6px;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
   text-align: center;
+  width: 120px;
+  flex: 0 0 auto;
+  gap: 0;
+  padding: 10px 8px;
+  background: var(--arcade-surface);
+  border: 2px solid var(--arcade-border);
+  border-radius: 6px;
+  scroll-snap-align: center;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  position: relative;
+}
+
+.game-row:hover {
+  border-color: var(--arcade-cyan);
+  box-shadow: 0 0 10px rgb(0 240 255 / 0.4);
+  transform: translateY(-2px);
+}
+
+.game-row[aria-selected="true"] {
+  background: #2a1b4e;
+  border-color: var(--arcade-yellow);
+  box-shadow: 0 0 16px rgb(255 230 0 / 0.6), inset 0 0 8px rgb(255 230 0 / 0.2);
+  transform: translateY(-4px);
 }
 
 .game-row__cover {
-  width: 46px;
-  height: 46px;
-  border-radius: 0;
+  width: 104px;
+  height: 130px;
   object-fit: cover;
-  border: 2px solid var(--arc-line);
-  filter: brightness(0.55);
-  transition: filter 120ms linear, border-color 120ms linear;
+  border: 2px solid #000000;
+  box-shadow: 0 0 6px rgb(0 0 0 / 0.8);
+  border-radius: 2px;
 }
 
-.game-row[aria-selected="true"] .game-row__cover {
-  border-color: var(--arc-marquee);
-  filter: none;
-  box-shadow: 0 0 12px -2px oklch(0.86 0.17 92 / 0.7);
+.game-row__cover--empty {
+  background: #0b0716;
+  color: var(--arcade-cyan);
+  font-size: 20px;
+}
+
+.game-row__body {
+  width: 100%;
+  min-width: 0;
 }
 
 .game-row__title {
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 7.5px;
-  letter-spacing: 0.06em;
-  line-height: 1.3;
-  color: oklch(0.6 0.005 60);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  margin-top: 8px;
+  width: 100%;
+  font-family: var(--arcade-font);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #000000;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .game-row[aria-selected="true"] .game-row__title {
-  color: var(--arc-marquee);
-  text-shadow: 0 0 8px oklch(0.86 0.17 92 / 0.6);
+  color: var(--arcade-yellow);
+  text-shadow: 0 0 6px rgb(255 230 0 / 0.8), 1px 1px 0 #000000;
 }
 
-.game-row__meta,
-.game-row__dot {
+/* No room under a tile for a second line. */
+.game-row__meta {
   display: none;
 }
 
-/* ----------------------------------------------------------------- the screen */
-
-#game-title {
+/* The coin light, dark until the tile is the one Play will start. */
+.game-row__dot {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 166px;
-  margin: 0;
-  text-align: center;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 600;
-  font-stretch: 100%;
-  line-height: 1.4;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--arc-marquee);
-  text-shadow: 0 0 10px oklch(0.86 0.17 92 / 0.7);
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #330011;
+  border: 1px solid var(--arcade-red);
+  opacity: 1;
 }
 
-#scrim-bottom {
-  inset: auto 0 150px 0;
-  height: 34%;
+.game-row[aria-selected="true"] .game-row__dot {
+  background: var(--arcade-yellow);
+  border-color: #ffffff;
+  box-shadow: 0 0 8px var(--arcade-yellow);
 }
 
-/* --------------------------------------------------------- the control panel
-
-   The buttons sit on a panel below the screen rather than over the artwork,
-   because on a cabinet they are on a different surface entirely. */
+/* ------------------------------------------------------------ the plungers */
 
 #button-row {
-  margin: auto 0 0;
-  padding: 22px 16px 26px;
-  gap: 20px;
+  flex: none;
+  margin: 0;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  background: var(--arc-body);
-  border-top: 2px solid var(--arc-line);
+  gap: 16px;
+  padding: 14px 20px 18px;
+  background: #090612;
+  border-top: 3px solid var(--arcade-border);
 }
 
-/* Round, red, and it sinks onto its own edge. The only circular Play here. */
-.btn--play {
-  flex: none;
-  width: 82px;
-  height: 82px;
-  padding: 0;
-  border-radius: 50%;
-  border: 4px solid oklch(0.3 0.13 27);
-  background: radial-gradient(circle at 38% 32%, var(--arc-red-lit), var(--arc-red));
-  color: oklch(0.99 0 0);
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+/* Dome push-buttons: a lit top, a shaded underside, and a colour of plastic
+   below them that the button drops onto when it is pressed. */
+.btn--play,
+.btn--eject {
+  font-family: inherit;
+  font-weight: 900;
   text-transform: uppercase;
-  box-shadow:
-    0 6px 0 var(--arc-red-deep),
-    0 0 16px -2px oklch(0.55 0.22 27 / 0.6),
-    inset 0 2px 5px oklch(1 0 0 / 0.25);
+  border-style: solid;
+  border-width: 3px;
+  border-radius: 50px;
+  height: auto;
   transition: transform 80ms ease, box-shadow 80ms ease;
 }
 
-.btn--play:active:not(:disabled) {
-  transform: translateY(5px);
-  box-shadow: 0 1px 0 var(--arc-red-deep), inset 0 2px 5px oklch(0 0 0 / 0.3);
+.btn--play {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: #1a0f00;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.6);
+  background: linear-gradient(180deg, #fff275 0%, #ffe600 45%, #ff9900 85%, #d67a00 100%);
+  border-color: #fff9a6 #cc7a00 #804d00 #ffe600;
+  box-shadow:
+    inset 0 3px 3px rgb(255 255 255 / 0.8),
+    inset 0 -3px 4px rgb(0 0 0 / 0.3),
+    0 6px 0 #804d00,
+    0 8px 10px rgb(0 0 0 / 0.6);
 }
 
-/* A smaller button of the same kind, off to one side. */
+.btn--play:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffff99 0%, #ffeb33 45%, #ffaa00 85%, #e68500 100%);
+  box-shadow:
+    inset 0 3px 3px rgb(255 255 255 / 0.9),
+    inset 0 -3px 4px rgb(0 0 0 / 0.3),
+    0 6px 0 #804d00,
+    0 0 12px rgb(255 230 0 / 0.6);
+}
+
+.btn--play:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow:
+    inset 0 2px 2px rgb(0 0 0 / 0.4),
+    0 2px 0 #804d00,
+    0 3px 6px rgb(0 0 0 / 0.6);
+}
+
 .btn--eject {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 3px solid oklch(0.34 0.1 92);
-  background: radial-gradient(
-    circle at 38% 32%,
-    oklch(0.7 0.14 92),
-    oklch(0.55 0.13 92)
-  );
-  color: oklch(0.2 0.04 92);
-  box-shadow: 0 5px 0 oklch(0.32 0.09 92);
+  width: 72px;
+  padding: 10px 0;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #ffffff;
+  text-shadow: 0 -1px 0 rgb(0 0 0 / 0.8);
+  background: linear-gradient(180deg, #ff6b8b 0%, #ff2255 45%, #cc0033 85%, #800020 100%);
+  border-color: #ff99aa #990026 #4d0013 #ff3366;
+  box-shadow:
+    inset 0 3px 3px rgb(255 255 255 / 0.6),
+    inset 0 -3px 4px rgb(0 0 0 / 0.4),
+    0 6px 0 #4d0013,
+    0 8px 10px rgb(0 0 0 / 0.6);
+}
+
+.btn--eject:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ff85a1 0%, #ff3366 45%, #e60039 85%, #990026 100%);
+  box-shadow:
+    inset 0 3px 3px rgb(255 255 255 / 0.7),
+    inset 0 -3px 4px rgb(0 0 0 / 0.4),
+    0 6px 0 #4d0013,
+    0 0 12px rgb(255 34 85 / 0.6);
 }
 
 .btn--eject:active:not(:disabled) {
   transform: translateY(4px);
-  box-shadow: 0 1px 0 oklch(0.32 0.09 92);
+  box-shadow:
+    inset 0 2px 2px rgb(0 0 0 / 0.5),
+    0 2px 0 #4d0013,
+    0 3px 6px rgb(0 0 0 / 0.6);
 }
 
+/* A dome with nothing behind it is a dead button, so it flattens outright. */
 .btn:disabled {
-  background: oklch(0.26 0.004 60);
-  border-color: var(--arc-line);
-  color: oklch(0.45 0.004 60);
-  box-shadow: 0 5px 0 oklch(0.16 0.003 60);
+  background: #16102a;
+  border-color: var(--arcade-border);
+  color: #55447a;
+  box-shadow: none;
+  transform: none;
 }
 
 /* ------------------------------------------------------------------ the rest */
 
-#slot {
-  background: var(--arc-body-2);
-  color: var(--arc-marquee);
+#slot,
+#cover-placeholder {
+  background: var(--arcade-bg);
+  color: var(--arcade-cyan);
 }
 
-#cover-placeholder {
-  background: oklch(0.09 0.003 60);
+#placeholder-initials {
+  color: var(--arcade-yellow);
 }
 
 .pad-badge {
-  border-radius: 0;
+  background: var(--arcade-yellow);
+  color: #1a0f00;
 }

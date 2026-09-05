@@ -655,9 +655,14 @@ function select(index) {
     row.setAttribute("aria-selected", String(Number(row.dataset.index) === index));
   }
 
-  el.gameList
-    .querySelector(`.game-row[data-index="${index}"]`)
-    ?.scrollIntoView({ block: "nearest" });
+  const row = el.gameList.querySelector(`.game-row[data-index="${index}"]`);
+
+  // Focus follows the selection whenever it is already in the list. A row
+  // clicked with the mouse keeps the focus ring, so arrowing away from it left
+  // two rows lit in two different styles — the ring on the clicked one and the
+  // selected state on the real one — with only the second of them true.
+  if (document.activeElement?.classList.contains("game-row")) row?.focus();
+  row?.scrollIntoView({ block: "nearest" });
 
   const game = list[index];
   setGameTitle(game.title);
@@ -667,6 +672,14 @@ function select(index) {
   setBusy(false);
 }
 
+
+/** Which way each arrow key points, in the same [x, y] the pad reports. */
+const ARROWS = {
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+};
 
 /**
  * How many games are on a row, right now.
@@ -1122,7 +1135,6 @@ async function cycleSkin() {
 
   const next = skins[(Math.max(0, skins.indexOf(worn)) + 1) % skins.length];
   wearSkin(next);
-  toast(`Skin: ${next}`);
 
   try {
     const current = await invoke("get_settings");
@@ -1313,17 +1325,17 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  // Up and down move the selection, which is what the rail is for. They used
-  // to scroll it, so a collection could be scrolled past a game without ever
+  // The arrows move the selection, which is what the rail is for. They used to
+  // scroll it, so a collection could be scrolled past a game without ever
   // choosing one — and Play still acted on whatever was selected before.
-  if (!sheetOpen && isCollection() && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+  //
+  // All four of them, through the same two-axis step the pad uses: left and
+  // right did nothing at all in the skins whose list runs sideways or wraps
+  // into a grid, which are the two layouts where they are the natural keys.
+  if (!sheetOpen && isCollection() && ARROWS[event.key]) {
     event.preventDefault();
-    const step = event.key === "ArrowDown" ? 1 : -1;
-    const next = selected + step;
-    if (next >= 0 && next < games().length) {
-      select(next);
-      el.gameList.children[next]?.scrollIntoView({ block: "nearest" });
-    }
+    const [x, y] = ARROWS[event.key];
+    step(x + y * columns());
     return;
   }
 

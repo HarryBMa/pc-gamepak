@@ -155,14 +155,27 @@ button. Do not undo that.
 | Selector | When |
 |---|---|
 | `.game-row[aria-selected="true"]` | the game Play will start |
+| `.game-row:focus` | the same row — focus follows the selection |
 | `.btn:disabled` | no executable, or a job is running |
 | `.btn--play.is-launching` | between the press and the game appearing |
 | `#card.is-collection` | more than one game, so the rail is showing |
 | `#card.is-ejected` | the face has ridden out of the slot |
 | `#card.is-crossfaded` | the second art layer is in front |
 | `#stage.has-logo` | a logo is printed instead of the title |
+| `#game-title.is-long` | the name runs over fifteen characters |
 | `body.is-gamepad` | a controller is connected |
 | `.hidden`, `[hidden]` | do not make these visible |
+
+`is-long` sets no properties of its own — it flips four custom properties that
+the base `#game-title` rule reads, so a skin that gives the title its own
+`font-size` keeps it at every length:
+
+```
+--title-size  --title-stretch  --title-tracking  --title-leading
+```
+
+Set them yourself if you want long names squeezed rather than wrapped, and
+leave them alone if you do not.
 
 ---
 

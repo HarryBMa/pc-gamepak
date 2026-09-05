@@ -422,22 +422,29 @@ body.is-gamepad .pad-badge {
 
 #game-title {
   margin: 0;
-  font-size: 40px;
+  font-size: var(--title-size, 40px);
   font-weight: 800;
-  font-stretch: 84%;
-  line-height: 0.9;
-  letter-spacing: -0.012em;
+  font-stretch: var(--title-stretch, 84%);
+  line-height: var(--title-leading, 0.9);
+  letter-spacing: var(--title-tracking, -0.012em);
   text-transform: uppercase;
   text-wrap: balance;
   text-shadow: 0 2px 14px oklch(0 0 0 / 0.6);
 }
 
-/* Long titles give up width before they give up size. */
+/* Long titles give up width before they give up size.
+
+   Set as custom properties rather than as the properties themselves, because
+   `#game-title.is-long` outranks the `#game-title` a skin writes, and a skin
+   that had picked an 11px title got 30px for any name over fifteen characters
+   while its neighbours stayed small. Flipping variables the base rule reads
+   leaves a skin's own declaration to win, and lets a skin that wants the
+   squeeze opt into it by setting the same three. */
 #game-title.is-long {
-  font-size: 30px;
-  font-stretch: 76%;
-  letter-spacing: -0.004em;
-  line-height: 0.96;
+  --title-size: 30px;
+  --title-stretch: 76%;
+  --title-tracking: -0.004em;
+  --title-leading: 0.96;
 }
 
 /* Shown only when something is stopping Play from working. */

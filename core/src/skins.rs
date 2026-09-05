@@ -35,7 +35,7 @@ pub const SKINS: [(&str, &str); 6] = [
     ("desktop", "Games as a grid of shortcuts, with a taskbar"),
     (
         "arcade",
-        "A cabinet: the games run sideways, and Play is a big round button",
+        "A cabinet: scanlines, a marquee, and the games run sideways",
     ),
 ];
 
