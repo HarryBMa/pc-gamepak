@@ -221,3 +221,88 @@
 .pad-badge {
   border-radius: 0;
 }
+
+/* ========================================================================
+   Landscape
+
+   The stock window is 420x630 because a cover is 3:4 and one game is the
+   common case. A HUD is not a cover — it is a readout beside the thing it is
+   reading, so this one turns the window on its side and puts the controls in
+   a column to the right of the artwork.
+
+   The artwork itself is untouched: same cover, same logo, same background,
+   at the same aspect it always was. A skin choosing a shape is not a skin
+   asking for different pictures.
+   ======================================================================== */
+
+:root {
+  --skin-width: 560;
+  --skin-height: 380;
+}
+
+/* The art keeps its own proportions on the left; the panel sits over the
+   right third with the falloff doing the separating. */
+#plate {
+  right: 232px;
+}
+
+#scrim-bottom {
+  inset: 0 0 0 auto;
+  width: 300px;
+  height: 100%;
+  background: linear-gradient(
+    to left,
+    oklch(0.1 0.03 255 / 0.97) 0%,
+    oklch(0.1 0.03 255 / 0.93) 52%,
+    oklch(0.1 0.03 255 / 0.55) 78%,
+    transparent 100%
+  );
+}
+
+#scrim-top {
+  display: none;
+}
+
+#stage {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 232px;
+  margin-top: 0;
+  padding: 44px 18px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+#game-title {
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  line-height: 1.35;
+}
+
+#game-list {
+  margin-top: 12px;
+  max-height: none;
+  flex: 1;
+}
+
+/* Side by side down here too — there is width for it now, and a HUD does not
+   have one large control and one small one. */
+#button-row {
+  margin-top: 12px;
+}
+
+.btn--play {
+  height: 36px;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+}
+
+.btn--eject {
+  width: 72px;
+  height: 36px;
+}
+
+/* The reticle follows the window rather than the old portrait shape. */
+#face::before {
+  inset: 8px;
+}

@@ -34,6 +34,7 @@ const el = {
   slotLabel: document.getElementById("slot-label"),
   insert: document.getElementById("btn-insert"),
   skin: document.getElementById("skin"),
+  cartSkin: document.getElementById("cart-skin"),
   btnSkin: document.getElementById("btn-skin"),
   cover: document.getElementById("cover-img"),
   coverB: document.getElementById("cover-img-b"),
@@ -831,7 +832,7 @@ async function init() {
 
   // Before the window is shown, so the cartridge never appears in the stock
   // look and then changes its mind a frame later.
-  wearSkin(cartridge.skin);
+  wearSkin(cartridge.skin, cartridge.skin_css ?? "");
 
   // A tag has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
@@ -939,12 +940,51 @@ function showCover(src) {
  * "default" is the stylesheet already loaded, so it clears the link rather than
  * loading an empty file.
  */
-function wearSkin(name) {
+function wearSkin(name, css = null) {
   if (!el.skin) return;
   worn = name || "default";
   const wanted = worn !== "default" ? `skins/${worn}.css` : "";
   if (el.skin.getAttribute("href") !== wanted) el.skin.setAttribute("href", wanted);
+
+  // The cartridge's own, after the named one, so it can either bring a whole
+  // look or adjust one that already exists. Only replaced when a cartridge is
+  // being loaded — cycling skins must not throw away what the cartridge said.
+  if (css !== null) el.cartSkin.textContent = css;
+
+  // A stylesheet arriving over a link lands a frame later than one set inline,
+  // so the size is taken after the next paint rather than immediately.
+  requestAnimationFrame(() => requestAnimationFrame(resizeToSkin));
 }
+
+/**
+ * Let the skin choose the window's size.
+ *
+ * The launcher is 420x630 because a cover is 3:4, which is the right shape for
+ * one game and the wrong one for a skin laid out sideways. A skin says what it
+ * wants in two custom properties and this passes them on; saying nothing keeps
+ * the stock size, so this costs a skin that does not care exactly nothing.
+ *
+ *   :root { --skin-width: 520; --skin-height: 400; }
+ */
+async function resizeToSkin() {
+  if (!tauri?.window) return;
+
+  const style = getComputedStyle(document.documentElement);
+  const width = Number.parseInt(style.getPropertyValue("--skin-width"), 10) || 420;
+  const height = Number.parseInt(style.getPropertyValue("--skin-height"), 10) || 630;
+  if (width === sized.width && height === sized.height) return;
+  sized = { width, height };
+
+  try {
+    const { getCurrentWindow, LogicalSize } = tauri.window;
+    await getCurrentWindow().setSize(new LogicalSize(width, height));
+  } catch {
+    // An older build without the permission keeps the size it was given.
+  }
+}
+
+/** What the window was last asked to be, so it is not asked again for nothing. */
+let sized = { width: 420, height: 630 };
 
 /** What is on now, so the button knows what comes next. */
 let worn = "default";

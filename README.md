@@ -197,6 +197,47 @@ retro skin's speaker grille and power lamp are drawn in one, and the terminal
 skin's title bar in the other. A stylesheet cannot add elements, so without
 somewhere to put them a skin could only ever be a palette.
 
+### A cartridge can carry its own look
+
+Put a stylesheet at `.gamepak/skin.css` on the cartridge and the launcher wears
+it, on top of whatever `skin=` selected — so a cartridge can bring a whole look
+of its own, or take one of the five and adjust it.
+
+```
+H:\.gamepak\skin.css
+```
+
+It is read by the backend and inlined into the window, the same way the artwork
+is read and handed over as a `data:` URI, so the window never opens a path on
+the drive itself. Capped at 256 KB, which is sixty times the largest of the five
+that ship.
+
+This does mean a cartridge can restyle the window that is asking whether to
+trust it. That is a fair trade here, where the cartridges are ones you wrote for
+your own shelf, and a bad one if you ever hand a cartridge to somebody else —
+the named skins exist for that case and cannot be supplied by a drive.
+
+### A skin can choose the window's shape
+
+The launcher is 420x630 because a cover is 3:4. A skin that is not built around
+a cover says otherwise in two custom properties, and the window resizes to
+match:
+
+```css
+:root {
+  --skin-width: 560;
+  --skin-height: 380;
+}
+```
+
+`neon` uses it to turn the window on its side — artwork on the left, the list
+and the controls in a column to the right. Saying nothing keeps the stock size.
+
+**The artwork never changes shape.** A skin picks its own frame, sizes and
+layout; the cover, logo and background stay exactly what they were, at the same
+aspect, so one set of pictures works under all of them. A skin choosing a shape
+is not a skin asking for different art.
+
 Adding a skin is a stylesheet in `tauri-ui/app/skins/` and a line in
 `core/src/skins.rs`. The file is loaded *on top of* the stock one rather than
 instead of it, so a skin is only the difference — `retro.css` is about 150 lines

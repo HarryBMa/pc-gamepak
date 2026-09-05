@@ -73,6 +73,29 @@ pub struct CartridgeInfo {
     /// with, so a cartridge chooses between skins rather than supplying one.
     /// See `skins`.
     pub skin: String,
+    /// A stylesheet the cartridge carries itself, or empty.
+    ///
+    /// Read here and handed over as text, the same way the artwork is read here
+    /// and handed over as a `data:` URI — the window never opens a path on the
+    /// drive, so there is one place that decides what a cartridge is allowed to
+    /// be read for. Applied after the named skin, so a cartridge can either
+    /// bring a whole look or adjust one that already exists.
+    pub skin_css: String,
+}
+
+/// A stylesheet the cartridge carries, if it has one and it is not absurd.
+///
+/// `.gamepak/skin.css`, beside the artwork, because that is where a cartridge's
+/// own files already live. Capped: this ends up inline in the window, and a
+/// stylesheet large enough to matter is a mistake rather than a design.
+pub fn skin_css(root: &Path) -> String {
+    let path = root.join(crate::create::ASSET_DIR).join("skin.css");
+    match std::fs::metadata(&path) {
+        Ok(meta) if meta.len() <= MAX_SKIN_BYTES => {
+            std::fs::read_to_string(&path).unwrap_or_default()
+        }
+        _ => String::new(),
+    }
 }
 
 /// The look this cartridge asks for, resolved to one the launcher ships.
@@ -103,6 +126,10 @@ pub fn holds_game(root: &Path) -> bool {
 /// Largest cover we will base64 into the webview. A cartridge is not a trusted
 /// input, and a 200 MB "cover" should fail rather than be inlined.
 pub const MAX_COVER_BYTES: u64 = 8 * 1024 * 1024;
+
+/// A cartridge's own stylesheet is inlined into the window, so it is held to a
+/// size that stays a stylesheet. The launcher's own five are 4 KB each.
+pub const MAX_SKIN_BYTES: u64 = 256 * 1024;
 
 // --------------------------------------------------------------------------
 // Inline INI / conf file parser
@@ -268,6 +295,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 is_bundle: true,
                 games,
                 skin: skin_from(&ini, "collection"),
+                skin_css: skin_css(root),
             });
         }
 
@@ -316,6 +344,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             is_bundle: false,
             games: Vec::new(),
             skin: skin_from(&ini, "general"),
+            skin_css: skin_css(root),
         });
     }
 
@@ -360,6 +389,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             holds_game: holds_game(root),
             is_bundle: false,
             skin: crate::skins::DEFAULT.to_string(),
+            skin_css: skin_css(root),
             games: Vec::new(),
         });
     }
