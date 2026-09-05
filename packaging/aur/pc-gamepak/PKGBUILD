@@ -59,6 +59,13 @@ sha256sums=('SKIP')  # replaced at release time by the checksum from the workflo
 build() {
   cd "$srcdir/$pkgname-$pkgver"
 
+  # Keeps the build path out of the binary. makepkg still warns once about
+  # "Package contains reference to $srcdir": tauri-build captures
+  # CARGO_MANIFEST_DIR through env!(), which is a string baked in at expansion
+  # time and so out of reach of --remap-path-prefix. It is never read at
+  # runtime — cosmetic, and not worth patching Tauri over.
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
+
   # The frontend is plain static files (tauri.conf.json points frontendDist at
   # ../app), so there is no npm step — cargo is the whole build.
   ( cd tauri-ui/src-tauri && cargo build --release --locked )

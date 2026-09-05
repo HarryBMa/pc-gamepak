@@ -57,6 +57,13 @@ pkgver() {
 build() {
   cd "$srcdir/$_pkgname"
 
+  # Keeps the build path out of the binary. makepkg still warns once about
+  # "Package contains reference to $srcdir": tauri-build captures
+  # CARGO_MANIFEST_DIR through env!(), which is a string baked in at expansion
+  # time and so out of reach of --remap-path-prefix. It is never read at
+  # runtime — cosmetic, and not worth patching Tauri over.
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
+
   # Static frontend, so cargo is the whole build — no npm step.
   ( cd tauri-ui/src-tauri && cargo build --release --locked )
   ( cd watcher && cargo build --release --locked )
