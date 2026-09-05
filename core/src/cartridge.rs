@@ -80,19 +80,12 @@ pub struct CartridgeInfo {
     pub is_bundle: bool,
     /// Individual games, populated only for bundles (`is_bundle == true`).
     pub games: Vec<GameEntry>,
-    /// Which of the launcher's own looks this cartridge asks for.
+    /// The stylesheet the cartridge carries, or empty.
     ///
-    /// A name, never a path: it is resolved against the list the launcher ships
-    /// with, so a cartridge chooses between skins rather than supplying one.
-    /// See `skins`.
-    pub skin: String,
-    /// A stylesheet the cartridge carries itself, or empty.
-    ///
-    /// Read here and handed over as text, the same way the artwork is read here
-    /// and handed over as a `data:` URI — the window never opens a path on the
-    /// drive, so there is one place that decides what a cartridge is allowed to
-    /// be read for. Applied after the named skin, so a cartridge can either
-    /// bring a whole look or adjust one that already exists.
+    /// The only way a cartridge changes how the launcher looks. Read here and
+    /// handed over as text, the same way the artwork is read here and handed
+    /// over as a `data:` URI — the window never opens a path on the drive, so
+    /// there is one place that decides what a cartridge may be read for.
     pub skin_css: String,
 }
 
@@ -101,6 +94,11 @@ pub struct CartridgeInfo {
 /// `.gamepak/skin.css`, beside the artwork, because that is where a cartridge's
 /// own files already live. Capped: this ends up inline in the window, and a
 /// stylesheet large enough to matter is a mistake rather than a design.
+///
+/// The launcher used to ship a list of looks that a cartridge picked from by
+/// name. It does not any more: a cartridge that wants to look like something
+/// brings the stylesheet, and one that does not gets the stock window. The
+/// examples that used to ship are in `docs/skins/`.
 pub fn skin_css(root: &Path) -> String {
     let path = root.join(crate::create::ASSET_DIR).join("skin.css");
     match std::fs::metadata(&path) {
@@ -108,19 +106,6 @@ pub fn skin_css(root: &Path) -> String {
             std::fs::read_to_string(&path).unwrap_or_default()
         }
         _ => String::new(),
-    }
-}
-
-/// The look this cartridge asks for, resolved to one the launcher ships.
-///
-/// Resolved here rather than in the window, so an unknown or hostile value has
-/// already become a known name by the time anything is asked to load it.
-fn skin_from(ini: &IniMap, section: &str) -> String {
-    match ini_get(ini, section, "skin") {
-        // The cartridge asked. It is the thing being shown, so it wins.
-        Some(asked) => crate::skins::resolve(asked).to_string(),
-        // It did not, so the answer is whatever the machine was told to prefer.
-        None => crate::skins::resolve(&crate::settings::load().default_skin).to_string(),
     }
 }
 
@@ -325,7 +310,6 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 holds_game: holds_game(root),
                 is_bundle: true,
                 games,
-                skin: skin_from(&ini, "collection"),
                 skin_css: skin_css(root),
             });
         }
@@ -374,7 +358,6 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             holds_game: holds_game(root),
             is_bundle: false,
             games: Vec::new(),
-            skin: skin_from(&ini, "general"),
             skin_css: skin_css(root),
         });
     }
@@ -419,7 +402,6 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             drive_path: drive_path.to_string(),
             holds_game: holds_game(root),
             is_bundle: false,
-            skin: crate::skins::DEFAULT.to_string(),
             skin_css: skin_css(root),
             games: Vec::new(),
         });

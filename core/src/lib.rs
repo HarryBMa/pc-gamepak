@@ -25,7 +25,6 @@ pub mod portable;
 pub mod proc;
 pub mod settings;
 pub mod sgdb;
-pub mod skins;
 pub mod steam;
 pub mod steamlib;
 pub mod throttle;

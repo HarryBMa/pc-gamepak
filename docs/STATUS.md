@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 214 tests
+### `core/` — `gamepak-core`, 209 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.

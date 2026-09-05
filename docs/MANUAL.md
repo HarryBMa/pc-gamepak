@@ -118,79 +118,43 @@ what it just launched. A cartridge with one game on it has no rail at all.
 
 ### Skins
 
-The launcher ships with more than one look, and a cartridge can ask for the one
-it wants:
-
-```ini
-title=Stardew Valley
-executable=steam://rungameid/413150
-skin=retro
-```
-
-| Skin | |
-|---|---|
-| `default` | Dark, quiet, and out of the way of the artwork |
-| `luna` | Explorer, about 2003: a title bar, a white pane, no artwork at all |
-| `neon` | Cyan and magenta over the hero, in a vertical list |
-| `cozy` | Cream and rounded: the light one, and the artwork stays out of it |
-| `desktop` | Games as a grid of shortcuts, with a taskbar |
-| `arcade` | A cabinet: the games run sideways, and Play is a big round button |
-
-The six are deliberately not variations on a palette. Retro is moulded
-plastic with buttons you press into, neon is etched glass with outlines you
-press through, and cozy is a knitted thing on a shelf — so they differ in the
-frame, in the shape and size of the two actions, in how the list is drawn and in
-whether the title shouts. The clearest single tell is what happens when a
-button is pressed: retro sinks into moulded plastic, neon lights an outline,
-cozy barely moves, and terminal drops four pixels onto a solid edge underneath
-it. Eject is a square, a wide bar, a circle and a hardware key across the four.
-
-A cartridge that says nothing wears whatever **Launcher look** is set to in the
-wizard's Settings. A cartridge that asks wins, because the cartridge is the
-thing being shown.
-
-**A cartridge picks a skin; it cannot bring one.** The name is looked up in the
-list above and an unknown one quietly becomes `default` — `../../evil`,
-`http://…`, and `retro.css` all match nothing. That is deliberate. Everything
-else a cartridge supplies is content the launcher puts inside a frame it
-controls: titles go in as text, artwork is read and handed over as a `data:`
-URI, and nothing is executed. A stylesheet is a different animal — it cannot run
-code, but it can move, cover and restyle anything on screen, including making
-Eject look like Play or putting a convincing false sentence where a real one
-was. A cartridge is a drive somebody handed you, and letting one repaint the
-window that is asking whether to trust it is a poor trade for a nicer
-background.
-
-The star in the corner of the launcher cycles through them, live, and
-remembers the one you stop on as the default. It is a cycle rather than a menu
-because five looks in a 420px window means a list would cover the artwork it is
-meant to be showing off.
-
-A skin gets two boxes of its own — one over the artwork, one behind the
-controls — which is what lets it add things rather than only recolour them: the
-retro skin's speaker grille and power lamp are drawn in one, and the terminal
-skin's title bar in the other. A stylesheet cannot add elements, so without
-somewhere to put them a skin could only ever be a palette.
-
-### A cartridge can carry its own look
-
-Put a stylesheet at `.gamepak/skin.css` on the cartridge and the launcher wears
-it, on top of whatever `skin=` selected — so a cartridge can bring a whole look
-of its own, or take one of the five and adjust it.
+A cartridge carries its own look, or it wears the stock one. Put a stylesheet at
+`.gamepak/skin.css` on the drive, beside the artwork:
 
 ```
 H:\.gamepak\skin.css
 ```
 
-It is read by the backend and inlined into the window, the same way the artwork
-is read and handed over as a `data:` URI, so the window never opens a path on
-the drive itself. Capped at 256 KB, which is sixty times the largest of the five
-that ship.
+That is the whole mechanism. There is no `skin=` key and no list of looks in the
+launcher to choose from — a cartridge either brings a stylesheet or it does not,
+which is the same arrangement the artwork already had. The look belongs to the
+cartridge and travels with it.
 
-This does mean a cartridge can restyle the window that is asking whether to
-trust it. That is a fair trade here, where the cartridges are ones you wrote for
-your own shelf, and a bad one if you ever hand a cartridge to somebody else —
-the named skins exist for that case and cannot be supplied by a drive.
+Eight worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
+wood-grain television, a neon split, black-and-gold, a desktop of icons, an
+arcade cabinet, a cream one, and a Big Picture couch launcher. Copy one to
+`.gamepak/skin.css` and edit it. [SKINNING.md](SKINNING.md) is the reference:
+which elements exist, what states they take, and what the content security
+policy forbids.
+
+The stylesheet is read by the backend and inlined into the window, the same way
+the artwork is read and handed over as a `data:` URI, so the window never opens
+a path on the drive itself. Capped at 256 KB, which is sixty times the largest
+of the examples.
+
+**What this trades away.** A stylesheet cannot run code, but it can move, cover
+and restyle anything on screen — including making Eject look like Play, or
+putting a convincing false sentence where a real one was. A cartridge is a drive
+somebody handed you. That is a fair trade here, where the cartridges are ones
+you wrote for your own shelf, and a bad one if you ever plug in somebody else's.
+If that is a risk you have, delete `.gamepak/skin.css` before plugging the drive
+in, or do not enable it.
+
+A skin gets two boxes of its own — one over the artwork, one behind the
+controls — which is what lets it add things rather than only recolour them: the
+retro example's knobs and lamps are drawn in one, and the 2003 example's title
+bar in the other. A stylesheet cannot add elements, so without somewhere to put
+them a skin could only ever be a palette.
 
 ### A skin can choose the window's shape
 

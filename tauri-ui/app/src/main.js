@@ -11,7 +11,6 @@
  *   focus_window()                            -> ()
  *   debug_logging() / debug_log(line)         -> diagnostics, off by default
  *   get_settings() / set_settings(settings)   -> Settings
- *   list_skins()                              -> [(name, description)]
  *   can_eject({ drivePath })                  -> bool
  *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
  *
@@ -33,9 +32,7 @@ const el = {
   slot: document.getElementById("slot"),
   slotLabel: document.getElementById("slot-label"),
   insert: document.getElementById("btn-insert"),
-  skin: document.getElementById("skin"),
   cartSkin: document.getElementById("cart-skin"),
-  btnSkin: document.getElementById("btn-skin"),
   cover: document.getElementById("cover-img"),
   coverB: document.getElementById("cover-img-b"),
   placeholder: document.getElementById("cover-placeholder"),
@@ -53,7 +50,6 @@ const el = {
   close: document.getElementById("btn-close"),
   details: document.getElementById("btn-details"),
   openWizard: document.getElementById("btn-open-wizard"),
-  openSettings: document.getElementById("btn-open-settings"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
   sheetBack: document.getElementById("btn-sheet-back"),
@@ -1024,7 +1020,7 @@ async function init() {
 
   // Before the window is shown, so the cartridge never appears in the stock
   // look and then changes its mind a frame later.
-  wearSkin(cartridge.skin, cartridge.skin_css ?? "");
+  wearSkin(cartridge.skin_css ?? "");
 
   // A tag has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
@@ -1108,49 +1104,26 @@ function showCover(src) {
 }
 
 /**
- * Wear the look this cartridge asked for.
+ * Wear the look this cartridge brought with it.
  *
- * The name has already been checked against the list the launcher ships with,
- * by the time it reaches here — see `skins.rs`. That is what makes this safe to
- * put in an href: a cartridge picks from what is installed, it does not supply
- * a stylesheet, so there is nothing here that a drive someone handed you can
- * point at.
+ * The launcher used to ship a list of looks and a button to cycle them, and a
+ * cartridge picked one by name. Now the cartridge either carries a stylesheet
+ * or it does not, which is the arrangement worth keeping: the look belongs to
+ * the cartridge, the way the artwork does, so it travels with it.
  *
- * "default" is the stylesheet already loaded, so it clears the link rather than
- * loading an empty file.
+ * The text goes into a `<style>` rather than an href. Nothing here can name a
+ * file, so there is no path on the drive for the window to open — `core` read
+ * the stylesheet, capped its size, and handed over the text, which is the same
+ * arrangement the artwork already had.
+ *
+ * Inline rules are live as the assignment returns, so the size and the artwork
+ * can be settled immediately; an href would have had to be waited for.
  */
-function wearSkin(name, css = null) {
-  debugLog(`wearSkin(${name}) css=${(css ?? "").length}b link=${Boolean(el.skin)}`);
-  if (!el.skin) return;
-  worn = name || "default";
-  const wanted = worn !== "default" ? `skins/${worn}.css` : "";
-  const arriving = el.skin.getAttribute("href") !== wanted;
-  if (arriving) el.skin.setAttribute("href", wanted);
-
-  // The cartridge's own, after the named one, so it can either bring a whole
-  // look or adjust one that already exists. Only replaced when a cartridge is
-  // being loaded — cycling skins must not throw away what the cartridge said.
-  if (css !== null) el.cartSkin.textContent = css;
-
-  const settle = () => {
-    resizeToSkin();
-    restyleArt();
-  };
-
-  // The size and the artwork both come from properties the new stylesheet
-  // sets, and its rules are not live until it has loaded — asked before that,
-  // `getComputedStyle` answers with the skin on its way out.
-  //
-  // The load event rather than a frame or two: the window is created hidden
-  // and shown once there is something to show, and a hidden window runs no
-  // animation frames at all, so a wait built on `requestAnimationFrame` never
-  // ended. Clearing the href needs no wait — the rules stop applying as the
-  // attribute is set — and neither does an unchanged one.
-  if (!arriving || !wanted) settle();
-  else {
-    el.skin.addEventListener("load", settle, { once: true });
-    el.skin.addEventListener("error", settle, { once: true });
-  }
+function wearSkin(css = "") {
+  debugLog(`wearSkin css=${css.length}b`);
+  el.cartSkin.textContent = css;
+  resizeToSkin();
+  restyleArt();
 }
 
 /**
@@ -1208,43 +1181,6 @@ async function resizeToSkin() {
 
 /** What the window was last asked to be, so it is not asked again for nothing. */
 let sized = { width: 420, height: 630 };
-
-/** What is on now, so the button knows what comes next. */
-let worn = "default";
-
-/** Every look this build ships, filled in once the backend has been asked. */
-let skins = [];
-
-invoke("list_skins")
-  .then((list) => {
-    skins = list.map(([name]) => name);
-  })
-  .catch(() => {});
-
-/**
- * Put on the next skin, and remember it.
- *
- * A cycle rather than a menu. Five looks and a 420px window: a list would be a
- * popup covering the artwork it is meant to be showing off, where pressing a
- * button repeatedly shows the same thing faster and never hides anything.
- *
- * Saved as the default for cartridges that do not ask for one — pressing this
- * is a preference, not a fidget. A cartridge with its own `skin=` still wins
- * next time it is plugged in, which is why the toast says what it changed.
- */
-async function cycleSkin() {
-  if (skins.length < 2) return;
-
-  const next = skins[(Math.max(0, skins.indexOf(worn)) + 1) % skins.length];
-  wearSkin(next);
-
-  try {
-    const current = await invoke("get_settings");
-    await invoke("set_settings", { settings: { ...current, defaultSkin: next } });
-  } catch {
-    // The look changed either way; it just will not be remembered.
-  }
-}
 
 async function showWindow() {
   if (tauri?.window) await tauri.window.getCurrentWindow().show();
@@ -1389,22 +1325,16 @@ const gamepad = connectGamepad({
 });
 
 el.close.addEventListener("click", closeWindow);
-el.btnSkin.addEventListener("click", cycleSkin);
 el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
 el.sheetBack.addEventListener("click", () => toggleSheet(false));
 el.pathsToggle.addEventListener("click", () => togglePaths());
+// One way through to the wizard, which is where both making a cartridge and
+// changing a setting happen. Two links here asked the reader to know which of
+// them opened which half of the same window.
 el.openWizard.addEventListener("click", async () => {
   try {
     await invoke("open_wizard_window");
-  } catch (error) {
-    console.error(error);
-  }
-});
-
-el.openSettings.addEventListener("click", async () => {
-  try {
-    await invoke("open_wizard_settings");
   } catch (error) {
     console.error(error);
   }
@@ -1473,7 +1403,10 @@ document.addEventListener("keydown", (event) => {
    --------------------------------------------------------------------------
    Opened outside Tauri, the page serves a sample cartridge so the window can
    be designed and reviewed without a physical drive:
-       npx http-server tauri-ui  →  http://localhost:8080/?drive=/demo
+       python -m http.server 8731   (from the repository root)
+       localhost:8731/tauri-ui/app/index.html?drive=D:\
+   Append &skin=<name> to wear one of docs/skins/ as if the cartridge carried
+   it, which is the only way a look reaches the launcher.
    Append &state=noexec to see the nothing-to-play case, &state=bundle for a
    collection, and &tag=1 for a cartridge that is a tag rather than a drive —
    which composes with the others.
@@ -1489,12 +1422,32 @@ const DEMO_LOGO =
   " viewBox='0 0 300 80'%3E%3Ctext x='0' y='58' font-family='Georgia'" +
   " font-size='54' fill='%23fff'%3EDEMO LOGO%3C/text%3E%3C/svg%3E";
 
+/**
+ * The stylesheet the preview's cartridge is carrying, if the URL named one.
+ *
+ * `?skin=retro` fetches `docs/skins/retro.css` and hands it over as the
+ * cartridge's own `skin_css`, which is the only way a look reaches the launcher
+ * now — so the preview exercises the real path rather than a special case.
+ * Needs the server rooted at the repository, not at `tauri-ui/app`.
+ */
+async function demoSkinCss() {
+  const name = new URLSearchParams(location.search).get("skin");
+  if (!name || !/^[a-z0-9-]+$/.test(name)) return "";
+  try {
+    const response = await fetch(`../../docs/skins/${name}.css`);
+    return response.ok ? await response.text() : "";
+  } catch {
+    return "";
+  }
+}
+
 async function demoInvoke(command, args) {
   const state = new URLSearchParams(location.search).get("state");
   switch (command) {
     case "parse_cartridge":
       if (state === "bundle") {
         return {
+          skin_css: await demoSkinCss(),
           title: "God of War Collection",
           cover: "src/demo/gow-collection.jpg",
           cover_path: "D:\\collection.jpg",
@@ -1531,6 +1484,7 @@ async function demoInvoke(command, args) {
         };
       }
       return {
+        skin_css: await demoSkinCss(),
         title: "Cinder & Salt",
         // A plain path stands in for the data URI the backend would send; the
         // browser loads it directly.
@@ -1542,22 +1496,6 @@ async function demoInvoke(command, args) {
         holds_game: true,
         games: [],
       };
-    case "list_skins":
-      // The preview cycles skins too. Without this the star button was dead
-      // outside Tauri, which is how a skin swap that never re-read the art
-      // properties got as far as a cartridge. Kept in step with `skins.rs` by
-      // hand; a name here that has no stylesheet just fails to load.
-      return [
-        ["default", ""],
-        ["luna", ""],
-        ["cozy", ""],
-        ["desktop", ""],
-        ["arcade", ""],
-        ["bigpicture", ""],
-        ["retro", ""],
-        ["cyberpunk", ""],
-        ["phantom", ""],
-      ];
     case "can_eject":
       // A tag resolves to a directory on this machine; there is no drive to
       // unmount and the button should not be there.

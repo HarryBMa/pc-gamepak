@@ -9,47 +9,27 @@ this page is a CSS selector or a custom property.
 
 ---
 
-## The two files
-
-```
-tauri-ui/app/skins/<name>.css     the stylesheet
-core/src/skins.rs                 one line in SKINS: ("<name>", "one-line description")
-```
-
-Both, or nothing happens. A name with no file loads nothing and looks exactly
-like a skin that did not work; a file with no name can never be chosen. There is
-a test for each of those, so `cargo test skins` will tell you which half you
-forgot.
-
-The description is what Settings shows. Keep it to what somebody would see.
-
-### Or carry one on the cartridge
+## Where it goes
 
 ```
 <drive>\.gamepak\skin.css
 ```
 
-Applied after the named skin, so a cartridge can bring a whole look or adjust
-one of the shipped ones. Capped at 256 KB. It is read by the backend and inlined
-into the window, so the window never opens a path on the drive.
+One file, on the cartridge, beside the artwork. Replug the drive and the
+launcher wears it. There is no name to register and no `skin=` key: a cartridge
+either carries a stylesheet or it does not.
 
-This is for cartridges you wrote yourself. A stylesheet can restyle the window
-that is asking whether to trust the drive it came from — including making Eject
-look like Play — so it is a fair trade on your own shelf and a poor one for a
-cartridge somebody handed you. The named skins cannot be supplied by a drive,
-which is the answer for that case.
+It is read by the backend, capped at 256 KB, and inlined into the window as
+text — the window never opens a path on the drive, which is the same arrangement
+the artwork already had.
 
----
+Eight worked examples are in [`skins/`](skins/). Copy one and edit it.
 
-## Choosing a skin
-
-| | |
-|---|---|
-| `skin=<name>` in `cartridge.conf` | that cartridge, whatever the machine prefers |
-| **Launcher look** in the wizard's Settings | every cartridge with no opinion |
-| The ★ in the launcher's corner | cycles live, and remembers the one you stop on |
-
-A cartridge that asks wins, because the cartridge is the thing being shown.
+**What this trades away.** A stylesheet cannot run code, but it can move, cover
+and restyle anything on screen, including making Eject look like Play or putting
+a convincing false sentence where a real one was. This is for cartridges you
+wrote yourself: a fair trade on your own shelf, a poor one for a drive somebody
+handed you.
 
 ---
 
@@ -135,7 +115,6 @@ layers below are for.
     ├── #cart-mark           a collection's logo, in the corner
     ├── #chrome              the three corner buttons
     │   └── #chrome-actions
-    │       ├── #btn-skin        ★ cycles skins
     │       ├── #btn-details     ⓘ  carries .pad-badge
     │       └── #btn-close       ✕
     ├── #stage
@@ -258,7 +237,7 @@ are the whole reason a skin is CSS and not a program:
 
 - Do not hide or cover `#btn-play` or `#btn-eject`. Nothing protects those two:
   they are inside `#stage`, which a skin lays out.
-- `#chrome` — the ★, ⓘ and ✕ — sits at `z-index: 6`, above `#stage`, both owned
+- `#chrome` — the ⓘ and ✕ — sits at `z-index: 6`, above `#stage`, both owned
   layers, and any overlay on `#face`. So positioning `#stage` absolutely is
   safe, which several skins do. Do not lower it, and do not draw an opaque
   layer over that corner: it would still be clickable and no longer visible,
@@ -294,8 +273,7 @@ are the whole reason a skin is CSS and not a program:
 }
 ```
 
-Then add `("mine", "…")` to `SKINS` in `core/src/skins.rs`, rebuild, and pick it
-from Settings or the ★.
+Save that as `.gamepak/skin.css` on a cartridge and replug it.
 
 ---
 
@@ -305,12 +283,17 @@ The launcher is plain HTML and falls back to a preview harness when there is no
 Tauri behind it, so a browser will run it:
 
 ```bash
-cd tauri-ui/app && python -m http.server 8731
+python -m http.server 8731        # from the repository root
 ```
 
-- `localhost:8731/index.html?drive=D:\` — one game
-- `localhost:8731/index.html?drive=D:\&state=bundle` — a collection
-- `&state=noexec` — a cartridge with nothing to play
+- `localhost:8731/tauri-ui/app/index.html?drive=D:\` — one game
+- `…&state=bundle` — a collection
+- `…&state=noexec` — a cartridge with nothing to play
+- `…&skin=retro` — hands the launcher `docs/skins/retro.css` as if the cartridge
+  were carrying it, which is the same path a real one takes
+
+Serve the repository root, not `tauri-ui/app`, or `&skin=` cannot reach
+`docs/skins/`.
 
 The browser window will not be 420x630, and a skin that sets its own size cannot
 resize a tab, so put it in an iframe of the right size to judge proportions:

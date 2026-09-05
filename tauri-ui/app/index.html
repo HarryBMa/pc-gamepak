@@ -8,7 +8,6 @@
   <!-- The skin, swapped at runtime for whichever look the cartridge asked for.
        Empty until then: a cartridge with no opinion wears the stock one, and
        the stylesheet for that is the one above. -->
-  <link id="skin" rel="stylesheet" href="" />
   <!-- The cartridge's own stylesheet, if it carries one. Inline rather than a
        path on the drive: the backend reads it, the same way it reads the
        artwork, so the window never opens a file itself. -->
@@ -73,14 +72,6 @@
       <!-- Top chrome. Present only while the pointer is in the window. -->
       <header id="chrome" data-tauri-drag-region>
         <div id="chrome-actions">
-          <button id="btn-skin" class="icon-btn" type="button"
-                  aria-label="Change the launcher's look" title="Skin">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
-                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14"
-                 aria-hidden="true">
-              <path d="M8 1.8l2 3.4 3.8.7-2.6 2.8.5 3.9L8 10.9l-3.7 1.7.5-3.9L2.2 5.9l3.8-.7z" />
-            </svg>
-          </button>
           <button id="btn-details" class="icon-btn" type="button"
                   aria-expanded="false" aria-controls="sheet"
                   aria-label="Cartridge details" title="Details">
@@ -193,10 +184,7 @@
              together: the whole wizard, and the shortcut past it to Settings.
              Neither competes with the way out. -->
         <button id="btn-open-wizard" class="sheet-link" type="button">
-          Make a cartridge…
-        </button>
-        <button id="btn-open-settings" class="sheet-link" type="button">
-          Settings…
+          Cartridges and settings…
         </button>
       </footer>
     </aside>

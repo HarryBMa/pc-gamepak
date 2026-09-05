@@ -14,7 +14,6 @@
 //   launch_game(executable, drive_path)      -> ()
 //   eject_drive(drive_path)                  -> ()
 //   focus_window()                           -> ()
-//   list_skins()                             -> [(name, description)]
 //   cartridge_health(drive_path)             -> Health
 //   read_cartridge_for_edit(drive_path)      -> Editable
 //   update_cartridge(request)                -> UpdateResult
@@ -297,15 +296,6 @@ fn debug_log(line: String) {
         let line: String = line.chars().take(400).collect();
         let _ = writeln!(file, "{line}");
     }
-}
-
-/// The looks the launcher ships with, for the Settings list.
-///
-/// Sent as data rather than hardcoded in the window, so adding one means adding
-/// a line to `skins.rs` and a stylesheet, and nothing else.
-#[tauri::command]
-fn list_skins() -> Vec<(String, String)> {
-    gamepak_core::skins::all()
 }
 
 /// Can this cartridge be ejected, or is it a tag standing in for one?
@@ -1450,7 +1440,6 @@ fn main() {
             launch_game,
             eject_drive,
             focus_window,
-            list_skins,
             debug_logging,
             debug_log,
             can_eject,
