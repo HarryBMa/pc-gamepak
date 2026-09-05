@@ -895,12 +895,17 @@ async function init() {
   //
   //   :root { --skin-art: hero; }
   //
-  // A selected game still wins over both: on a collection, choosing a game is
-  // what changes the art, and that is what choosing it means.
+  // All four are on offer, including the icon — which exists for autorun.inf
+  // and is a poor fill at 256px, but is a skin maker's to misuse if they have a
+  // reason to. Anything unrecognised, or nothing at all, gets the grid.
+  //
+  // A selected game still wins over all of them: on a collection, choosing a
+  // game is what changes the art, and that is what choosing it means.
   const wanted = getComputedStyle(document.documentElement)
     .getPropertyValue("--skin-art")
     .trim();
-  const preferred = wanted === "hero" ? cartridge.background : "";
+  const preferred =
+    { hero: cartridge.background, logo: cartridge.logo, icon: cartridge.icon }[wanted] || "";
   const launcherArt =
     (isCollection() ? games()[selected]?.cover : null) || preferred || cartridge.cover;
   if (launcherArt) await showCover(launcherArt);

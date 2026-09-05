@@ -243,11 +243,22 @@ skin's to say, because it depends on the shape the skin chose:
 :root { --skin-art: hero; }
 ```
 
-`neon` asks for the hero, which is the picture it was always for — heroes were
-dropped from the launcher years ago because one wants a window three times as
-wide as a cartridge is, and there was only one window. A portrait skin says
-nothing and keeps the grid. The logo prints over whichever it is, and the icon
-stays Explorer's business.
+All four are on offer — `hero`, `grid`, `logo`, `icon` — and anything else, or
+nothing at all, gets the grid. `neon` asks for the hero, which is the picture it
+was always for: heroes were dropped from the launcher because one wants a window
+three times as wide as a cartridge is, and there was only one window. A portrait
+skin says nothing and keeps the grid.
+
+The icon is really autorun.inf's — it is what Explorer puts on the drive — and
+at 256px it makes a poor fill. It is on the list anyway, because a skin maker
+with a reason is better served by having the option than by being protected from
+it.
+
+For a desktop-full-of-icons skin the fill is the wrong lever regardless: each
+game already carries its own picture, in `.game-row__cover`, so laying
+`#game-list` out as a grid of square tiles and hiding the row titles gets there
+with no new data. What a cartridge does not have is a per-game *icon* — games
+carry one picture each, and it is the grid.
 
 **The artwork itself never changes shape.** A skin picks its frame, size, layout
 and which of the four it shows; the pictures are the same pictures at the same
