@@ -54,6 +54,14 @@ pub struct EditableGame {
     pub executable: String,
     pub cover: String,
     pub cover_path: String,
+    /// The other three, so the editor's slots show what is on the drive rather
+    /// than sitting empty over a picture the cartridge already has.
+    pub background: String,
+    pub background_path: String,
+    pub logo: String,
+    pub logo_path: String,
+    pub icon: String,
+    pub icon_path: String,
 }
 
 /// What the window is asking for.
@@ -88,6 +96,13 @@ pub struct UpdateGame {
     pub executable: String,
     #[serde(default)]
     pub cover_source: Option<String>,
+    /// The other three, each optional and each left alone when absent.
+    #[serde(default)]
+    pub background_source: Option<String>,
+    #[serde(default)]
+    pub logo_source: Option<String>,
+    #[serde(default)]
+    pub icon_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -114,8 +129,16 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         vec![EditableGame {
             title: info.title.clone(),
             executable: info.executable.clone(),
+            // A single game's art is the cartridge's art, which the editor
+            // already shows in its own slots.
             cover: String::new(),
             cover_path: String::new(),
+            background: String::new(),
+            background_path: String::new(),
+            logo: String::new(),
+            logo_path: String::new(),
+            icon: String::new(),
+            icon_path: String::new(),
         }]
     } else {
         info.games
@@ -125,6 +148,12 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
                 executable: game.executable.clone(),
                 cover: game.cover.clone(),
                 cover_path: game.cover_path.clone(),
+                background: game.background.clone(),
+                background_path: game.background_path.clone(),
+                logo: game.logo.clone(),
+                logo_path: game.logo_path.clone(),
+                icon: game.icon.clone(),
+                icon_path: game.icon_path.clone(),
             })
             .collect()
     };
@@ -172,6 +201,9 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
                 title: game.title.clone(),
                 executable: game.executable.clone(),
                 cover_source: found.map(|path| path.to_string_lossy().into_owned()),
+                // Refetching replaces posters. The other three are the user's
+                // choices and are not something to overwrite behind them.
+                ..Default::default()
             }
         })
         .collect();
@@ -244,53 +276,80 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
         executables.push(executable);
     }
 
-    // A game keeps the art it already had unless a new picture was chosen for
-    // it — and the art belongs to the *game*, not to the slot it sits in. The
-    // list arrives in its new order, so looking art up by position handed each
-    // game whatever used to be in its seat: one press of the reorder button and
-    // every poster on the cartridge moved along by one.
-    let mut art: Vec<Option<String>> = executables
-        .iter()
-        .map(|executable| {
-            existing
-                .as_ref()?
-                .games
-                .iter()
-                .find(|previous| create::sanitize_conf_value(&previous.executable) == *executable)
-                .map(|previous| previous.cover_path.clone())
-                .filter(|path| !path.is_empty())
-                .and_then(|path| file_name_relative(root, &path))
-        })
-        .collect();
+    // Every game carries the same four pictures the cartridge does, and each
+    // is resolved the same way, so they are described once and walked rather
+    // than written out four times over.
+    type Previous = fn(&cartridge::GameEntry) -> &str;
+    type Chosen = fn(&UpdateGame) -> Option<&str>;
+    const KINDS: [(&str, Previous, Chosen); 4] = [
+        ("cover", |g| &g.cover_path, |u| u.cover_source.as_deref()),
+        (
+            "background",
+            |g| &g.background_path,
+            |u| u.background_source.as_deref(),
+        ),
+        ("logo", |g| &g.logo_path, |u| u.logo_source.as_deref()),
+        ("icon", |g| &g.icon_path, |u| u.icon_source.as_deref()),
+    ];
 
-    for (index, game) in request.games.iter().enumerate() {
-        let Some(source) = game
-            .cover_source
-            .as_deref()
-            .map(str::trim)
-            .filter(|source| !source.is_empty())
-        else {
-            continue;
-        };
-        // `cover_<index>` is the natural name and nearly always free, but after
-        // a reorder that file can still belong to a game that kept its art —
-        // and writing there would quietly replace that game's poster with this
-        // one's.
-        let stem = free_cover_stem(index, &art);
-        match create::copy_cover(Path::new(source), root, &stem) {
-            Ok(name) => art[index] = Some(name),
-            Err(e) => warnings.push(format!(
-                "Cover art for {} was not changed: {e}",
-                titles[index]
-            )),
+    let mut per_game: Vec<Vec<Option<String>>> = Vec::with_capacity(KINDS.len());
+
+    for (stem, previous, chosen) in KINDS {
+        // A game keeps the art it already had unless a new picture was chosen
+        // for it — and the art belongs to the *game*, not to the slot it sits
+        // in. The list arrives in its new order, so looking art up by position
+        // handed each game whatever used to be in its seat: one press of the
+        // reorder button and every poster on the cartridge moved along by one.
+        let mut art: Vec<Option<String>> = executables
+            .iter()
+            .map(|executable| {
+                let found =
+                    existing.as_ref()?.games.iter().find(|game| {
+                        create::sanitize_conf_value(&game.executable) == *executable
+                    })?;
+                let path = previous(found);
+                (!path.is_empty())
+                    .then(|| file_name_relative(root, path))
+                    .flatten()
+            })
+            .collect();
+
+        for (index, game) in request.games.iter().enumerate() {
+            let Some(source) = chosen(game)
+                .map(str::trim)
+                .filter(|source| !source.is_empty())
+            else {
+                continue;
+            };
+            // `<kind>_<index>` is the natural name and nearly always free, but
+            // after a reorder that file can still belong to a game that kept
+            // its art — and writing there would quietly replace that game's
+            // picture with this one's.
+            let name = free_art_stem(stem, index, &art);
+            match create::copy_cover(Path::new(source), root, &name) {
+                Ok(written) => art[index] = Some(written),
+                Err(e) => warnings.push(format!(
+                    "The {stem} for {} was not changed: {e}",
+                    titles[index]
+                )),
+            }
         }
+
+        per_game.push(art);
     }
 
-    let entries: Vec<(String, String, Option<String>)> = titles
+    let entries: Vec<create::GameArt> = titles
         .into_iter()
         .zip(executables)
-        .zip(art)
-        .map(|((title, executable), cover)| (title, executable, cover))
+        .enumerate()
+        .map(|(index, (title, executable))| create::GameArt {
+            title,
+            executable,
+            cover: per_game[0][index].clone(),
+            background: per_game[1][index].clone(),
+            logo: per_game[2][index].clone(),
+            icon: per_game[3][index].clone(),
+        })
         .collect();
 
     // ---- The collection's own art ---------------------------------------
@@ -369,22 +428,20 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     // ---- cartridge.conf --------------------------------------------------
 
     let conf = if entries.len() > 1 {
-        let tuples: Vec<(&str, &str, Option<&str>)> = entries
-            .iter()
-            .map(|(t, e, c)| (t.as_str(), e.as_str(), c.as_deref()))
-            .collect();
+        let games: Vec<create::ConfGame<'_>> =
+            entries.iter().map(create::GameArt::as_conf).collect();
         create::render_bundle_conf(
             &title,
             cover_name.as_deref(),
             None,
             None,
             logo_name.as_deref(),
-            &tuples,
+            &games,
         )
     } else {
         create::render_cartridge_conf(
             &title,
-            &entries[0].1,
+            &entries[0].executable,
             cover_name.as_deref(),
             None,
             background_name.as_deref(),
@@ -439,7 +496,7 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
 ///
 /// The slot's own number is the right answer almost every time; it is not when
 /// a reorder has left a different game still holding that file.
-fn free_cover_stem(index: usize, art: &[Option<String>]) -> String {
+fn free_art_stem(kind: &str, index: usize, art: &[Option<String>]) -> String {
     let taken: Vec<&str> = art
         .iter()
         .enumerate()
@@ -448,15 +505,15 @@ fn free_cover_stem(index: usize, art: &[Option<String>]) -> String {
         .map(stem_of)
         .collect();
 
-    let preferred = format!("cover_{index}");
+    let preferred = format!("{kind}_{index}");
     if !taken.contains(&preferred.as_str()) {
         return preferred;
     }
     // Finite `taken`, so some number is always free.
     (0..)
-        .map(|n| format!("cover_{n}"))
+        .map(|n| format!("{kind}_{n}"))
         .find(|candidate| !taken.contains(&candidate.as_str()))
-        .expect("a free cover stem")
+        .expect("a free art stem")
 }
 
 /// The part of a file name before its extension.
@@ -504,7 +561,7 @@ mod tests {
                 .map(|(t, e)| UpdateGame {
                     title: t.to_string(),
                     executable: e.to_string(),
-                    cover_source: None,
+                    ..Default::default()
                 })
                 .collect(),
         }

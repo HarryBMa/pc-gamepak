@@ -176,7 +176,9 @@
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
   color: var(--ink-3);
   background: repeating-linear-gradient(
     135deg,
@@ -1249,4 +1251,24 @@ body.is-gamepad :focus {
   inset: auto 0 0 0;
   height: 0;
   z-index: 2;
+}
+
+/* The initials, large enough to read across a room, in the colour sampled from
+   whatever art the cartridge does have — so a half-filled collection still
+   looks like one cartridge rather than a set of error states. */
+#placeholder-initials {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 800;
+  font-stretch: 84%;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklch, var(--accent) 55%, var(--ink-3));
+}
+
+#placeholder-name {
+  margin: 0;
+  max-width: 15ch;
+  font-size: 12px;
+  line-height: 1.35;
 }

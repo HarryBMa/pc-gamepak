@@ -17,6 +17,19 @@ pub struct GameEntry {
     pub cover: String,
     /// Absolute path to the cover image, or empty string.
     pub cover_path: String,
+    /// The same four pictures a single-game cartridge has, per game.
+    ///
+    /// A collection used to carry one picture per game and three for itself,
+    /// which was right while the launcher only ever showed a cover. A skin can
+    /// ask for the hero now, and a collection under one of those needs a hero
+    /// for each game rather than one for the shelf — so every game gets the
+    /// full set, and any of them may be empty.
+    pub background: String,
+    pub background_path: String,
+    pub logo: String,
+    pub logo_path: String,
+    pub icon: String,
+    pub icon_path: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -261,13 +274,31 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                         .cloned()
                         .unwrap_or_else(|| "Unknown Game".to_string());
                     let game_exec = g.get("executable").cloned().unwrap_or_default();
-                    let game_cover_rel = g.get("cover").cloned().unwrap_or_default();
-                    let game_cover_path = resolve_cover(root, &game_cover_rel);
+                    // Only the cover falls back to guessing at some image on
+                    // the drive when the key is absent, exactly as it does for
+                    // the cartridge itself. An absent hero is an absent hero.
+                    let cover_path =
+                        resolve_cover(root, &g.get("cover").cloned().unwrap_or_default());
+                    let art = |key: &str| {
+                        g.get(key)
+                            .map(|rel| resolve_cover(root, rel))
+                            .unwrap_or_default()
+                    };
+                    let background_path = art("background");
+                    let logo_path = art("logo");
+                    let icon_path = art("icon");
+
                     GameEntry {
                         title: game_title,
                         executable: game_exec,
-                        cover: cover_as_data_uri(&game_cover_path),
-                        cover_path: game_cover_path,
+                        cover: cover_as_data_uri(&cover_path),
+                        cover_path,
+                        background: cover_as_data_uri(&background_path),
+                        background_path,
+                        logo: cover_as_data_uri(&logo_path),
+                        logo_path,
+                        icon: cover_as_data_uri(&icon_path),
+                        icon_path,
                     }
                 })
                 .collect();

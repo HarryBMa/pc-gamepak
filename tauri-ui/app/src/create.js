@@ -1723,6 +1723,9 @@ function buildRequest() {
         // The backend copies that folder and works out what to run inside it.
         sourceDir: g.library === "folder" ? g.id : null,
         coverSource: g.coverSource ?? null,
+        backgroundSource: g.backgroundSource ?? null,
+        logoSource: g.logoSource ?? null,
+        iconSource: g.iconSource ?? null,
       })),
     };
   }
@@ -1912,19 +1915,22 @@ function renderActiveGameList() {
 }
 
 function openArtwork(target, gameIndex = null) {
-  artTarget = gameIndex === null ? target : "cover";
+  artTarget = target;
   artGame = gameIndex;
 
   const game = artGameOf();
-  // A game on a collection has exactly one piece of art: its poster. The
-  // background, logo and icon belong to the cartridge, not to any one game, so
-  // the tabs that pick them are not offered here.
-  el.sgdbTabs.hidden = game !== null;
+  // The same four slots whether this is the cartridge's art or one game's. A
+  // game used to have exactly one picture, its poster, on the reasoning that
+  // the other three belonged to the cartridge — which was true while the
+  // launcher only ever showed a cover. A collection under a skin that wants
+  // heroes needs a hero per game, so every game has the full set and any of
+  // them may be left empty.
+  el.sgdbTabs.hidden = false;
   for (const tab of el.sgdbTabs.children) {
     tab.setAttribute("aria-selected", String(tab.dataset.type === kindFor(artTarget)));
   }
-  el.sgdbTitle.textContent = game ? `Poster — ${game.name}` : "Artwork";
-  el.sgdbSearch.value = game ? game.name : cartridgeTitle();
+  el.sgdbTitle.textContent = game ? `Artwork — ${game.name ?? game.title}` : "Artwork";
+  el.sgdbSearch.value = game ? (game.name ?? game.title) : cartridgeTitle();
   el.icoReceipt.hidden = true;
   refreshPreview();
   el.sgdbDialog.showModal();
@@ -1958,15 +1964,15 @@ function artworkKeys() {
 /**
  * File a chosen image against whatever the dialog is currently pointed at.
  *
- * A game's poster lives on the game, so it survives reordering and so
- * buildRequest can hand the backend one cover per `[game]` block. Everything
- * else is the cartridge's, and lives in `art`.
+ * A game's art lives on the game, so it survives reordering and so
+ * buildRequest can hand the backend one set per `[game]` block. The
+ * cartridge's own lives in `art`.
  */
 function applyArt(path, preview) {
   const game = artGameOf();
   if (game) {
-    game.coverSource = path;
-    game.cover = preview;
+    game[`${artTarget}Source`] = path;
+    game[artTarget] = preview;
     renderActiveGameList();
     refreshRail();
     return;
@@ -2122,8 +2128,8 @@ async function pickCoverFile(target = artTarget) {
     if (!chosen) return;
     const game = artGameOf();
     if (game) {
-      game.coverSource = chosen.path;
-      game.cover = chosen.preview;
+      game[`${target}Source`] = chosen.path;
+      game[target] = chosen.preview;
       renderActiveGameList();
       refreshPreview();
       refreshRail();
@@ -2559,8 +2565,11 @@ async function saveEdits() {
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,
-          // Absent leaves the game's existing poster alone.
+          // Absent leaves whatever that game already had.
           coverSource: g.coverSource ?? null,
+          backgroundSource: g.backgroundSource ?? null,
+          logoSource: g.logoSource ?? null,
+          iconSource: g.iconSource ?? null,
         })),
       },
     });

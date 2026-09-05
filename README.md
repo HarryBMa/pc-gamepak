@@ -260,6 +260,18 @@ game already carries its own picture, in `.game-row__cover`, so laying
 with no new data. What a cartridge does not have is a per-game *icon* — games
 carry one picture each, and it is the grid.
 
+Every game in a collection carries the same four, not just a poster — the art
+picker is the same picker whether it is pointed at the cartridge or at one game
+on it. Any of them may be left empty: somebody who knows their cartridge will be
+read under a skin that wants heroes can fill in ten heroes and nothing else, and
+that works. A frame with no picture for it shows the game's initials and its
+name, so a half-filled collection is still one you can use rather than a row of
+error states.
+
+What fills a frame is resolved game-first: the game's own picture of the kind
+the skin asked for, then the cartridge's, then the game's cover, then the
+cartridge's. The first thing that exists wins.
+
 **The artwork itself never changes shape.** A skin picks its frame, size, layout
 and which of the four it shows; the pictures are the same pictures at the same
 aspects, so one set works under all of them. A skin choosing a shape is not a

@@ -39,6 +39,8 @@ const el = {
   cover: document.getElementById("cover-img"),
   coverB: document.getElementById("cover-img-b"),
   placeholder: document.getElementById("cover-placeholder"),
+  placeholderInitials: document.getElementById("placeholder-initials"),
+  placeholderName: document.getElementById("placeholder-name"),
   eyebrow: document.getElementById("eyebrow"),
   titleLogo: document.getElementById("title-logo"),
   cartMark: document.getElementById("cart-mark"),
@@ -659,7 +661,9 @@ function select(index) {
 
   const game = list[index];
   setGameTitle(game.title);
-  if (game.cover) crossfadeCover(game.cover);
+  const art = artFor(game);
+  if (art) crossfadeCover(art);
+  else showPlaceholder(game);
   setBusy(false);
 }
 
@@ -675,6 +679,59 @@ function step(delta) {
   const list = games();
   if (list.length < 2) return;
   select((selected + delta + list.length) % list.length);
+}
+
+/**
+ * The picture that fills the window, for whichever game is showing.
+ *
+ * Which of the four a skin wants is the skin's to say, because it depends on
+ * the shape it chose — a hero was tried here once and taken back out, since one
+ * wants a window three times as wide as a cartridge is and there was only one
+ * window. All four are on offer, the icon included: it exists for autorun.inf
+ * and makes a poor fill at 256px, but it is a skin maker's to misuse if they
+ * have a reason. Anything unrecognised gets the grid.
+ *
+ *   :root { --skin-art: hero; }
+ *
+ * The game's own picture is preferred over the cartridge's, then the game's
+ * cover, then the cartridge's — so somebody filling in heroes for ten games and
+ * leaving the rest empty gets exactly what they asked for, and somebody who
+ * filled in none still gets a cartridge that looks like something.
+ */
+function artFor(game) {
+  const wanted = getComputedStyle(document.documentElement)
+    .getPropertyValue("--skin-art")
+    .trim();
+
+  const pick = (from) =>
+    from && ({ hero: from.background, logo: from.logo, icon: from.icon }[wanted] || "");
+
+  return (
+    pick(game) || pick(cartridge) || game?.cover || cartridge?.cover || ""
+  );
+}
+
+/**
+ * Say which game it is when there is no picture for it.
+ *
+ * Initials rather than a generic icon. Ten games under a skin that wants heroes
+ * with three heroes filled in is seven blank frames, and seven frames that each
+ * say which game they are is a cartridge somebody can still use.
+ */
+function showPlaceholder(game) {
+  const title = game?.title || cartridge?.title || "";
+  const initials = title
+    .split(/\s+/)
+    .filter((word) => /[\p{L}\p{N}]/u.test(word))
+    .slice(0, 3)
+    .map((word) => [...word][0].toUpperCase())
+    .join("");
+
+  el.placeholderInitials.textContent = initials;
+  el.placeholderName.textContent = title;
+  el.cover.hidden = true;
+  el.coverB.hidden = true;
+  el.placeholder.classList.remove("hidden");
 }
 
 /** Bring the next game's art up behind the current one, then swap. */
@@ -887,28 +944,9 @@ async function init() {
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
   }
 
-  // Which picture fills the window is the skin's to say, because it depends on
-  // the shape the skin chose. A hero was tried here once and taken back out —
-  // it wants a window three times as wide as a cartridge is, and there was only
-  // one window. Now that a skin can size its own, a landscape one asks for the
-  // hero and a portrait one keeps the grid.
-  //
-  //   :root { --skin-art: hero; }
-  //
-  // All four are on offer, including the icon — which exists for autorun.inf
-  // and is a poor fill at 256px, but is a skin maker's to misuse if they have a
-  // reason to. Anything unrecognised, or nothing at all, gets the grid.
-  //
-  // A selected game still wins over all of them: on a collection, choosing a
-  // game is what changes the art, and that is what choosing it means.
-  const wanted = getComputedStyle(document.documentElement)
-    .getPropertyValue("--skin-art")
-    .trim();
-  const preferred =
-    { hero: cartridge.background, logo: cartridge.logo, icon: cartridge.icon }[wanted] || "";
-  const launcherArt =
-    (isCollection() ? games()[selected]?.cover : null) || preferred || cartridge.cover;
+  const launcherArt = artFor(currentGame());
   if (launcherArt) await showCover(launcherArt);
+  else showPlaceholder(currentGame());
 
   setBusy(false);
   await showWindow();

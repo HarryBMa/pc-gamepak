@@ -92,6 +92,18 @@ pub struct GameList {
 pub struct BundleGameRequest {
     pub title: String,
     pub executable: String,
+    /// This game's own hero, title logo and icon, each optional.
+    ///
+    /// The same four slots the cartridge itself has. A collection shown under a
+    /// skin that wants heroes needs one per game, and a user who knows that is
+    /// better served filling in heroes and leaving the rest empty than being
+    /// made to supply four pictures for ten games.
+    #[serde(default)]
+    pub background_source: Option<String>,
+    #[serde(default)]
+    pub logo_source: Option<String>,
+    #[serde(default)]
+    pub icon_source: Option<String>,
     /// Steam app id, when the cover should come from Steam.
     #[serde(default)]
     pub app_id: Option<String>,
@@ -883,7 +895,7 @@ pub fn create_cartridge(
         // Each game is copied as if it were the only one on the cartridge: the
         // copy helpers take a single-game view of the request and never learn
         // that this is a bundle.
-        let mut entries: Vec<(String, String, Option<String>)> = Vec::new();
+        let mut entries: Vec<GameArt> = Vec::new();
 
         for game in bundle_games {
             let game_title = sanitize_conf_value(&game.title);
@@ -916,7 +928,11 @@ pub fn create_cartridge(
                 validate_executable(&executable, &root)?;
             }
 
-            entries.push((game_title, executable, None));
+            entries.push(GameArt {
+                title: game_title,
+                executable,
+                ..Default::default()
+            });
         }
 
         // ---- Per-game cover art -------------------------------------------
@@ -928,23 +944,47 @@ pub fn create_cartridge(
         });
 
         for (index, (game, entry)) in bundle_games.iter().zip(entries.iter_mut()).enumerate() {
-            let source = match cover_source(
+            // The cover is the one that goes looking when nothing was chosen —
+            // Steam and Playnite both keep one, and a collection with a blank
+            // row is worse than a guessed poster. The other three are only ever
+            // what somebody picked: there is nowhere to guess a hero from, and
+            // an empty one is a cartridge saying it has no hero.
+            match cover_source(
                 game.cover_source.as_deref(),
                 game.app_id.as_deref(),
                 game.playnite_id.as_deref(),
                 game.source_dir.as_deref(),
-                &entry.0,
+                &entry.title,
             ) {
-                Ok(Some(path)) => path,
-                Ok(None) => continue,
-                Err(e) => {
-                    warnings.push(format!("No cover for {}: {e}", entry.0));
+                Ok(Some(source)) => match copy_cover(&source, &root, &format!("cover_{index}")) {
+                    Ok(name) => entry.cover = Some(name),
+                    Err(e) => {
+                        warnings.push(format!("Cover art for {} was not copied: {e}", entry.title))
+                    }
+                },
+                Ok(None) => {}
+                Err(e) => warnings.push(format!("No cover for {}: {e}", entry.title)),
+            }
+
+            for (chosen, stem, slot) in [
+                (game.background_source.as_deref(), "background", 0),
+                (game.logo_source.as_deref(), "logo", 1),
+                (game.icon_source.as_deref(), "icon", 2),
+            ] {
+                let Some(source) = chosen.map(Path::new).filter(|path| path.is_file()) else {
                     continue;
+                };
+                match copy_cover(source, &root, &format!("{stem}_{index}")) {
+                    Ok(name) => match slot {
+                        0 => entry.background = Some(name),
+                        1 => entry.logo = Some(name),
+                        _ => entry.icon = Some(name),
+                    },
+                    Err(e) => warnings.push(format!(
+                        "The {stem} for {} was not copied: {e}",
+                        entry.title
+                    )),
                 }
-            };
-            match copy_cover(&source, &root, &format!("cover_{index}")) {
-                Ok(name) => entry.2 = Some(name),
-                Err(e) => warnings.push(format!("Cover art for {} was not copied: {e}", entry.0)),
             }
         }
 
@@ -1019,10 +1059,7 @@ pub fn create_cartridge(
         result.cover_written = collection_cover.is_some();
 
         // ---- cartridge.conf -----------------------------------------------
-        let tuples: Vec<(&str, &str, Option<&str>)> = entries
-            .iter()
-            .map(|(t, e, c)| (t.as_str(), e.as_str(), c.as_deref()))
-            .collect();
+        let tuples: Vec<ConfGame<'_>> = entries.iter().map(GameArt::as_conf).collect();
         let conf = render_bundle_conf(
             &title,
             collection_cover.as_deref(),
@@ -1061,7 +1098,10 @@ pub fn create_cartridge(
             &root,
             entries
                 .iter()
-                .filter_map(|(_, _, cover)| cover.as_deref())
+                .flat_map(|game| {
+                    [&game.cover, &game.background, &game.logo, &game.icon].map(Option::as_deref)
+                })
+                .flatten()
                 .chain(
                     [
                         &collection_cover,
@@ -2280,7 +2320,7 @@ pub fn render_bundle_conf(
     collection_icon: Option<&str>,
     collection_background: Option<&str>,
     collection_logo: Option<&str>,
-    games: &[(&str, &str, Option<&str>)],
+    games: &[ConfGame<'_>],
 ) -> String {
     let mut out = String::new();
     out.push_str("# PC GamePak\n");
@@ -2301,16 +2341,64 @@ pub fn render_bundle_conf(
         out.push_str(&format!("logo={logo}\n"));
     }
     out.push('\n');
-    for (title, executable, cover) in games {
+    for game in games {
         out.push_str("[game]\n");
-        out.push_str(&format!("title={title}\n"));
-        out.push_str(&format!("executable={executable}\n"));
-        if let Some(c) = cover {
-            out.push_str(&format!("cover={c}\n"));
+        out.push_str(&format!("title={}\n", game.title));
+        out.push_str(&format!("executable={}\n", game.executable));
+        for (key, value) in [
+            ("cover", game.cover),
+            ("background", game.background),
+            ("logo", game.logo),
+            ("icon", game.icon),
+        ] {
+            if let Some(value) = value {
+                out.push_str(&format!("{key}={value}\n"));
+            }
         }
         out.push('\n');
     }
     out
+}
+
+/// One game's art while it is being written, before the conf is rendered.
+///
+/// Owns its strings, where `ConfGame` borrows them: this is filled in over the
+/// course of a copy, and that one is a view of the result.
+#[derive(Debug, Clone, Default)]
+pub struct GameArt {
+    pub title: String,
+    pub executable: String,
+    pub cover: Option<String>,
+    pub background: Option<String>,
+    pub logo: Option<String>,
+    pub icon: Option<String>,
+}
+
+impl GameArt {
+    pub fn as_conf(&self) -> ConfGame<'_> {
+        ConfGame {
+            title: &self.title,
+            executable: &self.executable,
+            cover: self.cover.as_deref(),
+            background: self.background.as_deref(),
+            logo: self.logo.as_deref(),
+            icon: self.icon.as_deref(),
+        }
+    }
+}
+
+/// One game as `cartridge.conf` records it.
+///
+/// A struct rather than the tuple this used to be: four optional pictures and
+/// two strings is past the point where position tells anyone which is which.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ConfGame<'a> {
+    pub title: &'a str,
+    pub executable: &'a str,
+    pub cover: Option<&'a str>,
+    pub background: Option<&'a str>,
+    pub logo: Option<&'a str>,
+    pub icon: Option<&'a str>,
 }
 
 /// A name for a cartridge carrying several games, from what they are called.
@@ -2859,6 +2947,8 @@ mod tests {
         scratch.write("gow.png", b"pretend png");
 
         let art = copy_cover(&root.join("gow.png"), root, "cover_0").unwrap();
+        scratch.write("gow-hero.png", b"pretend hero");
+        let hero = copy_cover(&root.join("gow-hero.png"), root, "background_0").unwrap();
         let conf = render_bundle_conf(
             "God of War Collection",
             Some("collection.jpg"),
@@ -2866,12 +2956,20 @@ mod tests {
             None,
             None,
             &[
-                (
-                    "God of War",
-                    "steam://rungameid/1593500",
-                    Some(art.as_str()),
-                ),
-                ("God of War Ragnarök", "steam://rungameid/2322010", None),
+                ConfGame {
+                    title: "God of War",
+                    executable: "steam://rungameid/1593500",
+                    cover: Some(art.as_str()),
+                    // The hero this game carries itself, which a skin asking
+                    // for heroes reads instead of the collection's.
+                    background: Some(hero.as_str()),
+                    ..Default::default()
+                },
+                ConfGame {
+                    title: "God of War Ragnarök",
+                    executable: "steam://rungameid/2322010",
+                    ..Default::default()
+                },
             ],
         );
         std::fs::write(root.join("cartridge.conf"), conf).unwrap();
@@ -2883,6 +2981,17 @@ mod tests {
         assert_eq!(info.games.len(), 2);
         assert_eq!(info.games[0].title, "God of War");
         assert_eq!(info.games[1].executable, "steam://rungameid/2322010");
+        // Each game carries its own four now, so a collection under a skin that
+        // wants heroes has one per game rather than one for the shelf.
+        assert!(
+            info.games[0].background_path.ends_with("background_0.png"),
+            "{:?}",
+            info.games[0].background_path
+        );
+        // And an absent one stays absent rather than falling back to a picture
+        // that happens to be on the drive.
+        assert!(info.games[1].background_path.is_empty());
+        assert!(info.games[0].logo_path.is_empty());
         assert!(
             info.games[0].cover_path.ends_with("cover_0.png"),
             "{:?}",
