@@ -22,6 +22,8 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// A `Command` that will not open a console window.
 pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    // Only Windows mutates it, so only Windows needs it mutable.
+    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut command = Command::new(program);
     #[cfg(windows)]
     {
