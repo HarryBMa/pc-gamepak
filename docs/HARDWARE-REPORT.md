@@ -994,7 +994,8 @@ and, eventually, for the launcher offering it.
 While the hardware question was settling, both Windows channels were tested
 against the published v0.1.0 artefact rather than in theory:
 
-- **Scoop** — installed on this machine from `packaging/scoop/pc-gamepak.json`.
+- **Scoop** — installed on this machine from the Scoop manifest, which now
+  lives in [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket).
   Scoop's hash check passed, `extract_dir` stripped the version folder, both
   executables landed at the app root and got shims, `windows\install.ps1` came
   with them. Uninstalled cleanly afterwards.

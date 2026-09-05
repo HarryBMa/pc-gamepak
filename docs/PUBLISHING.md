@@ -33,7 +33,7 @@ switch.
 | **AUR** (`pc-gamepak`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` is written |
 | **Flatpak / Flathub** | Verified on real hardware, see below — host mounts propagate into the sandbox and the watcher fires inside one. The way onto a Steam Deck, which ships Flatpak and no AUR. | Medium. `packaging/flatpak/` is written; needs vendored cargo sources for Flathub's offline build |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
-| **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. `packaging/scoop/pc-gamepak.json` is written. | Low |
+| **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. Published in [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket). | Low |
 
 ### Later, and only with a reason
 
