@@ -1981,7 +1981,10 @@ function applyArt(path, preview) {
 }
 
 function targetFor(kind) {
-  return { grid: "cover", logo: "logo", icon: "icon" }[kind] ?? "cover";
+  // The other half of `kindFor`. The hero was missing from this one, so a Hero
+  // slot opened the picker on a tab that did not exist: nothing showed as
+  // selected, and every tab click landed back on the cover.
+  return { grid: "cover", hero: "background", logo: "logo", icon: "icon" }[kind] ?? "cover";
 }
 
 el.sgdbTabs.addEventListener("click", (event) => {
@@ -2075,21 +2078,27 @@ function refreshPreview() {
   // While a game's poster is being chosen, the preview shows that game — it is
   // the row the picture will land on, not the cartridge's own face.
   const targeted = artGameOf();
-  const grid = targeted
-    ? targeted.cover
-    : art.cover?.preview ?? (isCollection() ? null : picked[0]?.cover);
+  // Each kind comes from the game when one is targeted, and from the cartridge
+  // otherwise — a game carries all four of its own now.
+  const of = (kind) => (targeted ? targeted[kind] : art[kind]?.preview);
 
-  el.previewGrid.hidden = !safeSrc(grid);
-  if (safeSrc(grid)) el.previewGrid.src = safeSrc(grid);
-  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(grid)));
+  const grid = of("cover") ?? (targeted || isCollection() ? null : picked[0]?.cover);
 
-  const logo = art.logo?.preview;
+  // Picking a hero previews the hero. It is the picture being chosen, and
+  // showing the cover instead reads as though nothing had happened.
+  const fill = artTarget === "background" ? of("background") ?? grid : grid;
+
+  el.previewGrid.hidden = !safeSrc(fill);
+  if (safeSrc(fill)) el.previewGrid.src = safeSrc(fill);
+  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(fill)));
+
+  const logo = of("logo");
   el.previewLogo.hidden = !safeSrc(logo);
   if (safeSrc(logo)) el.previewLogo.src = safeSrc(logo);
   el.previewStage.classList.toggle("has-logo", Boolean(safeSrc(logo)));
-  el.previewTitle.textContent = targeted?.name ?? (cartridgeTitle() || "Nothing yet");
+  el.previewTitle.textContent = targeted?.name ?? targeted?.title ?? (cartridgeTitle() || "Nothing yet");
 
-  const icon = art.icon?.preview ?? grid;
+  const icon = of("icon") ?? grid;
   el.previewIcon.style.backgroundImage = safeSrc(icon) ? `url("${safeSrc(icon)}")` : "";
 }
 
