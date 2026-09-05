@@ -720,18 +720,39 @@ function artFor(game) {
  */
 function showPlaceholder(game) {
   const title = game?.title || cartridge?.title || "";
-  const initials = title
+  el.placeholderInitials.textContent = initialsOf(title);
+  el.placeholderName.textContent = title;
+  el.cover.hidden = true;
+  el.coverB.hidden = true;
+  el.placeholder.classList.remove("hidden");
+}
+
+/**
+ * The picture for one row, which is that game's or nothing.
+ *
+ * Deliberately not `artFor`: that one falls back to the cartridge's art so the
+ * window is never blank, and a list of ten rows doing the same would be ten
+ * copies of one cover. A row with no picture says which game it is instead.
+ */
+function rowArtFor(game) {
+  const wanted = getComputedStyle(document.documentElement)
+    .getPropertyValue("--skin-art")
+    .trim();
+  return (
+    ({ hero: game.background, logo: game.logo, icon: game.icon })[wanted] ||
+    game.cover ||
+    ""
+  );
+}
+
+/** The first letter of up to three words, for a game with no picture. */
+function initialsOf(title) {
+  return (title || "")
     .split(/\s+/)
     .filter((word) => /[\p{L}\p{N}]/u.test(word))
     .slice(0, 3)
     .map((word) => [...word][0].toUpperCase())
     .join("");
-
-  el.placeholderInitials.textContent = initials;
-  el.placeholderName.textContent = title;
-  el.cover.hidden = true;
-  el.coverB.hidden = true;
-  el.placeholder.classList.remove("hidden");
 }
 
 /** Bring the next game's art up behind the current one, then swap. */
@@ -762,10 +783,24 @@ function renderRail(list) {
     row.tabIndex = 0;
     row.dataset.index = String(index);
 
-    const img = document.createElement("img");
-    img.className = "game-row__cover";
-    img.alt = "";
-    if (game.cover) img.src = game.cover;
+    // A row is that game, so it shows that game's picture of whichever kind the
+    // skin asked for and stops there — falling through to the cartridge's would
+    // fill a grid of ten shortcuts with ten copies of the same cover.
+    const art = rowArtFor(game);
+    let img;
+    if (art) {
+      img = document.createElement("img");
+      img.className = "game-row__cover";
+      img.alt = "";
+      img.src = art;
+    } else {
+      // Its initials instead, so a game with no picture is still a game rather
+      // than an empty square.
+      img = document.createElement("span");
+      img.className = "game-row__cover game-row__cover--empty";
+      img.textContent = initialsOf(game.title);
+      img.setAttribute("aria-hidden", "true");
+    }
 
     const body = document.createElement("span");
     body.className = "game-row__body";

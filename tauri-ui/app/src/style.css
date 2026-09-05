@@ -1272,3 +1272,15 @@ body.is-gamepad :focus {
   font-size: 12px;
   line-height: 1.35;
 }
+
+/* A row whose game has no picture of the kind the skin asked for. Same box as
+   the image it replaces, so nothing in a list or a grid shifts. */
+.game-row__cover--empty {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklch, var(--accent) 60%, var(--ink-3));
+  background: oklch(0.24 0.006 65);
+}
