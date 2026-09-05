@@ -21,43 +21,21 @@
 ///
 /// `("name", "what it looks like")` — the description is what Settings shows,
 /// so the list is the single place a new skin has to be added.
-pub const SKINS: [(&str, &str); 10] = [
+pub const SKINS: [(&str, &str); 6] = [
     ("default", "Dark, quiet, and out of the way of the artwork"),
-    (
-        "retro",
-        "A beige CRT: scanlines, chunky buttons, orange and teal",
-    ),
-    (
-        "neon",
-        "A HUD: cut corners, hairline outlines, Eject as a wide bar",
-    ),
-    (
-        "cozy",
-        "Soft and warm: rounded frame, big pill Play, round Eject",
-    ),
-    (
-        "terminal",
-        "Amber phosphor: hard borders, scanlines, arcade buttons that travel",
-    ),
-    (
-        "desktop",
-        "A desktop: games as a grid of app icons, with a taskbar",
-    ),
-    (
-        "cyberpunk",
-        "Split readout: list left, hero right, slanted buttons in cyan and magenta",
-    ),
-    (
-        "arcade",
-        "A cabinet: marquee, a sideways strip of games, one big round button",
-    ),
-    (
-        "phantom",
-        "Gold on black: a hero band, a grid of plates, one outlined word",
-    ),
     (
         "luna",
         "Explorer, about 2003: a title bar, a white pane, no artwork at all",
+    ),
+    ("neon", "Cyan and magenta over the hero, in a vertical list"),
+    (
+        "cozy",
+        "Cream and rounded: the light one, and the artwork stays out of it",
+    ),
+    ("desktop", "Games as a grid of shortcuts, with a taskbar"),
+    (
+        "arcade",
+        "A cabinet: the games run sideways, and Play is a big round button",
     ),
 ];
 
@@ -93,8 +71,8 @@ mod tests {
 
     #[test]
     fn a_known_name_is_kept_however_it_was_typed() {
-        assert_eq!(resolve("retro"), "retro");
-        assert_eq!(resolve("  RETRO "), "retro");
+        assert_eq!(resolve("neon"), "neon");
+        assert_eq!(resolve("  NEON "), "neon");
         assert_eq!(resolve("Default"), "default");
     }
 
@@ -109,7 +87,7 @@ mod tests {
         assert_eq!(resolve("../../evil"), "default");
         assert_eq!(resolve("/etc/passwd"), "default");
         assert_eq!(resolve("http://example.com/x.css"), "default");
-        assert_eq!(resolve("retro.css"), "default");
+        assert_eq!(resolve("neon.css"), "default");
     }
 
     #[test]

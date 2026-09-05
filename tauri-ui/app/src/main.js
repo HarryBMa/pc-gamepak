@@ -669,11 +669,29 @@ function select(index) {
 
 
 /**
- * Move the selection by one, wrapping.
+ * How many games are on a row, right now.
  *
- * What up and down do on a pad. Wraps because a list of three on a television
- * is a ring, not a form: pressing up on the first game should reach the last
- * one rather than stop.
+ * Measured rather than declared, because it is the skin's business: a list is
+ * one, a grid is however many fit across, and a horizontal strip is all of
+ * them. Rows sharing a top edge are on the same row, which holds for a flex
+ * column, a flex row and a grid without any of them having to say so.
+ */
+function columns() {
+  const rows = [...el.gameList.querySelectorAll(".game-row")];
+  if (rows.length < 2) return 1;
+  const first = rows[0].offsetTop;
+  return Math.max(1, rows.filter((row) => row.offsetTop === first).length);
+}
+
+/**
+ * Move the selection, wrapping.
+ *
+ * Both axes go through here: the pad reports a direction and this turns it into
+ * a distance using the row width above, so down means the next row in a grid
+ * and the next game in a list, with no skin having to be asked which it is.
+ *
+ * Wraps because a shelf of games on a television is a ring, not a form:
+ * pressing up on the first game should reach the last rather than stop.
  */
 function step(delta) {
   const list = games();
@@ -1248,8 +1266,7 @@ const gamepad = connectGamepad({
   play: doPlay,
   eject: doEject,
   details: () => toggleSheet(),
-  previous: () => step(-1),
-  next: () => step(1),
+  move: (x, y) => step(x + y * columns()),
   log: debugLog,
   back: () => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);

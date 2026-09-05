@@ -9,7 +9,7 @@
  * Every action has its own button, and the stick only ever changes which game
  * is selected:
  *
- *   D-pad / left stick   move up and down the game list
+ *   D-pad / left stick   move through the game list, on both axes
  *   A (south)            Play
  *   X (west)             Eject
  *   Y (north)            Details
@@ -121,9 +121,8 @@ export function connect(actions) {
   let frames = 0;
   let lastReport = 0;
 
-  function move(direction) {
-    if (direction < 0) actions.previous();
-    else actions.next();
+  function move([x, y]) {
+    actions.move(x, y);
   }
 
   function frame(now) {
@@ -162,31 +161,33 @@ export function connect(actions) {
             actions.back();
             break;
           case BUTTON.UP:
-          case BUTTON.LEFT:
-            move(-1);
-            held = -1;
-            heldSince = now;
-            lastRepeat = now;
-            break;
           case BUTTON.DOWN:
-          case BUTTON.RIGHT:
-            move(1);
-            held = 1;
+          case BUTTON.LEFT:
+          case BUTTON.RIGHT: {
+            // Both axes are reported, and the launcher decides what each means
+            // for the layout it is currently wearing: down the column in a
+            // list, along the strip in a horizontal one, by a row in a grid.
+            const direction = {
+              [BUTTON.UP]: [0, -1],
+              [BUTTON.DOWN]: [0, 1],
+              [BUTTON.LEFT]: [-1, 0],
+              [BUTTON.RIGHT]: [1, 0],
+            }[button];
+            move(direction);
+            held = { button, direction };
             heldSince = now;
             lastRepeat = now;
             break;
+          }
         }
       }
 
       // A held direction keeps moving, after a pause long enough that a single
       // press never repeats by accident.
-      const stillHeld =
-        (held === -1 && (state[BUTTON.UP] || state[BUTTON.LEFT])) ||
-        (held === 1 && (state[BUTTON.DOWN] || state[BUTTON.RIGHT]));
-      if (!stillHeld) {
+      if (!held || !state[held.button]) {
         held = null;
       } else if (now - heldSince > REPEAT_DELAY && now - lastRepeat > REPEAT_RATE) {
-        move(held);
+        move(held.direction);
         lastRepeat = now;
       }
 

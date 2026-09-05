@@ -36,6 +36,20 @@
    The empty slot, behind the cartridge
    ========================================================================== */
 
+/* Hidden until the face has actually left, rather than merely covered by it.
+   The artwork used to be what hid this, so a skin that hides `#plate` — and
+   three of them do, being a file list or a desktop rather than a poster — left
+   `#face` transparent and "Slot empty" showed through the middle of the window.
+   Both paths that reveal the slot, eject and an unreadable cartridge, add
+   `is-ejected` first. */
+#slot {
+  visibility: hidden;
+}
+
+#card.is-ejected #slot {
+  visibility: visible;
+}
+
 #slot {
   position: absolute;
   inset: 0;

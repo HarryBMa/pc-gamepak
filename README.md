@@ -156,17 +156,13 @@ skin=retro
 | Skin | |
 |---|---|
 | `default` | Dark, quiet, and out of the way of the artwork |
-| `retro` | A beige CRT: scanlines, chunky buttons, orange and teal |
-| `neon` | A HUD: cut corners, hairline outlines, Eject as a wide bar |
-| `cozy` | Soft and warm: rounded frame, big pill Play, round Eject |
-| `terminal` | Amber phosphor: hard borders, scanlines, arcade buttons that travel |
-| `desktop` | A desktop: games as a grid of app icons, with a taskbar |
-| `cyberpunk` | Split readout: list left, hero right, slanted buttons in cyan and magenta |
-| `arcade` | A cabinet: marquee, a sideways strip of games, one big round button |
-| `phantom` | Gold on black: a hero band, a grid of plates, one outlined word |
 | `luna` | Explorer, about 2003: a title bar, a white pane, no artwork at all |
+| `neon` | Cyan and magenta over the hero, in a vertical list |
+| `cozy` | Cream and rounded: the light one, and the artwork stays out of it |
+| `desktop` | Games as a grid of shortcuts, with a taskbar |
+| `arcade` | A cabinet: the games run sideways, and Play is a big round button |
 
-The nine are deliberately not variations on a palette. Retro is moulded
+The six are deliberately not variations on a palette. Retro is moulded
 plastic with buttons you press into, neon is etched glass with outlines you
 press through, and cozy is a knitted thing on a shelf — so they differ in the
 frame, in the shape and size of the two actions, in how the list is drawn and in
