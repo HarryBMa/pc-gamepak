@@ -195,6 +195,11 @@ also permitted from `data:` and steamgriddb.com. So:
   or use `"Archivo"` and `"Spline Sans Mono"`, which are already there.
 - No remote background images.
 
+**Watch the specificity.** Parts of the base stylesheet are id-scoped —
+`#chrome .icon-btn`, `#card.is-collection #scrim-bottom` — and a bare class
+selector loses to those and silently does nothing. If a rule appears to be
+ignored, that is the first thing to check.
+
 **No markup, no script.** A skin is a stylesheet. If you find yourself needing an
 element, use `#skin-chrome` or `#skin-panel`.
 

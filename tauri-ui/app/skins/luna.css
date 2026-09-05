@@ -80,8 +80,18 @@
   align-items: center;
 }
 
-/* Square-ish window buttons on the bar, the close one red. */
-.icon-btn {
+/* Always on. Everywhere else these appear when the pointer enters the window,
+   because they are chrome over somebody's artwork; on a title bar they are the
+   title bar, and a window with no buttons on it is not a window. */
+#chrome-actions {
+  opacity: 1;
+  transform: none;
+}
+
+/* Matched to `#chrome .icon-btn` in the base rather than written as
+   `.icon-btn`, which loses to it on specificity and left these the stock dark
+   grey — the whole point being that the close one is red. */
+#chrome .icon-btn {
   width: 21px;
   height: 21px;
   border-radius: 3px;
@@ -90,15 +100,15 @@
   color: #ffffff;
 }
 
-.icon-btn:hover {
+#chrome .icon-btn:hover {
   background: linear-gradient(180deg, #6ba3f5 0%, #2a6bd4 100%);
 }
 
-.icon-btn--close {
+#chrome .icon-btn--close {
   background: linear-gradient(180deg, #e76654 0%, #e04332 100%);
 }
 
-.icon-btn--close:hover {
+#chrome .icon-btn--close:hover {
   background: linear-gradient(180deg, #f07d6c 0%, #e8543f 100%);
 }
 
