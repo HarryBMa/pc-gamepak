@@ -229,26 +229,36 @@
   );
 }
 
+/* Every value here comes through a variable so the rule stays at one id.
+   Written the obvious way, the collection variant below was
+   `#card.is-collection #scrim-bottom` — two ids and a class, which outranks
+   the `#scrim-bottom` a skin writes. A skin that moved the scrim to sit over
+   part of the window got its `inset` and its gradient ignored the moment the
+   cartridge held more than one game, and the whole card went black behind the
+   artwork. The state sets variables; the skin sets properties. */
 #scrim-bottom {
   position: absolute;
-  inset: auto 0 0 0;
-  height: 52%;
-  border-radius: 0 0 var(--radius) var(--radius);
-  background:
+  inset: var(--scrim-inset, auto 0 0 0);
+  height: var(--scrim-height, 52%);
+  border-radius: var(--scrim-radius, 0 0 var(--radius) var(--radius));
+  background: var(
+    --scrim-image,
     /* a breath of the sampled colour, as if the art were lighting the shelf */
-    linear-gradient(
-      to top,
-      color-mix(in oklch, var(--accent) 10%, transparent) 0%,
-      transparent 42%
-    ),
-    linear-gradient(
-      to top,
-      oklch(0.09 0.004 65 / 0.98) 0%,
-      oklch(0.09 0.004 65 / 0.9) 22%,
-      oklch(0.1 0.004 65 / 0.58) 48%,
-      oklch(0.1 0.004 65 / 0.16) 76%,
-      transparent 100%
-    );
+      linear-gradient(
+          to top,
+          color-mix(in oklch, var(--accent) 10%, transparent) 0%,
+          transparent 42%
+        )
+        ,
+      linear-gradient(
+        to top,
+        oklch(0.09 0.004 65 / 0.98) 0%,
+        oklch(0.09 0.004 65 / 0.9) 22%,
+        oklch(0.1 0.004 65 / 0.58) 48%,
+        oklch(0.1 0.004 65 / 0.16) 76%,
+        transparent 100%
+      )
+  );
 }
 
 /* A collection's rail starts higher up the window than a single game's title
@@ -257,11 +267,11 @@
    any point, which left the artwork veiled from edge to edge with nothing in
    front of most of it. The top half is the picture; darken from where the
    rail begins. */
-#card.is-collection #scrim-bottom {
-  inset: 0;
-  height: auto;
-  border-radius: var(--radius);
-  background:
+#card.is-collection {
+  --scrim-inset: 0;
+  --scrim-height: auto;
+  --scrim-radius: var(--radius);
+  --scrim-image:
     linear-gradient(
       to top,
       color-mix(in oklch, var(--accent) 8%, transparent) 0%,
@@ -420,31 +430,32 @@ body.is-gamepad .pad-badge {
   display: none;
 }
 
+/* Two variables deep on purpose. The outer one is the skin's and the base
+   never sets it; the inner one is the squeeze below, which only ever fills in
+   for a skin that said nothing. `#game-title.is-long` outranks the
+   `#game-title` a skin writes, so a skin that had picked an 11px title got the
+   squeeze's 30px for any name over fifteen characters while its neighbours
+   stayed small — and it did that whether the squeeze set `font-size` outright
+   or set the same variable the skin had set. Giving them separate names is
+   what stops them competing. */
 #game-title {
   margin: 0;
-  font-size: var(--title-size, 40px);
+  font-size: var(--title-size, var(--auto-title-size, 40px));
   font-weight: 800;
-  font-stretch: var(--title-stretch, 84%);
-  line-height: var(--title-leading, 0.9);
-  letter-spacing: var(--title-tracking, -0.012em);
+  font-stretch: var(--title-stretch, var(--auto-title-stretch, 84%));
+  line-height: var(--title-leading, var(--auto-title-leading, 0.9));
+  letter-spacing: var(--title-tracking, var(--auto-title-tracking, -0.012em));
   text-transform: uppercase;
   text-wrap: balance;
   text-shadow: 0 2px 14px oklch(0 0 0 / 0.6);
 }
 
-/* Long titles give up width before they give up size.
-
-   Set as custom properties rather than as the properties themselves, because
-   `#game-title.is-long` outranks the `#game-title` a skin writes, and a skin
-   that had picked an 11px title got 30px for any name over fifteen characters
-   while its neighbours stayed small. Flipping variables the base rule reads
-   leaves a skin's own declaration to win, and lets a skin that wants the
-   squeeze opt into it by setting the same three. */
+/* Long titles give up width before they give up size. */
 #game-title.is-long {
-  --title-size: 30px;
-  --title-stretch: 76%;
-  --title-tracking: -0.004em;
-  --title-leading: 0.96;
+  --auto-title-size: 30px;
+  --auto-title-stretch: 76%;
+  --auto-title-tracking: -0.004em;
+  --auto-title-leading: 0.96;
 }
 
 /* Shown only when something is stopping Play from working. */

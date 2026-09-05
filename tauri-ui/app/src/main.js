@@ -665,7 +665,7 @@ function select(index) {
   row?.scrollIntoView({ block: "nearest" });
 
   const game = list[index];
-  setGameTitle(game.title);
+  renderLogo();
   const art = artFor(game);
   if (art) crossfadeCover(art);
   else showPlaceholder(game);
@@ -712,17 +712,50 @@ function step(delta) {
   select((selected + delta + list.length) % list.length);
 }
 
+/** Which of a game's four pictures each name asks for. `grid` is the cover. */
+const ART_FIELD = {
+  hero: "background",
+  grid: "cover",
+  logo: "logo",
+  icon: "icon",
+};
+
+/**
+ * The kind of picture one of the skin's art properties asked for.
+ *
+ * There are three slots rather than one, because a window showing a picture in
+ * three places wants three different pictures in them — a hero behind
+ * everything, covers in the rail, and the selected game's logo printed in
+ * front. That is what the stock launcher already does for a single game, and
+ * with one property a skin could only ask for the same picture three times.
+ *
+ *   :root {
+ *     --skin-art: hero;        the fill behind everything
+ *     --skin-row-art: grid;    each row's thumbnail
+ *     --skin-logo: game;       the logo printed over the fill
+ *   }
+ *
+ * A slot left unset falls back to `--skin-art`, so a skin that wants one kind
+ * throughout still says it once and a skin written before the split behaves
+ * exactly as it did. Anything unrecognised gets the grid, and `none` means no
+ * picture at all — worth saying for a rail of names with no thumbnails, which
+ * would otherwise build an image element per row to show nothing.
+ */
+function artKind(property) {
+  const style = getComputedStyle(document.documentElement);
+  const own = style.getPropertyValue(property).trim();
+  if (own === "none" || own in ART_FIELD) return own;
+
+  const fill = style.getPropertyValue("--skin-art").trim();
+  return fill === "none" || fill in ART_FIELD ? fill : "grid";
+}
+
 /**
  * The picture that fills the window, for whichever game is showing.
  *
- * Which of the four a skin wants is the skin's to say, because it depends on
- * the shape it chose — a hero was tried here once and taken back out, since one
- * wants a window three times as wide as a cartridge is and there was only one
- * window. All four are on offer, the icon included: it exists for autorun.inf
- * and makes a poor fill at 256px, but it is a skin maker's to misuse if they
- * have a reason. Anything unrecognised gets the grid.
- *
- *   :root { --skin-art: hero; }
+ * All four are on offer, the icon included: it exists for autorun.inf and makes
+ * a poor fill at 256px, but it is a skin maker's to misuse if they have a
+ * reason.
  *
  * The game's own picture is preferred over the cartridge's, then the game's
  * cover, then the cartridge's — so somebody filling in heroes for ten games and
@@ -730,16 +763,13 @@ function step(delta) {
  * filled in none still gets a cartridge that looks like something.
  */
 function artFor(game) {
-  const wanted = getComputedStyle(document.documentElement)
-    .getPropertyValue("--skin-art")
-    .trim();
+  const kind = artKind("--skin-art");
+  if (kind === "none") return "";
 
-  const pick = (from) =>
-    from && ({ hero: from.background, logo: from.logo, icon: from.icon }[wanted] || "");
+  const field = ART_FIELD[kind];
+  const pick = (from) => (from ? from[field] : "") || "";
 
-  return (
-    pick(game) || pick(cartridge) || game?.cover || cartridge?.cover || ""
-  );
+  return pick(game) || pick(cartridge) || game?.cover || cartridge?.cover || "";
 }
 
 /**
@@ -766,14 +796,9 @@ function showPlaceholder(game) {
  * copies of one cover. A row with no picture says which game it is instead.
  */
 function rowArtFor(game) {
-  const wanted = getComputedStyle(document.documentElement)
-    .getPropertyValue("--skin-art")
-    .trim();
-  return (
-    ({ hero: game.background, logo: game.logo, icon: game.icon })[wanted] ||
-    game.cover ||
-    ""
-  );
+  const kind = artKind("--skin-row-art");
+  if (kind === "none") return "";
+  return game[ART_FIELD[kind]] || game.cover || "";
 }
 
 /** The first letter of up to three words, for a game with no picture. */
@@ -913,6 +938,50 @@ function setGameTitle(title) {
  * names the collection, so the heading below it has to stay: it is the only
  * thing that says which game the rail has picked.
  */
+/**
+ * Point the printed logo at whatever the skin asked for.
+ *
+ *   --skin-logo: auto    a single game prints its logo instead of the heading;
+ *                        a collection's names the collection, so it goes to the
+ *                        corner mark and the heading names the pick (the
+ *                        stock behaviour, and the default)
+ *   --skin-logo: game    the selected game's logo, printed instead of the
+ *                        heading, on a collection too — which is the piece a
+ *                        hero fill and a rail of covers were missing
+ *   --skin-logo: none    no logo; the heading is type
+ *
+ * Called again on every pick, so the logo follows the rail rather than being
+ * decided once when the cartridge loaded.
+ */
+function renderLogo() {
+  const game = currentGame();
+  const collected = isCollection();
+  const mode = getComputedStyle(document.documentElement)
+    .getPropertyValue("--skin-logo")
+    .trim();
+
+  const logo =
+    mode === "none"
+      ? null
+      : mode === "game"
+        ? game?.logo || cartridge?.logo || null
+        : collected
+          ? null
+          : cartridge?.logo || null;
+
+  // Printed *instead of* the heading only when it names the same thing the
+  // heading would have. Under `auto` on a collection it names the collection,
+  // not the pick — printing it over each one put Mirror's Edge's logo across
+  // Hollow Knight — so the heading stays and this hands the logo back.
+  const namesTheHeading = mode === "game" || !collected;
+
+  renderTitle(
+    game?.title ?? cartridge?.title,
+    logo,
+    namesTheHeading ? null : cartridge?.title,
+  );
+}
+
 function renderTitle(title, logo, logoOf = null) {
   setGameTitle(title);
 
@@ -970,16 +1039,7 @@ async function init() {
   // A collection's mark names the collection, so the heading under it stays
   // free to name whichever game the rail has picked.
   const collected = isCollection();
-  // On a single game the logo *is* the title, printed instead of it. On a
-  // collection it belongs to the cartridge rather than to whichever game is
-  // selected — printing it over each one put Mirror's Edge's logo across
-  // Hollow Knight — so it becomes a small mark in the corner and the heading
-  // goes back to naming the game.
-  renderTitle(
-    collected ? games()[0]?.title ?? cartridge.title : cartridge.title,
-    collected ? null : cartridge.logo,
-    null,
-  );
+  renderLogo();
   if (collected && cartridge.logo) {
     el.cartMark.src = cartridge.logo;
     el.cartMark.alt = `${cartridge.title || "Collection"} logo`;
@@ -1064,16 +1124,58 @@ function wearSkin(name, css = null) {
   if (!el.skin) return;
   worn = name || "default";
   const wanted = worn !== "default" ? `skins/${worn}.css` : "";
-  if (el.skin.getAttribute("href") !== wanted) el.skin.setAttribute("href", wanted);
+  const arriving = el.skin.getAttribute("href") !== wanted;
+  if (arriving) el.skin.setAttribute("href", wanted);
 
   // The cartridge's own, after the named one, so it can either bring a whole
   // look or adjust one that already exists. Only replaced when a cartridge is
   // being loaded — cycling skins must not throw away what the cartridge said.
   if (css !== null) el.cartSkin.textContent = css;
 
-  // A stylesheet arriving over a link lands a frame later than one set inline,
-  // so the size is taken after the next paint rather than immediately.
-  requestAnimationFrame(() => requestAnimationFrame(resizeToSkin));
+  const settle = () => {
+    resizeToSkin();
+    restyleArt();
+  };
+
+  // The size and the artwork both come from properties the new stylesheet
+  // sets, and its rules are not live until it has loaded — asked before that,
+  // `getComputedStyle` answers with the skin on its way out.
+  //
+  // The load event rather than a frame or two: the window is created hidden
+  // and shown once there is something to show, and a hidden window runs no
+  // animation frames at all, so a wait built on `requestAnimationFrame` never
+  // ended. Clearing the href needs no wait — the rules stop applying as the
+  // attribute is set — and neither does an unchanged one.
+  if (!arriving || !wanted) settle();
+  else {
+    el.skin.addEventListener("load", settle, { once: true });
+    el.skin.addEventListener("error", settle, { once: true });
+  }
+}
+
+/**
+ * Re-derive every picture from the skin that is on now.
+ *
+ * The three art properties are read while the window is being drawn, so a skin
+ * put on afterwards kept the previous one's choices: swapping to a skin that
+ * asks for icons left a rail of covers, because the covers had already been
+ * decided. Nothing about the cartridge changed, only what to show of it, so
+ * this re-reads the properties and redraws rather than reloading anything.
+ */
+function restyleArt() {
+  if (!cartridge) return;
+
+  const hadFocus = document.activeElement?.classList.contains("game-row");
+  if (isCollection()) renderRail(games());
+  if (hadFocus) {
+    el.gameList.querySelector(`.game-row[data-index="${selected}"]`)?.focus();
+  }
+
+  const game = currentGame();
+  const art = artFor(game);
+  if (art) showCover(art);
+  else showPlaceholder(game);
+  renderLogo();
 }
 
 /**
@@ -1377,6 +1479,16 @@ document.addEventListener("keydown", (event) => {
    which composes with the others.
    ========================================================================== */
 
+/**
+ * A logo for the preview, as a `data:` URI because that is what the backend
+ * sends and what `renderTitle` will accept — a path is refused there, so a
+ * skin asking for `--skin-logo: game` would show nothing without this.
+ */
+const DEMO_LOGO =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'" +
+  " viewBox='0 0 300 80'%3E%3Ctext x='0' y='58' font-family='Georgia'" +
+  " font-size='54' fill='%23fff'%3EDEMO LOGO%3C/text%3E%3C/svg%3E";
+
 async function demoInvoke(command, args) {
   const state = new URLSearchParams(location.search).get("state");
   switch (command) {
@@ -1390,11 +1502,18 @@ async function demoInvoke(command, args) {
           drive_path: args.drivePath,
           is_bundle: true,
           holds_game: true,
+          // All four kinds filled in, and each one different, because the
+          // three art properties can ask for a different one in each of the
+          // three places a picture goes and there is no way to see that they
+          // are being honoured if every kind is the same file.
           games: [
             {
               title: "God of War (2018)",
               executable: "steam://rungameid/310970",
               cover: "src/demo/gow-1.jpg",
+              background: "src/demo/gow-2.jpg",
+              logo: DEMO_LOGO,
+              icon: "src/demo/cover.jpg",
               cover_path: "",
               sizeBytes: 64_200_000_000,
             },
@@ -1402,6 +1521,9 @@ async function demoInvoke(command, args) {
               title: "God of War: Ragnarök",
               executable: "steam://rungameid/1476670",
               cover: "src/demo/gow-2.jpg",
+              background: "src/demo/gow-1.jpg",
+              logo: DEMO_LOGO,
+              icon: "src/demo/cover.jpg",
               cover_path: "",
               sizeBytes: 44_700_000_000,
             },
@@ -1420,6 +1542,22 @@ async function demoInvoke(command, args) {
         holds_game: true,
         games: [],
       };
+    case "list_skins":
+      // The preview cycles skins too. Without this the star button was dead
+      // outside Tauri, which is how a skin swap that never re-read the art
+      // properties got as far as a cartridge. Kept in step with `skins.rs` by
+      // hand; a name here that has no stylesheet just fails to load.
+      return [
+        ["default", ""],
+        ["luna", ""],
+        ["cozy", ""],
+        ["desktop", ""],
+        ["arcade", ""],
+        ["bigpicture", ""],
+        ["retro", ""],
+        ["cyberpunk", ""],
+        ["phantom", ""],
+      ];
     case "can_eject":
       // A tag resolves to a directory on this machine; there is no drive to
       // unmount and the button should not be there.

@@ -21,13 +21,12 @@
 ///
 /// `("name", "what it looks like")` — the description is what Settings shows,
 /// so the list is the single place a new skin has to be added.
-pub const SKINS: [(&str, &str); 6] = [
+pub const SKINS: [(&str, &str); 9] = [
     ("default", "Dark, quiet, and out of the way of the artwork"),
     (
         "luna",
         "Explorer, about 2003: a title bar, a white pane, no artwork at all",
     ),
-    ("neon", "Cyan and magenta over the hero, in a vertical list"),
     (
         "cozy",
         "Cream and rounded: the light one, and the artwork stays out of it",
@@ -37,6 +36,16 @@ pub const SKINS: [(&str, &str); 6] = [
         "arcade",
         "A cabinet: scanlines, a marquee, and the games run sideways",
     ),
+    (
+        "bigpicture",
+        "A hero behind, covers along the bottom, and the logo in front",
+    ),
+    ("retro", "A wood-grain television: knobs, LEDs, and a scanlined screen"),
+    (
+        "cyberpunk",
+        "Wide and split: titles down the left, the hero filling the right",
+    ),
+    ("phantom", "Black and gold, a hero over a grid, and nothing else"),
 ];
 
 /// The skin used when nothing has asked for one.
@@ -71,8 +80,8 @@ mod tests {
 
     #[test]
     fn a_known_name_is_kept_however_it_was_typed() {
-        assert_eq!(resolve("neon"), "neon");
-        assert_eq!(resolve("  NEON "), "neon");
+        assert_eq!(resolve("retro"), "retro");
+        assert_eq!(resolve("  RETRO "), "retro");
         assert_eq!(resolve("Default"), "default");
     }
 

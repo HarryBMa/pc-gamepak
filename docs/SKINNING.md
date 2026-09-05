@@ -60,22 +60,49 @@ behaviour, so a skin that does not care pays nothing.
 
 ```css
 :root {
-  --skin-width: 560;      /* logical px. Default 420 */
-  --skin-height: 430;     /* logical px. Default 630 */
-  --skin-art: hero;       /* grid | hero | logo | icon. Default grid */
+  --skin-width: 560;       /* logical px. Default 420 */
+  --skin-height: 430;      /* logical px. Default 630 */
+
+  --skin-art: hero;        /* the fill behind everything */
+  --skin-row-art: grid;    /* each row's thumbnail */
+  --skin-logo: game;       /* the logo printed over the fill */
 }
 ```
 
-**Size.** The window resizes itself to match after the stylesheet lands. 420×630
-is the shape of a cover, which is right for a skin built around one and wrong
-for a skin laid out sideways.
+**Size.** The window resizes itself to match once the stylesheet has loaded.
+420×630 is the shape of a cover, which is right for a skin built around one and
+wrong for a skin laid out sideways.
 
-**Artwork.** Which of SteamGridDB's four fills the window. Every game carries all
-four and any may be empty, so the launcher falls through: the game's picture of
-the kind you asked for, then the cartridge's, then the game's cover, then the
-cartridge's, then the game's initials. A row in the list is that game, so it
-takes that game's picture of that kind and stops — otherwise a grid of ten
+**Artwork — three slots, not one.** A window showing a picture in three places
+wants three different pictures in them: a hero behind everything, covers in the
+rail, and the selected game's logo printed in front. That is Big Picture, and
+with a single property a skin could only ask for the same picture three times.
+
+| property | drives | takes | default |
+|---|---|---|---|
+| `--skin-art` | the fill behind everything | `grid` `hero` `logo` `icon` `none` | `grid` |
+| `--skin-row-art` | each row's thumbnail | the same | falls back to `--skin-art` |
+| `--skin-logo` | the printed logo | `auto` `game` `none` | `auto` |
+
+A slot left unset falls back to `--skin-art`, so a skin that wants one kind
+throughout still says it once. Anything unrecognised gets the grid. `none` means
+no picture at all — worth saying for a rail of names with no thumbnails, which
+would otherwise build an image element per row to show nothing.
+
+Every game carries all four kinds and any may be empty, so the fill falls
+through: the game's picture of the kind you asked for, then the cartridge's,
+then the game's cover, then the cartridge's, then the game's initials. A row is
+that game, so it takes that game's picture and stops — otherwise a grid of ten
 shortcuts is ten copies of one cover.
+
+`--skin-logo: auto` is the stock behaviour: a single game prints its logo
+instead of the heading, and a collection's logo names the collection rather than
+the pick, so it goes to `#cart-mark` in the corner and the heading names the
+game. `game` prints the **selected game's** logo instead of the heading on a
+collection too, following the rail as it moves — pair it with `--skin-art: hero`
+and `--skin-row-art: grid` and you have a couch launcher. `none` keeps the
+heading as type. Whenever a logo is printed, `#stage` gains `.has-logo` and the
+base hides `#game-title`, so nothing repeats the name.
 
 `icon` is really `autorun.inf`'s and is 256px, so it makes a poor fill. It is on
 the list because a skin maker with a reason is better served by having it.
@@ -92,7 +119,9 @@ layers below are for.
 ├── #slot                    what is behind the cartridge; seen after Eject
 │   ├── #slot-label
 │   └── #btn-insert
-└── #face                    everything printed on the cartridge
+└── #face                    everything printed on the cartridge — not just
+                             the artwork. #stage is inside it, so insetting
+                             #face clips the whole interface, not the picture.
     ├── #plate               the artwork
     │   ├── #cover-img       two layers, so a collection can cross-fade
     │   ├── #cover-img-b
@@ -166,16 +195,24 @@ button. Do not undo that.
 | `body.is-gamepad` | a controller is connected |
 | `.hidden`, `[hidden]` | do not make these visible |
 
-`is-long` sets no properties of its own — it flips four custom properties that
-the base `#game-title` rule reads, so a skin that gives the title its own
-`font-size` keeps it at every length:
+`is-long` sets no properties of its own. The base reads two variables deep —
+`font-size: var(--title-size, var(--auto-title-size, 40px))` — where the outer
+one is yours and the base never sets it, and the inner one is the squeeze, which
+only fills in for a skin that said nothing:
 
 ```
 --title-size  --title-stretch  --title-tracking  --title-leading
 ```
 
-Set them yourself if you want long names squeezed rather than wrapped, and
-leave them alone if you do not.
+Set them if you want a title size of your own, and leave them alone to inherit
+the squeeze. Setting `font-size` on `#game-title` directly works too.
+
+**The rule behind that shape:** a state on `#card` or `#stage` must never set a
+property a skin might want. `#card.is-collection #scrim-bottom` is two ids and a
+class, so it beat every skin's `#scrim-bottom` and blacked out the whole window
+the moment a cartridge held more than one game. Both that and the long-title
+squeeze now set variables the one-id rule reads. If you find a state that still
+wins against you, that is a bug in the base, not something to out-specify.
 
 ---
 

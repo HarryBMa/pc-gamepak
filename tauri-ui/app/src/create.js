@@ -199,6 +199,7 @@ const el = {
   settingsStatus: $("settings-status"),
 
   sgdbDialog: $("sgdb-dialog"),
+  sgdbForm: $("sgdb-form"),
   sgdbTitle: $("sgdb-title"),
   sgdbTabs: $("sgdb-tabs"),
   sgdbSearch: $("sgdb-search"),
@@ -2602,10 +2603,13 @@ el.search.addEventListener("input", renderGames);
 el.changeGame.addEventListener("click", openGamePicker);
 el.changeMedia.addEventListener("click", openMediaPicker);
 // method="dialog" means a stray Enter in the search box would close the dialog
-// mid-selection, which is the opposite of what Enter means in a filter.
-el.pickForm.addEventListener("submit", (event) => {
-  if (event.submitter?.id !== "pick-close") event.preventDefault();
-});
+// mid-selection, which is the opposite of what Enter means in a filter. Only a
+// button that means to close one gets to.
+const closesDialog = (event, ...ids) => {
+  if (!ids.includes(event.submitter?.id)) event.preventDefault();
+};
+el.pickForm.addEventListener("submit", (e) => closesDialog(e, "pick-close", "pick-done"));
+el.sgdbForm.addEventListener("submit", (e) => closesDialog(e, "sgdb-close", "sgdb-done"));
 // Entering a game by hand is an answer to "which game", so the dialog that
 // asked has done its job.
 el.btnCustom.addEventListener("click", () => {
