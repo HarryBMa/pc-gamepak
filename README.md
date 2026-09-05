@@ -233,10 +233,26 @@ match:
 `neon` uses it to turn the window on its side — artwork on the left, the list
 and the controls in a column to the right. Saying nothing keeps the stock size.
 
-**The artwork never changes shape.** A skin picks its own frame, sizes and
-layout; the cover, logo and background stay exactly what they were, at the same
-aspect, so one set of pictures works under all of them. A skin choosing a shape
-is not a skin asking for different art.
+### A skin chooses which artwork it wants
+
+SteamGridDB has four kinds and the wizard fetches all four — grid (the 2:3
+cover), hero (the wide banner), logo and icon. Which one fills the window is the
+skin's to say, because it depends on the shape the skin chose:
+
+```css
+:root { --skin-art: hero; }
+```
+
+`neon` asks for the hero, which is the picture it was always for — heroes were
+dropped from the launcher years ago because one wants a window three times as
+wide as a cartridge is, and there was only one window. A portrait skin says
+nothing and keeps the grid. The logo prints over whichever it is, and the icon
+stays Explorer's business.
+
+**The artwork itself never changes shape.** A skin picks its frame, size, layout
+and which of the four it shows; the pictures are the same pictures at the same
+aspects, so one set works under all of them. A skin choosing a shape is not a
+skin asking for different art.
 
 Adding a skin is a stylesheet in `tauri-ui/app/skins/` and a line in
 `core/src/skins.rs`. The file is loaded *on top of* the stock one rather than

@@ -140,6 +140,8 @@ const el = {
   editLogoImg: $("edit-logo-img"),
   editIcon: $("edit-icon"),
   editIconImg: $("edit-icon-img"),
+  editHero: $("edit-hero"),
+  editHeroImg: $("edit-hero-img"),
   editGames: $("edit-games"),
   editStatus: $("edit-status"),
   tuneNow: $("tune-now"),
@@ -171,6 +173,8 @@ const el = {
   slotLogo: $("slot-logo"),
   slotLogoImg: $("slot-logo-img"),
   slotIcon: $("slot-icon"),
+  slotHero: $("slot-hero"),
+  slotHeroImg: $("slot-hero-img"),
   slotIconImg: $("slot-icon-img"),
 
   settingsDialog: $("settings-dialog"),
@@ -1465,6 +1469,9 @@ function renderBuild() {
   setPlate(el.collectionCover, el.collectionCoverImg, coverSrc);
   setPlate(el.slotLogo, el.slotLogoImg, art.logo?.preview);
   setPlate(el.slotIcon, el.slotIconImg, art.icon?.preview ?? coverSrc);
+  // No fallback to the cover: a hero is a different shape, and standing a
+  // portrait in for one would look like a hero had been chosen when none had.
+  setPlate(el.slotHero, el.slotHeroImg, art.background?.preview);
   el.btnInheritCover.textContent = first ? `Use ${first.name}'s artwork` : "";
   el.btnInheritCover.hidden = !collection || !first || Boolean(art.cover);
 }
@@ -2387,6 +2394,7 @@ function renderEditArt() {
 
   setPlate(el.editCover, el.editCoverImg, art.cover?.preview ?? editing?.cover);
   setPlate(el.editLogo, el.editLogoImg, art.logo?.preview ?? editing?.logo);
+  setPlate(el.editHero, el.editHeroImg, art.background?.preview ?? editing?.background);
   // Falls back to the cover only when the cartridge genuinely has no icon of
   // its own, which is what autorun.inf does with it.
   setPlate(
@@ -2547,6 +2555,7 @@ async function saveEdits() {
         coverSource: art.cover?.path ?? null,
         logoSource: art.logo?.path ?? null,
         iconSource: art.icon?.path ?? null,
+        backgroundSource: art.background?.path ?? null,
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,

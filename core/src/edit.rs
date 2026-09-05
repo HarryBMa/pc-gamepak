@@ -35,6 +35,11 @@ pub struct Editable {
     /// The drive's icon, as a data URI.
     pub icon: String,
     pub icon_path: String,
+    /// The hero, as a data URI. Shown in its own slot so a cartridge that has
+    /// one says so, rather than the slot sitting empty over a picture that is
+    /// already on the drive.
+    pub background: String,
+    pub background_path: String,
     pub is_bundle: bool,
     pub games: Vec<EditableGame>,
     /// True when the games live on the cartridge, which is what makes removing
@@ -68,6 +73,9 @@ pub struct UpdateRequest {
     /// cover, which is what a cartridge without its own icon has always used.
     #[serde(default)]
     pub icon_source: Option<String>,
+    /// A new hero — the wide one. Absent leaves whatever the cartridge had.
+    #[serde(default)]
+    pub background_source: Option<String>,
     /// The games, in the order they should appear. A single-game cartridge has
     /// exactly one; removing the last one is refused.
     pub games: Vec<UpdateGame>,
@@ -130,6 +138,8 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         logo_path: info.logo_path,
         icon: info.icon,
         icon_path: info.icon_path,
+        background: info.background,
+        background_path: info.background_path,
         is_bundle: info.is_bundle,
         holds_game: info.holds_game,
         games,
@@ -178,6 +188,7 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
             cover_source: None,
             logo_source: None,
             icon_source: None,
+            background_source: None,
             games,
         },
     )?;
@@ -315,14 +326,27 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
 
     // ---- The logo ---------------------------------------------------------
     //
-    // The background is still carried forward rather than edited: the launcher
-    // stopped reading heroes, so there is nothing on this cartridge that would
-    // show a new one.
+    // The hero used to be carried forward and never edited, because the
+    // launcher had stopped reading heroes: it wants a window three times as
+    // wide as a cover, and there was only one window. Skins can size their own
+    // now, so a wide one has somewhere to go and is worth being able to change.
     let existing_background = existing
         .as_ref()
         .map(|info| info.background_path.clone())
         .filter(|path| !path.is_empty())
         .and_then(|path| file_name_relative(root, &path));
+    let background_name = match request.background_source.as_deref().map(str::trim) {
+        Some(source) if !source.is_empty() => {
+            match create::copy_cover(Path::new(source), root, "background") {
+                Ok(name) => Some(name),
+                Err(e) => {
+                    warnings.push(format!("The hero was not changed: {e}"));
+                    existing_background.clone()
+                }
+            }
+        }
+        _ => existing_background.clone(),
+    };
     let existing_logo = existing
         .as_ref()
         .map(|info| info.logo_path.clone())
@@ -363,7 +387,7 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
             &entries[0].1,
             cover_name.as_deref(),
             None,
-            existing_background.as_deref(),
+            background_name.as_deref(),
             logo_name.as_deref(),
         )
     };
@@ -474,6 +498,7 @@ mod tests {
             cover_source: None,
             logo_source: None,
             icon_source: None,
+            background_source: None,
             games: games
                 .iter()
                 .map(|(t, e)| UpdateGame {

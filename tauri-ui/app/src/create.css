@@ -2402,3 +2402,10 @@ dialog form {
 .tune-now {
   margin: -4px 0 4px 30px;
 }
+
+/* A hero is a banner, so its slot is one — showing it in the same portrait
+   frame as the cover would misreport what shape the picture has to be. */
+.art-slot__art--wide {
+  aspect-ratio: 16 / 6;
+  width: 100%;
+}

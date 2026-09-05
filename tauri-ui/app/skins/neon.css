@@ -238,6 +238,11 @@
 :root {
   --skin-width: 560;
   --skin-height: 380;
+
+  /* A window on its side wants the wide picture. This is the shape the hero
+     was always for, and the reason it was dropped was that there was nowhere
+     wide enough to put one. */
+  --skin-art: hero;
 }
 
 /* The art keeps its own proportions on the left; the panel sits over the

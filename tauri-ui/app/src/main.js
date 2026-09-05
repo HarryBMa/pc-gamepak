@@ -887,12 +887,22 @@ async function init() {
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
   }
 
-  // The grid is the launcher's art. A hero was tried here and taken back out:
-  // it wants a window three times as wide as a cartridge is, and the cover has
-  // to be reduced to a card in front of it to leave any of it visible, which is
-  // two pictures competing in a 420px window. The grid fills it, the logo prints
-  // over it, and the icon is Explorer's business rather than this window's.
-  const launcherArt = (isCollection() ? games()[selected]?.cover : null) || cartridge.cover;
+  // Which picture fills the window is the skin's to say, because it depends on
+  // the shape the skin chose. A hero was tried here once and taken back out —
+  // it wants a window three times as wide as a cartridge is, and there was only
+  // one window. Now that a skin can size its own, a landscape one asks for the
+  // hero and a portrait one keeps the grid.
+  //
+  //   :root { --skin-art: hero; }
+  //
+  // A selected game still wins over both: on a collection, choosing a game is
+  // what changes the art, and that is what choosing it means.
+  const wanted = getComputedStyle(document.documentElement)
+    .getPropertyValue("--skin-art")
+    .trim();
+  const preferred = wanted === "hero" ? cartridge.background : "";
+  const launcherArt =
+    (isCollection() ? games()[selected]?.cover : null) || preferred || cartridge.cover;
   if (launcherArt) await showCover(launcherArt);
 
   setBusy(false);
