@@ -55,11 +55,25 @@ if [ ! -f "$MOUNT_POINT/cartridge.conf" ] && [ ! -f "$MOUNT_POINT/autorun.inf" ]
     exit 0
 fi
 
-LAUNCHER="${PC_CARTRIDGE_LAUNCHER:-/usr/local/bin/pc-gamepak}"
+# Where the launcher ended up depends on how it was installed: install.sh puts
+# it in /usr/local/bin, a package in /usr/bin. Searching both means this helper
+# does not have to know which one ran. PC_GAMEPAK_LAUNCHER overrides all of it
+# and is spelled the same way the watcher spells it; PC_CARTRIDGE_LAUNCHER is
+# the old name, still honoured so existing installs keep working.
+LAUNCHER="${PC_GAMEPAK_LAUNCHER:-${PC_CARTRIDGE_LAUNCHER:-}}"
 
-if [ ! -x "$LAUNCHER" ]; then
-    echo "launcher not found at $LAUNCHER"
-    echo "build it with: cd tauri-ui && npm run build, then install the binary there"
+if [ -z "$LAUNCHER" ]; then
+    for candidate in /usr/local/bin/pc-gamepak /usr/bin/pc-gamepak; do
+        if [ -x "$candidate" ]; then
+            LAUNCHER="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$LAUNCHER" ] || [ ! -x "$LAUNCHER" ]; then
+    echo "launcher not found in /usr/local/bin or /usr/bin"
+    echo "install it with linux/install.sh, or set PC_GAMEPAK_LAUNCHER"
     exit 0
 fi
 

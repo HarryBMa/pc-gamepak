@@ -30,7 +30,7 @@ switch.
 | Channel | Why it fits | Effort |
 |---|---|---|
 | **GitHub Releases** | The source of truth every other channel points at. Tag `v0.1.0`, CI builds Linux and Windows artefacts with checksums. | Done — `.github/workflows/release.yml` |
-| **AUR** (`pc-gamepak`, `pc-gamepak-git`) | pacman installs as root; udev rules and systemd units are ordinary here. Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. | Low. `packaging/aur/PKGBUILD` is written |
+| **AUR** (`pc-gamepak`, `pc-gamepak-git`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` and `packaging/aur/pc-gamepak-git/` are written |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
 | **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. `packaging/scoop/pc-gamepak.json` is written. | Low |
 
@@ -69,11 +69,45 @@ Still unverified, and worth checking before writing a manifest: whether new host
 mounts appear inside a Flatpak sandbox quickly enough to be useful, and how the
 launcher hands a `steam://` URI back to the host.
 
+## What Linux actually does, tested
+
+Checked on CachyOS (KDE Plasma 6, Wayland) against a real 128 GB exFAT
+cartridge — a ten-game Tomb Raider collection written by the Windows wizard.
+
+| | Result |
+|---|---|
+| `cargo build --release` for all three crates | Builds clean, warnings only |
+| `cargo test --release` in `core` | 218 pass |
+| `verify-cart` over the whole cartridge | 107.43 GB read at 345 MB/s, `intact: every file matches the manifest` |
+| Launcher on Wayland | Draws the collection, per-game art, Play and Eject |
+| Wizard (`--create`) | Opens, and finds the cartridge: `20.4 GB free · exFAT · has a cartridge` |
+| Rootless watcher | Detects arrival and removal, opens and closes the launcher, 2.4 MB resident |
+| udev route (`install.sh`) | Fires and opens the launcher |
+
+The cartridge written on Windows was read on Linux without conversion, which is
+the claim the exFAT choice exists to make.
+
+**The one thing that actually breaks it is automount.** The watcher waits on the
+mount table and the udev helper waits for a mount point; neither can do anything
+for a drive the desktop never mounts. KDE does not automount removable media
+unless it is switched on, and the first plug-in of the test cartridge failed
+exactly there:
+
+```
+==== 2026-09-05T18:13:49 cartridge detected: sda2 ====
+no mount point appeared for /dev/sda2 after 30s; giving up
+```
+
+Nothing was wrong with the cartridge — it opened normally once mounted. So the
+packaging says so out loud: `udiskie` is an optdepend, and the post-install
+message names automount as the thing to check first. It is the Linux equivalent
+of a Windows autorun policy, and it will be the top support question.
+
 ## Order of work
 
-1. **Tag `v0.1.0`.** Nothing below can start without artefacts to point at.
-   Check `cargo build --release` on both platforms first — CI covers `check`,
-   not `build`.
+1. **Tag `v1.0.0`.** Nothing below can start without artefacts to point at.
+   `cargo build --release` is confirmed on Linux (above) and on Windows — CI
+   covers `check`, not `build`.
 2. **AUR `pc-gamepak-git`** first: it builds from `main`, so it needs no
    checksums and no release cadence, and it puts the project in front of the
    Steam Deck audience immediately. Then the versioned `pc-gamepak`.
