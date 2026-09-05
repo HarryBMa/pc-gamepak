@@ -282,7 +282,9 @@ aspects, so one set works under all of them. A skin choosing a shape is not a
 skin asking for different art.
 
 Adding a skin is a stylesheet in `tauri-ui/app/skins/` and a line in
-`core/src/skins.rs`. The file is loaded *on top of* the stock one rather than
+`core/src/skins.rs`. **[docs/SKINNING.md](docs/SKINNING.md)** is the reference:
+every element a skin can style, the three properties it sets, the states to
+handle, and the handful of things it must not do. The file is loaded *on top of* the stock one rather than
 instead of it, so a skin is only the difference — `retro.css` is about 150 lines
 and changes no markup at all.
 
