@@ -2969,6 +2969,7 @@ async function demoInvoke(command, args) {
         ["cyberpunk", "Split readout: list left, hero right, slanted buttons in cyan and magenta"],
         ["arcade", "A cabinet: marquee, a sideways strip of games, one big round button"],
         ["phantom", "Gold on black: a hero band, a grid of plates, one outlined word"],
+        ["luna", "Explorer, about 2003: a title bar, a white pane, no artwork at all"],
       ];
     case "steam_registration_plan":
       return [

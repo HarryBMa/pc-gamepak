@@ -1,0 +1,335 @@
+/* ==========================================================================
+   Luna — Explorer, about 2003. Beige, blue, and a list of files.
+
+   The only skin with no artwork on show: the picture is not the subject here,
+   the list is, so `#plate` is hidden outright and every game's own icon does
+   the work at 32px in a white pane. Everything else has been a poster with
+   controls over it; this is a window with a title bar.
+
+   Tahoma is a system font on Windows and needs no `@font-face`, which is the
+   one webfont in this project that costs nothing.
+   ========================================================================== */
+
+:root {
+  --skin-width: 460;
+  --skin-height: 600;
+
+  /* Rows are 32px squares in a list. An icon is the only one of the four that
+     is square to begin with; a hero in that box is a sliver of a banner. */
+  --skin-art: icon;
+
+  --accent: #316ac5;
+  --accent-ink: #ffffff;
+  --radius: 0px;
+
+  --xp-face: #ece9d8;
+  --xp-pane: #ffffff;
+  --xp-blue: #0058e6;
+  --xp-blue-deep: #0038a8;
+  --xp-select: #316ac5;
+  --xp-line: #7f9db9;
+  --xp-button-line: #003c74;
+  --xp-ink: #000000;
+  --xp-font: Tahoma, "Segoe UI", ui-sans-serif, sans-serif;
+}
+
+/* ---------------------------------------------------------------- the window */
+
+#card {
+  background: var(--xp-face);
+  color: var(--xp-ink);
+  font-family: var(--xp-font);
+  border: 3px solid var(--xp-blue);
+  border-top: 0;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 14px 34px -12px rgb(0 0 0 / 0.55);
+}
+
+#face {
+  border-radius: 5px 5px 0 0;
+}
+
+/* No artwork behind anything. The list is the window's content, not a caption
+   printed over a picture. */
+#plate,
+#scrim-top,
+#scrim-bottom,
+#cart-mark {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- the title bar
+
+   Drawn on the skin's own layer, because the stock markup has no title bar and
+   a stylesheet cannot add one. */
+
+/* Drawn on #skin-panel rather than #skin-chrome, which is the difference
+   between the two layers: #skin-chrome sits above #stage and would paint over
+   the name printed on the bar, and #skin-panel sits below it. #chrome outranks
+   both, so the window buttons stay on top of whichever is used. */
+#skin-panel {
+  inset: 0 0 auto 0;
+  height: 30px;
+  background: linear-gradient(180deg, var(--xp-blue) 0%, var(--xp-blue-deep) 100%);
+  border-radius: 5px 5px 0 0;
+}
+
+#chrome {
+  padding: 5px 6px 0 0;
+  height: 30px;
+  align-items: center;
+}
+
+/* Square-ish window buttons on the bar, the close one red. */
+.icon-btn {
+  width: 21px;
+  height: 21px;
+  border-radius: 3px;
+  border: 1px solid #ffffff;
+  background: linear-gradient(180deg, #4f8ff0 0%, #1b5cc4 100%);
+  color: #ffffff;
+}
+
+.icon-btn:hover {
+  background: linear-gradient(180deg, #6ba3f5 0%, #2a6bd4 100%);
+}
+
+.icon-btn--close {
+  background: linear-gradient(180deg, #e76654 0%, #e04332 100%);
+}
+
+.icon-btn--close:hover {
+  background: linear-gradient(180deg, #f07d6c 0%, #e8543f 100%);
+}
+
+/* ------------------------------------------------------------------ the pane */
+
+#stage {
+  position: absolute;
+  inset: 30px 0 0 0;
+  margin-top: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The cartridge's name, as a toolbar line under the title bar. */
+#game-title {
+  order: -2;
+  flex: none;
+  margin: 0;
+  padding: 6px 10px 5px;
+  font-family: var(--xp-font);
+  font-size: 11px;
+  font-weight: 700;
+  font-stretch: 100%;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+  text-shadow: none;
+  color: #1a3d6b;
+  border-bottom: 1px solid #d4d0c8;
+}
+
+#title-logo {
+  max-height: 20px;
+}
+
+/* The cartridge's name goes in the title bar, which is where a window's name
+   goes. It is the one piece of text the stock markup has that belongs up
+   there — #game-title is the selected game, and that is a different thing. */
+#eyebrow {
+  position: absolute;
+  top: -30px;
+  left: 10px;
+  right: 70px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-family: var(--xp-font);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #ffffff;
+  text-shadow: 1px 1px 1px rgb(0 0 0 / 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#notice {
+  padding: 0 10px 8px;
+  font-family: var(--xp-font);
+  color: #444444;
+}
+
+#game-list {
+  order: -1;
+  flex: 1;
+  max-height: none;
+  margin: 8px;
+  padding: 3px;
+  gap: 2px;
+  background: var(--xp-pane);
+  border: 2px solid var(--xp-line);
+  border-radius: 0;
+  scrollbar-width: auto;
+}
+
+.game-row {
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: var(--xp-pane);
+  color: var(--xp-ink);
+  font-family: var(--xp-font);
+}
+
+.game-row:hover {
+  background: #e8f1ff;
+  border-color: #b5d3ff;
+}
+
+/* The launcher marks the chosen row with `aria-selected`, not a class — the
+   row is a listbox option, so the state is on the attribute that says so. */
+.game-row[aria-selected="true"] {
+  background: var(--xp-select);
+  border-color: var(--xp-select);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.game-row__cover {
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
+  object-fit: cover;
+  border: 1px solid var(--xp-line);
+  background: var(--xp-face);
+}
+
+.game-row__cover--empty {
+  color: #4a6a94;
+  background: var(--xp-face);
+  font-size: 11px;
+}
+
+.game-row__title {
+  font-size: 11.5px;
+  color: inherit;
+}
+
+.game-row__meta {
+  font-family: var(--xp-font);
+  font-size: 10px;
+  color: #6d6d6d;
+}
+
+.game-row[aria-selected="true"] .game-row__title,
+.game-row[aria-selected="true"] .game-row__meta {
+  color: #ffffff;
+}
+
+/* The status light, off until the row is the one Play will start. */
+.game-row__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid #606060;
+  background: #909090;
+  opacity: 1;
+}
+
+.game-row[aria-selected="true"] .game-row__dot {
+  border-color: #ffffff;
+  background: #ff9d00;
+  box-shadow: 0 0 4px #ff9d00;
+}
+
+/* ---------------------------------------------------------------- the buttons */
+
+#button-row {
+  flex: none;
+  margin: 0;
+  padding: 8px;
+  gap: 8px;
+  background: var(--xp-face);
+  border-top: 1px solid #d4d0c8;
+}
+
+.btn {
+  font-family: var(--xp-font);
+  border-radius: 3px;
+  border: 1px solid var(--xp-button-line);
+  background: linear-gradient(180deg, #ffffff 0%, #ece9d8 85%, #d6d2c2 100%);
+  color: var(--xp-ink);
+  box-shadow: inset 0 0 0 1px #ffffff;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.btn--play {
+  height: 34px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.btn--eject {
+  width: 46px;
+  height: 34px;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: #e8a33d;
+  box-shadow: inset 0 0 0 1px #ffffff, inset 0 0 0 2px #fdd67c;
+}
+
+.btn:active:not(:disabled) {
+  background: linear-gradient(180deg, #d6d2c2 0%, #ece9d8 100%);
+  box-shadow: inset 1px 1px 2px rgb(0 0 0 / 0.25);
+}
+
+.btn:disabled {
+  background: var(--xp-face);
+  border-color: #a0a0a0;
+  color: #9a9a94;
+  box-shadow: none;
+}
+
+/* Keyboard and pad users need to see where they are on a light ground. */
+.btn:focus-visible,
+body.is-gamepad :focus {
+  outline: 1px dotted var(--xp-ink);
+  outline-offset: -4px;
+}
+
+/* --------------------------------------------------------------- the leftovers */
+
+#slot {
+  background: var(--xp-face);
+  color: #444444;
+  border-radius: 0;
+}
+
+#cover-placeholder {
+  background: var(--xp-pane);
+}
+
+#placeholder-initials {
+  color: #4a6a94;
+}
+
+#placeholder-name {
+  font-family: var(--xp-font);
+  color: #444444;
+}
+
+.pad-badge {
+  border-radius: 50%;
+  background: var(--xp-select);
+  color: #ffffff;
+}

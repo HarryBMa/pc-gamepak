@@ -21,7 +21,7 @@
 ///
 /// `("name", "what it looks like")` — the description is what Settings shows,
 /// so the list is the single place a new skin has to be added.
-pub const SKINS: [(&str, &str); 9] = [
+pub const SKINS: [(&str, &str); 10] = [
     ("default", "Dark, quiet, and out of the way of the artwork"),
     (
         "retro",
@@ -54,6 +54,10 @@ pub const SKINS: [(&str, &str); 9] = [
     (
         "phantom",
         "Gold on black: a hero band, a grid of plates, one outlined word",
+    ),
+    (
+        "luna",
+        "Explorer, about 2003: a title bar, a white pane, no artwork at all",
     ),
 ];
 
