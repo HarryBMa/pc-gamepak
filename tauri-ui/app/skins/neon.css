@@ -268,12 +268,17 @@
   display: none;
 }
 
+/* Starting below the chrome rather than under it. Both are z-index 3 and the
+   stage comes later in the markup, so a stage spanning the full height put
+   itself over the details and close buttons and swallowed every click on them —
+   which only showed up here, because in the stock layout the stage is in normal
+   flow and never reaches them. */
 #stage {
   position: absolute;
-  inset: 0 0 0 auto;
+  inset: 42px 0 0 auto;
   width: 232px;
   margin-top: 0;
-  padding: 44px 18px 18px;
+  padding: 10px 18px 18px;
   display: flex;
   flex-direction: column;
 }

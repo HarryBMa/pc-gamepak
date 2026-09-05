@@ -21,7 +21,7 @@
 ///
 /// `("name", "what it looks like")` — the description is what Settings shows,
 /// so the list is the single place a new skin has to be added.
-pub const SKINS: [(&str, &str); 5] = [
+pub const SKINS: [(&str, &str); 6] = [
     ("default", "Dark, quiet, and out of the way of the artwork"),
     (
         "retro",
@@ -38,6 +38,10 @@ pub const SKINS: [(&str, &str); 5] = [
     (
         "terminal",
         "Amber phosphor: hard borders, scanlines, arcade buttons that travel",
+    ),
+    (
+        "desktop",
+        "A desktop: games as a grid of app icons, with a taskbar",
     ),
 ];
 

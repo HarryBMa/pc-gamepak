@@ -2956,6 +2956,7 @@ async function demoInvoke(command, args) {
         ["neon", "A HUD: cut corners, hairline outlines, Eject as a wide bar"],
         ["cozy", "Soft and warm: rounded frame, big pill Play, round Eject"],
         ["terminal", "Amber phosphor: hard borders, scanlines, arcade buttons that travel"],
+        ["desktop", "A desktop: games as a grid of app icons, with a taskbar"],
       ];
     case "steam_registration_plan":
       return [

@@ -1,0 +1,274 @@
+/* ==========================================================================
+   Desktop — the cartridge as a machine's desktop, games as shortcuts.
+
+   The one skin that needed the artwork choice to exist. `--skin-art: icon`
+   turns the list into a grid of app icons rather than a column of posters, and
+   the fill picture stops being the point: a desktop is its shortcuts, so the
+   frame is a wallpaper and the games are on it.
+
+   Ported from a mock-up written against its own markup (`.skin-desktop`,
+   `.game-card`, `.thumb`). Same idea, real selectors.
+
+   Widest of the skins, because a grid wants room to be a grid.
+   ========================================================================== */
+
+:root {
+  --skin-width: 620;
+  --skin-height: 460;
+
+  /* Per game, so a collection of ten is ten app icons. A game with no icon of
+     its own falls back through its cover, which crops square well enough that
+     a half-set-up cartridge still reads as a desktop. */
+  --skin-art: icon;
+
+  --accent: oklch(0.68 0.16 245);
+  --accent-ink: oklch(0.98 0.01 245);
+
+  --desk-deep: oklch(0.22 0.045 250);
+  --desk-far: oklch(0.15 0.035 253);
+  --desk-bar: oklch(0.17 0.02 250);
+  --desk-line: oklch(0.32 0.025 250);
+  --desk-ink: oklch(0.97 0.005 250);
+  --desk-ink-2: oklch(0.72 0.015 250);
+}
+
+/* -------------------------------------------------------------- wallpaper */
+
+#card {
+  background: var(--desk-far);
+  border-radius: 8px;
+}
+
+#face {
+  border-radius: 8px;
+}
+
+/* The artwork is the wallpaper: dimmed and pushed back, because the shortcuts
+   on top of it are the thing being used. */
+#plate img {
+  filter: saturate(0.55) brightness(0.42) blur(1px);
+}
+
+#face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(
+    120% 90% at 50% 25%,
+    oklch(0.3 0.06 250 / 0.55) 0%,
+    oklch(0.12 0.03 253 / 0.85) 100%
+  );
+}
+
+/* A wallpaper still shows through where there is no cover at all. */
+#cover-placeholder {
+  background: linear-gradient(160deg, var(--desk-deep) 0%, var(--desk-far) 100%);
+}
+
+#placeholder-initials {
+  font-size: 44px;
+}
+
+/* ------------------------------------------------------------- the title bar
+
+   `#skin-chrome` is the skin's own layer, so this is a bar the stock markup
+   does not have. The cartridge's name belongs up here on a desktop, not over
+   the middle of the wallpaper. */
+
+#skin-chrome::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 34px;
+  background: oklch(0.17 0.02 250 / 0.82);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--desk-line);
+}
+
+#chrome {
+  padding: 9px 12px 0 16px;
+}
+
+/* The big title moves into that bar and stops being a poster headline. */
+#stage {
+  position: absolute;
+  inset: 34px 0 0 0;
+  margin-top: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#game-title {
+  position: absolute;
+  top: -26px;
+  left: 16px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-stretch: 100%;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: none;
+  text-shadow: none;
+  color: var(--desk-ink);
+}
+
+#title-logo {
+  max-height: 18px;
+}
+
+/* --------------------------------------------------------------- the grid */
+
+#game-list {
+  flex: 1;
+  max-height: none;
+  margin: 0;
+  padding: 20px 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  grid-auto-rows: max-content;
+  gap: 16px 10px;
+  align-items: start;
+  justify-items: center;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 0.22) transparent;
+}
+
+/* A shortcut: icon over a label, not a row. */
+.game-row {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 88px;
+  gap: 8px;
+  padding: 8px 5px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: center;
+}
+
+.game-row:hover {
+  background: oklch(1 0 0 / 0.09);
+  border-color: oklch(1 0 0 / 0.16);
+}
+
+.game-row[aria-selected="true"] {
+  background: oklch(0.45 0.07 250 / 0.5);
+  border-color: oklch(0.72 0.05 250);
+  box-shadow: 0 5px 14px -6px oklch(0 0 0 / 0.6);
+}
+
+.game-row__cover {
+  width: 50px;
+  height: 50px;
+  border-radius: 11px;
+  object-fit: cover;
+  background: var(--desk-deep);
+  box-shadow:
+    0 4px 10px oklch(0 0 0 / 0.45),
+    0 0 0 1px oklch(1 0 0 / 0.14);
+  transition: transform 150ms var(--ease);
+}
+
+.game-row:hover .game-row__cover {
+  transform: translateY(-2px);
+}
+
+.game-row[aria-selected="true"] .game-row__cover {
+  box-shadow:
+    0 6px 16px -4px color-mix(in oklch, var(--accent) 55%, transparent),
+    0 0 0 2px var(--accent);
+}
+
+/* Two lines and then an ellipsis, the way a shortcut label behaves. */
+.game-row__body {
+  width: 100%;
+  min-width: 0;
+}
+
+.game-row__title {
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--desk-ink);
+  text-shadow: 0 1px 3px oklch(0 0 0 / 0.9);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* No room for a second line of text under an icon. */
+.game-row__meta {
+  display: none;
+}
+
+/* The mounted dot moves to the icon's corner, where a badge goes. */
+.game-row__dot {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--desk-far);
+  background: oklch(0.78 0.17 145);
+  box-shadow: 0 0 8px oklch(0.78 0.17 145 / 0.8);
+}
+
+/* ------------------------------------------------------------- the taskbar */
+
+#button-row {
+  margin: 0;
+  padding: 9px 12px;
+  gap: 10px;
+  background: oklch(0.17 0.02 250 / 0.9);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--desk-line);
+}
+
+#scrim-bottom,
+#scrim-top {
+  display: none;
+}
+
+.btn--play {
+  height: 38px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: linear-gradient(
+    135deg,
+    oklch(0.62 0.16 250) 0%,
+    oklch(0.5 0.15 253) 100%
+  );
+  color: var(--accent-ink);
+  box-shadow: 0 2px 8px -2px oklch(0.5 0.15 253 / 0.7);
+}
+
+.btn--eject {
+  width: 44px;
+  height: 38px;
+  border-radius: 6px;
+  background: oklch(1 0 0 / 0.06);
+  border: 1px solid var(--desk-line);
+  color: var(--desk-ink-2);
+}
+
+.btn--eject:hover:not(:disabled) {
+  background: oklch(0.6 0.19 25 / 0.16);
+  border-color: oklch(0.65 0.2 25);
+  color: oklch(0.75 0.19 25);
+}
+
+.btn:disabled {
+  background: oklch(1 0 0 / 0.04);
+  border-color: var(--desk-line);
+  color: oklch(0.5 0.015 250);
+  box-shadow: none;
+}
