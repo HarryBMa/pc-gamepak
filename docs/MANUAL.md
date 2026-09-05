@@ -66,7 +66,7 @@ A shelf of cartridges is a library you can hold. Each one carries a game, its
 cover art and nothing else, so what is on it is obvious from across the room and
 from the drive's own name in Explorer.
 
-<img width="480" alt="A cartridge is pushed into its enclosure; the launcher appears on the screen behind it showing Stardew Valley's cover art, and then reports Ejecting" src="docs/cartridge-demo.gif" />
+<img width="480" alt="A cartridge is pushed into its enclosure; the launcher appears on the screen behind it showing Stardew Valley's cover art, and then reports Ejecting" src="cartridge-demo.gif" />
 
 That is the whole loop: plug it in, the launcher is there, press Play, press
 Eject, take it out.
@@ -87,8 +87,8 @@ The window is 420 × 560 — the 3:4 of a cover — and the artwork fills it. Th
 window is the slot and the cover is the cartridge seated in it: press Eject and
 the whole face rides out, leaving the empty slot behind.
 
-<img width="420" alt="The launcher showing Stardew Valley: cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="docs/launcher.png" />
-<img width="420" alt="The details sheet for a Stardew Valley cartridge: the free space as one large figure with a fill bar, above a folded Show file paths disclosure" src="docs/launcher-details.png" />
+<img width="420" alt="The launcher showing Stardew Valley: cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="launcher.png" />
+<img width="420" alt="The details sheet for a single-game cartridge: the link speed and the free space as two large figures side by side, above a folded Show file paths disclosure" src="launcher-details.png" />
 
 The accent colour is sampled from the cover art at load, so the Play button
 belongs to whatever game is in the dock. At rest almost nothing else is on
@@ -102,7 +102,7 @@ launcher grows a rail: **picking a game is what Play acts on**, and the artwork
 behind it cross-fades to whichever one is selected — no menu, no submenu,
 nothing to learn.
 
-<img width="420" alt="The launcher showing a ten-game Tomb Raider cartridge: the selected game's art filling the window, the collection name above a rail of games, and the selected game's title over one shared Play button" src="docs/launcher-bundle.png" />
+<img width="420" alt="The launcher showing a ten-game Tomb Raider cartridge: the selected game's art filling the window, the collection name above a rail of games, and the selected game's title over one shared Play button" src="launcher-bundle.png" />
 
 Each row carries the game's own art and size, and the first nine answer to the
 number keys — pressing one selects that game and starts it, so the window shows
@@ -217,7 +217,7 @@ aspects, so one set works under all of them. A skin choosing a shape is not a
 skin asking for different art.
 
 Adding a skin is a stylesheet in `tauri-ui/app/skins/` and a line in
-`core/src/skins.rs`. **[docs/SKINNING.md](docs/SKINNING.md)** is the reference:
+`core/src/skins.rs`. **[docs/SKINNING.md](SKINNING.md)** is the reference:
 every element a skin can style, the three properties it sets, the states to
 handle, and the handful of things it must not do. The file is loaded *on top of* the stock one rather than
 instead of it, so a skin is only the difference — `retro.css` is about 150 lines
@@ -310,7 +310,7 @@ Run the installer menu and choose **Create a cartridge**, or start it directly:
 pc-gamepak --create
 ```
 
-<img width="760" alt="The create-cartridge wizard: one screen with Game, Media, Artwork and Written to as four groups down the left, each stating what is chosen with a Change button beside it, and a rail on the right previewing the launcher the cartridge will open" src="docs/wizard.png" />
+<img width="760" alt="The create-cartridge wizard: one screen with Game, Media, Artwork and Written to as four groups down the left, each stating what is chosen with a Change button beside it, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
 
 The wizard lists everything installed. **Playnite** is read first when present —
 one list covering Steam, GOG, Epic, Xbox, Ubisoft, itch and emulators — and
@@ -340,7 +340,7 @@ selection is always multiple, so ticking a second game is all it takes. The rail
 on the right titles itself **Cartridge** or **Multicartridge** to match. There is
 no mode to enter.
 
-<img width="760" alt="Choose the media: a dialog listing every removable drive with its free space, and a note against each one that already holds a cartridge" src="docs/wizard-media.png" />
+<img width="760" alt="Choose the media: a dialog listing every removable drive with its free space, and a note against each one that already holds a cartridge" src="wizard-media.png" />
 
 Media is the same dialog asking the same kind of question. Every removable drive
 is listed with the room on it, and one that already holds a cartridge says so
@@ -357,7 +357,7 @@ Tick a second game and the cartridge is a collection — nothing else to press.
 The rail counts them, and the bar under it puts one band per game so you can see
 which one is taking the room:
 
-<img width="760" alt="The wizard with three games chosen: the Game card naming the collection, a Name and order group with a drag-sortable play order, and the rail titled Multicartridge above a live preview of the launcher" src="docs/wizard-bundle.png" />
+<img width="760" alt="The wizard with three games chosen: the Game card naming the collection, a Name and order group with a drag-sortable play order, and the rail titled Multicartridge above a live preview of the launcher" src="wizard-bundle.png" />
 
 A collection is the one thing in a library with no artwork of its own, so a
 **Name and order** group appears on the same screen for the two things the wizard
@@ -385,7 +385,7 @@ whole thing again — which, with the games copied onto it, is hours.
 Select a drive that already holds a cartridge and **Edit the cartridge already
 on this drive** appears:
 
-<img width="760" alt="The edit dialog: the cartridge name, a Change artwork button, and the list of games with controls to rename, reorder and remove them" src="docs/wizard-edit.png" />
+<img width="760" alt="The edit dialog: the cartridge name, a Change artwork button, and the list of games with controls to rename, reorder and remove them" src="wizard-edit.png" />
 
 You can rename the cartridge, change its artwork, rename the individual games,
 reorder them — the order is the order of the launcher's rail — and take one off
@@ -430,7 +430,7 @@ plain.
 
 **The game itself**, by whichever route suits where it came from:
 
-<img width="760" alt="Adding a game by hand: the chosen folder, a title taken from the folder name, and the executables inside it ranked with the uninstaller and the runtime pushed to the bottom" src="docs/wizard-portable.png" />
+<img width="760" alt="Adding a game by hand: the chosen folder, a title taken from the folder name, and the executables inside it ranked with the uninstaller and the runtime pushed to the bottom" src="wizard-portable.png" />
 
 - *Steam games* go to `steamapps/` and the drive is registered in Steam's
   `libraryfolders.vdf`, so Steam plays **from the cartridge** rather than your
@@ -463,7 +463,7 @@ emulator entries, older GOG titles — and the launcher then shows a placeholder
 The wizard can look artwork up on [SteamGridDB](https://www.steamgriddb.com/)
 to fill those gaps.
 
-<img width="760" alt="The wizard's settings, grouped: a count of where the 87 games came from with a Rescan link, the SteamGridDB switch and its key field, and defaults for a new cartridge" src="docs/wizard-settings.png" />
+<img width="760" alt="The wizard's settings, grouped: a count of where the 87 games came from with a Rescan link, the SteamGridDB switch and its key field, and defaults for a new cartridge" src="wizard-settings.png" />
 
 **It is off by default**, and it is the only part of this project that talks to
 the network. Turn it on behind the gear in the wizard's title bar, where it also
@@ -477,7 +477,7 @@ artwork…** opens the desktop's own file dialog and copies whatever you point a
 
 ### Formatting erases the drive
 
-<img width="760" alt="Every option with formatting enabled: options grouped by what they touch, with the destructive one alone under its own heading" src="docs/wizard-format.png" />
+<img width="760" alt="Every option with formatting enabled: options grouped by what they touch, with the destructive one alone under its own heading" src="wizard-format.png" />
 
 Formatting is opt-in per cartridge and gated three ways: the target must be on
 the removable-drive allowlist the wizard re-derives itself, it must not be the
@@ -547,7 +547,7 @@ Neither of these gets better with a faster cartridge.
 Press `I` on the launcher and it reports three things about the drive in front
 of it:
 
-<img width="420" alt="The details sheet for a ten-game cartridge with the paths unfolded: free space, a games count, and the steam:// URI each game launches by" src="docs/launcher-health.png" />
+<img width="420" alt="The details sheet for a collection with the paths unfolded: link and free space, a games count, and the steam:// URI each game launches by" src="launcher-health.png" />
 
 - **Link** — 10 Gbps is what a Gen 2 enclosure should negotiate. 5 Gbps means a
   front-panel port, a hub, or a cable that is not rated for it; 480 Mbps means
@@ -717,7 +717,7 @@ plug-in cartridge, the drive would become the sacrificial part. In a USB
 enclosure, the NVMe drive is installed once and left alone, while the repeated
 insertions happen on the cheaper, easier-to-replace USB side instead.
 
-<img width="340" alt="A cartridge with its backplate removed: an M.2 2230 NVMe drive screwed into an aluminium enclosure, the USB-C plug moulded into the shell, and the plate and its single screw beside it" src="docs/hardware-cartridge.jpg" />
+<img width="340" alt="A cartridge with its backplate removed: an M.2 2230 NVMe drive screwed into an aluminium enclosure, the USB-C plug moulded into the shell, and the plate and its single screw beside it" src="hardware-cartridge.jpg" />
 
 That is the whole assembly, opened up: the 2230 drive screwed down inside the
 shell, the USB-C plug part of the enclosure rather than part of the drive, and a
@@ -1016,7 +1016,7 @@ tools/                      icon generation, DOM-id check
 docs/                       screenshots, PUBLISHING.md, STATUS.md
 ```
 
-[`docs/STATUS.md`](docs/STATUS.md) is the working inventory: what each module is
+[`docs/STATUS.md`](STATUS.md) is the working inventory: what each module is
 for, what is built, and what is missing.
 
 When a cartridge does not open the launcher, the logs are the first place to
@@ -1034,7 +1034,7 @@ Nothing is published yet. When it is, the shortlist is the AUR (which is where
 the Steam Deck and Arch audience is), WinGet and Scoop on Windows — the channels
 that can actually install the udev rule or the logon task this depends on.
 
-[`docs/PUBLISHING.md`](docs/PUBLISHING.md) has the reasoning, including why
+[`docs/PUBLISHING.md`](PUBLISHING.md) has the reasoning, including why
 Flatpak, Snap and Homebrew are not on that list yet and what would change it.
 
 </details>
