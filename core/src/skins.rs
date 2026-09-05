@@ -21,7 +21,7 @@
 ///
 /// `("name", "what it looks like")` — the description is what Settings shows,
 /// so the list is the single place a new skin has to be added.
-pub const SKINS: [(&str, &str); 4] = [
+pub const SKINS: [(&str, &str); 5] = [
     ("default", "Dark, quiet, and out of the way of the artwork"),
     (
         "retro",
@@ -34,6 +34,10 @@ pub const SKINS: [(&str, &str); 4] = [
     (
         "cozy",
         "Soft and warm: rounded frame, big pill Play, round Eject",
+    ),
+    (
+        "terminal",
+        "Amber phosphor: hard borders, scanlines, arcade buttons that travel",
     ),
 ];
 
@@ -104,6 +108,25 @@ mod tests {
                 path.is_file(),
                 "{name} has no stylesheet at {}",
                 path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn every_stylesheet_has_a_name_in_the_list() {
+        // The other direction, and the one that actually went wrong: a
+        // stylesheet nobody can ask for. It sits in the folder looking like a
+        // skin, is never offered in Settings, and cannot be named by a
+        // cartridge, so the only way to find out is to go looking for it.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tauri-ui/app/skins");
+        for entry in std::fs::read_dir(&dir).expect("the skins folder").flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(stem) = name.strip_suffix(".css") else {
+                continue;
+            };
+            assert!(
+                SKINS.iter().any(|(skin, _)| *skin == stem),
+                "{name} is not in SKINS, so nothing can ever load it"
             );
         }
     }

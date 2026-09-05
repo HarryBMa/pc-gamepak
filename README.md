@@ -159,14 +159,16 @@ skin=retro
 | `retro` | A beige CRT: scanlines, chunky buttons, orange and teal |
 | `neon` | A HUD: cut corners, hairline outlines, Eject as a wide bar |
 | `cozy` | Soft and warm: rounded frame, big pill Play, round Eject |
+| `terminal` | Amber phosphor: hard borders, scanlines, arcade buttons that travel |
 
-The three are deliberately not variations on a palette. Retro is moulded
+The four are deliberately not variations on a palette. Retro is moulded
 plastic with buttons you press into, neon is etched glass with outlines you
 press through, and cozy is a knitted thing on a shelf — so they differ in the
 frame, in the shape and size of the two actions, in how the list is drawn and in
-whether the title shouts. Eject alone is a square, a wide bar and a circle
-across them, which is the shortest way to show that a skin is not a colour
-scheme.
+whether the title shouts. The clearest single tell is what happens when a
+button is pressed: retro sinks into moulded plastic, neon lights an outline,
+cozy barely moves, and terminal drops four pixels onto a solid edge underneath
+it. Eject is a square, a wide bar, a circle and a hardware key across the four.
 
 A cartridge that says nothing wears whatever **Launcher look** is set to in the
 wizard's Settings. A cartridge that asks wins, because the cartridge is the

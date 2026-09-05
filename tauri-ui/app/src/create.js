@@ -2937,6 +2937,7 @@ async function demoInvoke(command, args) {
         ["retro", "A beige CRT: scanlines, chunky buttons, orange and teal"],
         ["neon", "A HUD: cut corners, hairline outlines, Eject as a wide bar"],
         ["cozy", "Soft and warm: rounded frame, big pill Play, round Eject"],
+        ["terminal", "Amber phosphor: hard borders, scanlines, arcade buttons that travel"],
       ];
     case "steam_registration_plan":
       return [
