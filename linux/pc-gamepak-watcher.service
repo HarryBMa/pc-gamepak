@@ -13,6 +13,10 @@ Documentation=https://github.com/HarryBMa/pc-gamepak
 # Wait for the desktop: the launcher needs a session to put a window on.
 After=graphical-session.target
 PartOf=graphical-session.target
+# A cartridge nothing mounted is a cartridge this never hears about, and not
+# every desktop automounts. Wants= rather than Requires=: if udiskie is absent,
+# or the desktop is already doing the job, the watcher still starts.
+Wants=pc-gamepak-automount.service
 
 [Service]
 Type=simple

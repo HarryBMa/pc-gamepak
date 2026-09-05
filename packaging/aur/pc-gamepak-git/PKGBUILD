@@ -82,6 +82,11 @@ package() {
   sed 's|%h/\.local/bin/pc-gamepak-watcher|/usr/bin/pc-gamepak-watcher|' \
     linux/pc-gamepak-watcher.service \
     > "$srcdir/pc-gamepak-watcher.service"
+  # Enabling the watcher pulls this in (it Wants= it), so automount on a desktop
+  # that lacks it costs the user no extra command.
+  install -Dm644 linux/pc-gamepak-automount.service \
+    "$pkgdir/usr/lib/systemd/user/pc-gamepak-automount.service"
+
   install -Dm644 "$srcdir/pc-gamepak-watcher.service" \
     "$pkgdir/usr/lib/systemd/user/pc-gamepak-watcher.service"
 

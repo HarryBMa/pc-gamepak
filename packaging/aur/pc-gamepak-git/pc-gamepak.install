@@ -13,10 +13,16 @@ That runs a small process (about 2 MB) that wakes when a drive is mounted,
 checks it for a cartridge.conf, and opens the launcher on it. No root, no udev
 rule.
 
-The cartridge must be mounted for any of this to fire. Most desktops automount
-removable drives; KDE asks first unless you turn that on, and a bare window
-manager does nothing at all. If yours does not automount, install udiskie and
-run it at login.
+A cartridge nothing mounted is a cartridge the watcher never hears about, and
+not every desktop automounts one: GNOME does, KDE asks first unless told
+otherwise, and a bare window manager does nothing at all. So the watcher pulls
+in pc-gamepak-automount.service, which runs udiskie against the same udisks2
+your desktop uses. Install udiskie and it just works:
+
+    pacman -S --asdeps udiskie
+
+If your desktop already automounts, skip it — the Want fails quietly and
+nothing else changes.
 
 Write a cartridge with the wizard, from your menu or:
 
