@@ -43,6 +43,11 @@
         "rule": "codex-grid-background",
         "value": "3px 3px",
         "createdAt": "2026-09-05T07:20:59.378Z"
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "border-bottom: 3px solid var(--arcade-yellow) tauri-ui/app/skins/arcade.css bottom-only border under a top-only radius (2px 2px 0 0) on #skin-panel: the rounded corners are at the top, the rule is at the bottom, so they never meet. the yellow line under the red marquee is the cabinet's trim.",
+        "createdAt": "2026-09-05T15:02:21.455Z"
       }
     ]
   }
