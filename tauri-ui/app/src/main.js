@@ -994,6 +994,7 @@ function showCover(src) {
  * loading an empty file.
  */
 function wearSkin(name, css = null) {
+  debugLog(`wearSkin(${name}) css=${(css ?? "").length}b link=${Boolean(el.skin)}`);
   if (!el.skin) return;
   worn = name || "default";
   const wanted = worn !== "default" ? `skins/${worn}.css` : "";
@@ -1031,8 +1032,9 @@ async function resizeToSkin() {
   try {
     const { getCurrentWindow, LogicalSize } = tauri.window;
     await getCurrentWindow().setSize(new LogicalSize(width, height));
-  } catch {
-    // An older build without the permission keeps the size it was given.
+    debugLog(`resized to ${width}x${height}`);
+  } catch (error) {
+    debugLog(`resize to ${width}x${height} failed: ${error}`);
   }
 }
 
@@ -1182,17 +1184,30 @@ el.eject.addEventListener("click", doEject);
  * than on every call — a gamepad poll runs sixty times a second and is not
  * somewhere to put a round trip.
  */
-let debugOn = false;
+let debugOn = null;
+let debugPending = [];
 function debugLog(line) {
-  if (debugOn) invoke("debug_log", { line: `[${new Date().toISOString()}] ${line}` });
+  const stamped = `[${new Date().toISOString()}] ${line}`;
+  // Held until the answer arrives rather than dropped. Whether logging is on is
+  // one round trip, and the most interesting lines — what the cartridge asked
+  // for, what the window resized to — all happen inside it.
+  if (debugOn === null) debugPending.push(stamped);
+  else if (debugOn) invoke("debug_log", { line: stamped });
 }
 
 invoke("debug_logging")
   .then((on) => {
     debugOn = Boolean(on);
-    if (debugOn) debugLog("launcher started");
+    if (debugOn) {
+      invoke("debug_log", { line: `[${new Date().toISOString()}] launcher started` });
+      for (const line of debugPending) invoke("debug_log", { line });
+    }
+    debugPending = [];
   })
-  .catch(() => {});
+  .catch(() => {
+    debugOn = false;
+    debugPending = [];
+  });
 
 const gamepad = connectGamepad({
   play: doPlay,
