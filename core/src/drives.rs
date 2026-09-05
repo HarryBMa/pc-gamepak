@@ -243,7 +243,6 @@ fn has_cartridge(root: &Path) -> bool {
 #[cfg(not(windows))]
 mod unix_impl {
     use super::*;
-    use std::process::Command;
 
     pub fn list() -> Vec<TargetDrive> {
         // Linux only: /proc/mounts is the mount table. macOS is not a supported

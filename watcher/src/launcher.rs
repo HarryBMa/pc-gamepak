@@ -44,6 +44,10 @@ pub fn open(path: &Path) -> Option<Child> {
 /// The tray is the only door to the wizard that is always there: the launcher
 /// itself only exists while a cartridge is plugged in, and the window that used
 /// to carry this menu went away with it.
+///
+/// Windows only, because the tray is: on Linux the desktop entry is the door,
+/// and the watcher never opens the wizard itself.
+#[cfg(windows)]
 pub fn open_wizard(settings: bool) -> Option<Child> {
     let Some(launcher) = installed_at() else {
         log::line("pc-gamepak is not installed anywhere I can find it");
