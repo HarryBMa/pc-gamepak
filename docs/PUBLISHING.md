@@ -31,6 +31,7 @@ switch.
 |---|---|---|
 | **GitHub Releases** | The source of truth every other channel points at. Tag `v0.1.0`, CI builds Linux and Windows artefacts with checksums. | Done — `.github/workflows/release.yml` |
 | **AUR** (`pc-gamepak`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` is written |
+| **Flatpak / Flathub** | Verified on real hardware, see below — host mounts propagate into the sandbox and the watcher fires inside one. The way onto a Steam Deck, which ships Flatpak and no AUR. | Medium. `packaging/flatpak/` is written; needs vendored cargo sources for Flathub's offline build |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
 | **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. `packaging/scoop/pc-gamepak.json` is written. | Low |
 
@@ -46,8 +47,7 @@ switch.
 
 | Channel | Why not |
 |---|---|
-| **Flatpak / Flathub** | **Now plausible, and untested.** The blocker was the udev rule; the rootless watcher removes it. What is unverified is whether host mounts propagate into the sandbox promptly — bubblewrap makes the sandbox's mounts slave to the host's, so they should, but that needs checking on a real machine before a manifest is worth writing. The launcher also has to be able to start a game on the host, which means `--talk-name=org.freedesktop.Flatpak` or accepting that `steam://` goes through the portal. |
-| **Snap** | Same unlock, same caveat, plus classic confinement's manual review queue. Behind Flatpak in the order. |
+| **Snap** | The audience is the Steam Deck, and SteamOS ships Flatpak. snapd is not installed on Arch by default and has to be added by hand, so a Snap asks the exact people this is for to install a second package manager first. Classic confinement's manual review queue on top. Flatpak covers the same ground with none of that. |
 | **Homebrew** | macOS is not a supported platform at all: no watcher, no installer, no icon set. On Linux, Homebrew installs into its own prefix and cannot place system units either. A tap would ship something that cannot work on the platform people would `brew install` it from. |
 | **Native pacman repo** | Hosting a signed binary repository to serve what the AUR already serves from source. |
 
@@ -65,9 +65,8 @@ The system install stays the recommendation, because zero is a better number tha
 two megabytes. But the rootless one is what a package format can actually
 install, which is what puts Flatpak back on the table.
 
-Still unverified, and worth checking before writing a manifest: whether new host
-mounts appear inside a Flatpak sandbox quickly enough to be useful, and how the
-launcher hands a `steam://` URI back to the host.
+That was the last theoretical objection, and it has now been measured rather
+than reasoned about. See below.
 
 ## What Linux actually does, tested
 
@@ -103,6 +102,49 @@ packaging says so out loud: `udiskie` is an optdepend, and the post-install
 message names automount as the thing to check first. It is the Linux equivalent
 of a Windows autorun policy, and it will be the top support question.
 
+## Does a sandboxed watcher actually work?
+
+The Flatpak question was whether a mount made on the host after the sandbox
+started becomes visible inside it. Tested with bubblewrap 0.11.2 — the same
+thing Flatpak runs — with `/run/media` bound, a private mount namespace and an
+unprivileged user namespace, against the real cartridge:
+
+```
+[1..4]   sees mount     cartridge was mounted before the sandbox started
+[5..11]  --             host unmounted it
+[12..30] sees mount     host mounted it again, after the sandbox started
+```
+
+Propagation works in both directions, within the one-second granularity of the
+poll. Then the same test with the real `pc-gamepak-watcher` binary inside the
+sandbox rather than a shell loop:
+
+```
+watcher starting (mount table)
+watching 16 mounted filesystems
+cartridge removed: /run/media/playbox/TOMBRAIDERC
+cartridge detected at /run/media/playbox/TOMBRAIDERC
+launcher started, pid 3
+```
+
+So `poll()` on `/proc/self/mountinfo` receives its `POLLPRI` wakeups through
+mount propagation, inside a namespace, with no udev and no root. That is the
+whole mechanism the product depends on, working in the place it was assumed it
+might not.
+
+`steam://` is the other half, and the pieces are all present on a normal
+desktop: the scheme resolves to a handler (`steam.desktop`),
+`xdg-desktop-portal` and a backend are installed and running, and
+`org.freedesktop.portal.OpenURI` answers on the session bus. A Flatpak's
+`xdg-open` is a shim onto that portal, so the URI is handed to the host rather
+than run in the sandbox. Worth confirming once packaged, since the portal may
+ask the user to confirm the handler the first time.
+
+The remaining Flatpak design question is not permissions but autostart: a
+Flatpak gets no systemd user unit, so the watcher has to ask for background
+autostart through `org.freedesktop.portal.Background` instead of being enabled
+with `systemctl --user`.
+
 ## Order of work
 
 1. **Tag `v1.0.0`.** Nothing below can start without artefacts to point at.
@@ -116,9 +158,9 @@ of a Windows autorun policy, and it will be the top support question.
 4. **WinGet**, via `wingetcreate` for the first submission and the
    `winget-releaser` action thereafter.
 5. **`.deb`** attached to releases via `cargo-deb`.
-6. **Flatpak**, once someone has confirmed on real hardware that mount events
-   reach a sandboxed watcher and that `steam://` still launches from inside one.
-   Snap after that, if ever.
+6. **Flatpak**, whose two open questions are now answered (below). What is
+   left is mechanical: vendored cargo sources, so the build works with no
+   network, and a Flathub submission. Snap is not planned.
 
 ## Before the first tag
 
