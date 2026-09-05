@@ -1,0 +1,255 @@
+/* ==========================================================================
+   Cyberpunk — a readout with the list down the left and the hero beside it.
+
+   The mock-up's split: titles on the left, the wide picture on the right, the
+   two actions along the bottom with the launch button cut into a parallelogram.
+   Cyan is the interface and magenta is the one thing that undoes something,
+   which is the whole of the colour scheme.
+
+   Not to be confused with `neon`, which is the other cyan one: that keeps the
+   list on the right in a narrow column and outlines everything; this puts the
+   list on the left, leans on magenta, and slants its buttons.
+   ========================================================================== */
+
+:root {
+  --skin-width: 560;
+  --skin-height: 430;
+  --skin-art: hero;
+
+  --accent: oklch(0.85 0.13 205);
+  --accent-ink: oklch(0.12 0.03 240);
+
+  --cy: oklch(0.85 0.13 205);
+  --cy-dim: oklch(0.85 0.13 205 / 0.24);
+  --cy-panel: oklch(0.13 0.035 275);
+  --mag: oklch(0.7 0.26 335);
+}
+
+/* ----------------------------------------------------------------- the case */
+
+#card {
+  background: oklch(0.09 0.03 280);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 1px var(--cy),
+    inset 0 0 60px oklch(0.05 0.04 280 / 0.9),
+    0 0 40px -6px oklch(0.6 0.15 220 / 0.35);
+}
+
+#face {
+  border-radius: 0;
+}
+
+/* Corner brackets, heavy on two corners and hairline on the same two, which is
+   the mock-up's one piece of decoration. */
+#face::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--cy), var(--cy)) 0 0 / 2px 34px,
+    linear-gradient(var(--cy), var(--cy)) 0 0 / 34px 2px,
+    linear-gradient(var(--cy), var(--cy)) 100% 100% / 2px 34px,
+    linear-gradient(var(--cy), var(--cy)) 100% 100% / 34px 2px;
+  background-repeat: no-repeat;
+}
+
+/* Scanlines over the picture only, and a corner wash towards the panel. */
+#face::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 190px;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      oklch(0 0 0 / 0) 0 3px,
+      oklch(0 0 0 / 0.16) 3px 4px
+    ),
+    linear-gradient(135deg, oklch(0 0 0 / 0.55) 0%, transparent 55%);
+}
+
+#plate {
+  left: 190px;
+}
+
+#plate img {
+  filter: brightness(0.72) saturate(1.28);
+}
+
+/* ---------------------------------------------------------------- the panel
+
+   The list is a column down the left with its own surface, so the hero is not
+   asked to be legible under text. */
+
+#stage {
+  position: absolute;
+  inset: 0;
+  margin-top: 0;
+  padding: 0;
+  display: block;
+}
+
+#game-list {
+  position: absolute;
+  inset: 34px 0 52px 0;
+  width: 190px;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  max-height: none;
+  border-right: 1px solid var(--cy-dim);
+  background: var(--cy-panel);
+  scrollbar-width: thin;
+  scrollbar-color: var(--cy-dim) transparent;
+}
+
+.game-row {
+  border: 0;
+  border-bottom: 1px solid oklch(0.85 0.13 205 / 0.08);
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 9px 12px;
+  gap: 9px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: oklch(0.72 0.01 250);
+}
+
+.game-row__cover {
+  width: 30px;
+  height: 30px;
+  border-radius: 0;
+  object-fit: cover;
+  filter: grayscale(0.8) brightness(0.5);
+}
+
+.game-row[aria-selected="true"] {
+  border-left-color: var(--cy);
+  background: oklch(0.85 0.13 205 / 0.08);
+  color: var(--cy);
+  text-shadow: 0 0 8px oklch(0.85 0.13 205 / 0.7);
+}
+
+.game-row[aria-selected="true"] .game-row__cover {
+  filter: none;
+}
+
+.game-row__meta {
+  display: none;
+}
+
+/* ----------------------------------------------------------------- the type
+
+   The title sits on the hero, bottom-left, the way the mock-up prints it. */
+
+#game-title {
+  position: absolute;
+  left: 206px;
+  right: 16px;
+  bottom: 66px;
+  margin: 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 15px;
+  font-weight: 500;
+  font-stretch: 100%;
+  line-height: 1.4;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cy);
+  text-shadow: 0 0 18px oklch(0.85 0.13 205 / 0.85);
+}
+
+#scrim-top {
+  display: none;
+}
+
+#scrim-bottom {
+  inset: auto 0 52px 190px;
+  height: 40%;
+  background: linear-gradient(to top, oklch(0.07 0.03 280 / 0.96), transparent);
+}
+
+/* --------------------------------------------------------------- the actions
+
+   Slanted, because everything else here is a rectangle and the two things you
+   can actually press should not be. */
+
+#button-row {
+  position: absolute;
+  inset: auto 0 0 0;
+  margin: 0;
+  padding: 8px 14px;
+  gap: 10px;
+  border-top: 1px solid var(--cy-dim);
+  background: oklch(0.85 0.13 205 / 0.04);
+}
+
+.btn {
+  border-radius: 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+  clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+}
+
+.btn--play {
+  height: 36px;
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  background: oklch(0.85 0.13 205 / 0.08);
+  color: var(--cy);
+  box-shadow: inset 0 0 0 2px var(--cy);
+  text-shadow: 0 0 8px oklch(0.85 0.13 205 / 0.8);
+}
+
+.btn--play:hover:not(:disabled) {
+  background: oklch(0.85 0.13 205 / 0.2);
+  box-shadow: inset 0 0 0 2px var(--cy), 0 0 20px -4px var(--cy);
+}
+
+/* Magenta is reserved for the one control that takes something away. */
+.btn--eject {
+  width: 76px;
+  height: 36px;
+  background: transparent;
+  border: 0;
+  color: var(--mag);
+  box-shadow: inset 0 0 0 1px var(--mag);
+}
+
+.btn--eject:hover:not(:disabled) {
+  background: oklch(0.7 0.26 335 / 0.14);
+  box-shadow: inset 0 0 0 1px var(--mag), 0 0 14px -4px var(--mag);
+}
+
+.btn:disabled {
+  background: transparent;
+  color: oklch(0.5 0.02 250);
+  box-shadow: inset 0 0 0 1px oklch(0.5 0.02 250 / 0.3);
+}
+
+/* ------------------------------------------------------------------ the rest */
+
+#chrome {
+  position: absolute;
+  inset: 0 0 auto 0;
+  padding: 8px 12px 0 0;
+  z-index: 7;
+}
+
+#slot {
+  background: oklch(0.09 0.03 280);
+  color: var(--cy);
+}
+
+#cover-placeholder {
+  background: var(--cy-panel);
+}
+
+.pad-badge {
+  border-radius: 0;
+}

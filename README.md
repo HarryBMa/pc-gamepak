@@ -161,8 +161,11 @@ skin=retro
 | `cozy` | Soft and warm: rounded frame, big pill Play, round Eject |
 | `terminal` | Amber phosphor: hard borders, scanlines, arcade buttons that travel |
 | `desktop` | A desktop: games as a grid of app icons, with a taskbar |
+| `cyberpunk` | Split readout: list left, hero right, slanted buttons in cyan and magenta |
+| `arcade` | A cabinet: marquee, a sideways strip of games, one big round button |
+| `phantom` | Gold on black: a hero band, a grid of plates, one outlined word |
 
-The five are deliberately not variations on a palette. Retro is moulded
+The eight are deliberately not variations on a palette. Retro is moulded
 plastic with buttons you press into, neon is etched glass with outlines you
 press through, and cozy is a knitted thing on a shelf — so they differ in the
 frame, in the shape and size of the two actions, in how the list is drawn and in

@@ -1,0 +1,263 @@
+/* ==========================================================================
+   Arcade — a cabinet: marquee at the top, a strip of games, a big round button.
+
+   The one skin where the list runs sideways rather than down, and the one with
+   a Play button that is not a rectangle. Everything else here has been a
+   window; this is a machine you would put a coin in.
+
+   Portrait and narrow, because a cabinet is.
+   ========================================================================== */
+
+:root {
+  --skin-width: 372;
+  --skin-height: 620;
+  --skin-art: grid;
+
+  --accent: oklch(0.86 0.17 92);
+  --accent-ink: oklch(0.2 0.04 92);
+
+  --arc-marquee: oklch(0.86 0.17 92);
+  --arc-red: oklch(0.55 0.22 27);
+  --arc-red-lit: oklch(0.64 0.23 30);
+  --arc-red-deep: oklch(0.33 0.14 27);
+  --arc-body: oklch(0.14 0.004 60);
+  --arc-body-2: oklch(0.1 0.003 60);
+  --arc-line: oklch(0.28 0.006 60);
+}
+
+/* ---------------------------------------------------------------- the cabinet */
+
+#card {
+  background: var(--arc-body-2);
+  border-radius: 6px;
+  border: 3px solid oklch(0.22 0.005 60);
+  box-shadow:
+    0 0 0 5px oklch(0.11 0.003 60),
+    0 0 0 7px oklch(0.26 0.006 60),
+    0 22px 56px -14px oklch(0 0 0 / 0.9);
+}
+
+#face {
+  border-radius: 3px;
+}
+
+/* --------------------------------------------------------------- the marquee
+
+   Lit from behind, the way the sign over a cabinet is. Drawn on the skin's own
+   layer, since the stock markup has no sign. */
+
+#skin-chrome::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 56px;
+  background: linear-gradient(180deg, oklch(0.2 0.09 27) 0%, oklch(0.11 0.05 27) 100%);
+  border-bottom: 2px solid var(--arc-red);
+}
+
+#skin-chrome::after {
+  content: "INSERT COIN TO CONTINUE";
+  position: absolute;
+  top: 34px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 7px;
+  letter-spacing: 0.3em;
+  color: var(--arc-red-lit);
+}
+
+#chrome {
+  padding: 8px 10px 0 0;
+  z-index: 7;
+}
+
+/* ------------------------------------------------------------- the game strip
+
+   Sideways. A cabinet shows the next game along, not a list of them. */
+
+#stage {
+  position: absolute;
+  inset: 56px 0 0 0;
+  margin-top: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#game-list {
+  flex: none;
+  order: -1;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  margin: 0;
+  padding: 9px 0;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: oklch(0.06 0.002 60);
+  border-bottom: 2px solid var(--arc-line);
+  scrollbar-width: none;
+}
+
+.game-row {
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  width: 84px;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+}
+
+.game-row__cover {
+  width: 46px;
+  height: 46px;
+  border-radius: 0;
+  object-fit: cover;
+  border: 2px solid var(--arc-line);
+  filter: brightness(0.55);
+  transition: filter 120ms linear, border-color 120ms linear;
+}
+
+.game-row[aria-selected="true"] .game-row__cover {
+  border-color: var(--arc-marquee);
+  filter: none;
+  box-shadow: 0 0 12px -2px oklch(0.86 0.17 92 / 0.7);
+}
+
+.game-row__title {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  color: oklch(0.6 0.005 60);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.game-row[aria-selected="true"] .game-row__title {
+  color: var(--arc-marquee);
+  text-shadow: 0 0 8px oklch(0.86 0.17 92 / 0.6);
+}
+
+.game-row__meta,
+.game-row__dot {
+  display: none;
+}
+
+/* ----------------------------------------------------------------- the screen */
+
+#game-title {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 166px;
+  margin: 0;
+  text-align: center;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  font-stretch: 100%;
+  line-height: 1.4;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--arc-marquee);
+  text-shadow: 0 0 10px oklch(0.86 0.17 92 / 0.7);
+}
+
+#scrim-bottom {
+  inset: auto 0 150px 0;
+  height: 34%;
+}
+
+/* --------------------------------------------------------- the control panel
+
+   The buttons sit on a panel below the screen rather than over the artwork,
+   because on a cabinet they are on a different surface entirely. */
+
+#button-row {
+  margin: auto 0 0;
+  padding: 22px 16px 26px;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  background: var(--arc-body);
+  border-top: 2px solid var(--arc-line);
+}
+
+/* Round, red, and it sinks onto its own edge. The only circular Play here. */
+.btn--play {
+  flex: none;
+  width: 82px;
+  height: 82px;
+  padding: 0;
+  border-radius: 50%;
+  border: 4px solid oklch(0.3 0.13 27);
+  background: radial-gradient(circle at 38% 32%, var(--arc-red-lit), var(--arc-red));
+  color: oklch(0.99 0 0);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow:
+    0 6px 0 var(--arc-red-deep),
+    0 0 16px -2px oklch(0.55 0.22 27 / 0.6),
+    inset 0 2px 5px oklch(1 0 0 / 0.25);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+
+.btn--play:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 1px 0 var(--arc-red-deep), inset 0 2px 5px oklch(0 0 0 / 0.3);
+}
+
+/* A smaller button of the same kind, off to one side. */
+.btn--eject {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid oklch(0.34 0.1 92);
+  background: radial-gradient(
+    circle at 38% 32%,
+    oklch(0.7 0.14 92),
+    oklch(0.55 0.13 92)
+  );
+  color: oklch(0.2 0.04 92);
+  box-shadow: 0 5px 0 oklch(0.32 0.09 92);
+}
+
+.btn--eject:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 oklch(0.32 0.09 92);
+}
+
+.btn:disabled {
+  background: oklch(0.26 0.004 60);
+  border-color: var(--arc-line);
+  color: oklch(0.45 0.004 60);
+  box-shadow: 0 5px 0 oklch(0.16 0.003 60);
+}
+
+/* ------------------------------------------------------------------ the rest */
+
+#slot {
+  background: var(--arc-body-2);
+  color: var(--arc-marquee);
+}
+
+#cover-placeholder {
+  background: oklch(0.09 0.003 60);
+}
+
+.pad-badge {
+  border-radius: 0;
+}

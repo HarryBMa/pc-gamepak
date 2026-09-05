@@ -2966,6 +2966,9 @@ async function demoInvoke(command, args) {
         ["cozy", "Soft and warm: rounded frame, big pill Play, round Eject"],
         ["terminal", "Amber phosphor: hard borders, scanlines, arcade buttons that travel"],
         ["desktop", "A desktop: games as a grid of app icons, with a taskbar"],
+        ["cyberpunk", "Split readout: list left, hero right, slanted buttons in cyan and magenta"],
+        ["arcade", "A cabinet: marquee, a sideways strip of games, one big round button"],
+        ["phantom", "Gold on black: a hero band, a grid of plates, one outlined word"],
       ];
     case "steam_registration_plan":
       return [
