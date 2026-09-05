@@ -1,0 +1,25 @@
+pkgbase = pc-gamepak
+	pkgdesc = Turn removable storage into physical game cartridges
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/HarryBMa/pc-gamepak
+	install = pc-gamepak.install
+	arch = x86_64
+	license = MIT
+	makedepends = rust
+	makedepends = pkgconf
+	depends = webkit2gtk-4.1
+	depends = gtk3
+	depends = librsvg
+	depends = exfatprogs
+	depends = polkit
+	depends = udisks2
+	depends = xdg-utils
+	optdepends = steam: play Steam games from the cartridge
+	optdepends = btrfs-progs: format cartridges to btrfs instead of exFAT
+	optdepends = udiskie: automount cartridges on desktops that do not do it themselves
+	options = !lto
+	source = pc-gamepak-1.0.0.tar.gz::https://github.com/HarryBMa/pc-gamepak/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = pc-gamepak
