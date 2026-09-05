@@ -268,11 +268,9 @@
   display: none;
 }
 
-/* Starting below the chrome rather than under it. Both are z-index 3 and the
-   stage comes later in the markup, so a stage spanning the full height put
-   itself over the details and close buttons and swallowed every click on them —
-   which only showed up here, because in the stock layout the stage is in normal
-   flow and never reaches them. */
+/* Below the chrome, so the title does not start underneath the corner buttons.
+   Clicks are the base stylesheet's problem now — it puts #chrome above
+   everything a skin can draw — but the panel still reads better cleared. */
 #stage {
   position: absolute;
   inset: 42px 0 0 auto;

@@ -269,7 +269,14 @@
 
 #chrome {
   position: relative;
-  z-index: 3;
+  /* Above the stage, the skin's own layers and any overlay drawn on #face.
+     A skin is free to position #stage absolutely — several do, to move the
+     list or turn the window on its side — and #stage comes later in the
+     markup, so at an equal z-index it covers these three buttons and eats
+     every click on them. Twice now that has shipped. The window's own
+     controls outranking everything a skin can draw is the fix; keeping each
+     skin clear of them by hand was not. */
+  z-index: 6;
   flex: none;
   display: flex;
   align-items: center;

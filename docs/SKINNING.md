@@ -201,10 +201,13 @@ element, use `#skin-chrome` or `#skin-panel`.
 **Nothing that makes the launcher unusable.** These are not enforced, and they
 are the whole reason a skin is CSS and not a program:
 
-- Do not hide or cover `#btn-play`, `#btn-eject`, `#btn-close` or `#btn-details`.
-  If you position `#stage` absolutely, keep it clear of `#chrome` — both are
-  `z-index: 3`, and the stage comes later in the markup, so a stage that spans
-  the window will swallow every click on the corner buttons.
+- Do not hide or cover `#btn-play` or `#btn-eject`. Nothing protects those two:
+  they are inside `#stage`, which a skin lays out.
+- `#chrome` — the ★, ⓘ and ✕ — sits at `z-index: 6`, above `#stage`, both owned
+  layers, and any overlay on `#face`. So positioning `#stage` absolutely is
+  safe, which several skins do. Do not lower it, and do not draw an opaque
+  layer over that corner: it would still be clickable and no longer visible,
+  which is worse than either.
 - Keep a visible focus state. `body.is-gamepad` exists so a controller user can
   see where they are.
 - Keep `:disabled` looking disabled.
