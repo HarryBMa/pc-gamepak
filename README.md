@@ -157,6 +157,16 @@ skin=retro
 |---|---|
 | `default` | Dark, quiet, and out of the way of the artwork |
 | `retro` | A beige CRT: scanlines, chunky buttons, orange and teal |
+| `neon` | A HUD: cut corners, hairline outlines, Eject as a wide bar |
+| `cozy` | Soft and warm: rounded frame, big pill Play, round Eject |
+
+The three are deliberately not variations on a palette. Retro is moulded
+plastic with buttons you press into, neon is etched glass with outlines you
+press through, and cozy is a knitted thing on a shelf — so they differ in the
+frame, in the shape and size of the two actions, in how the list is drawn and in
+whether the title shouts. Eject alone is a square, a wide bar and a circle
+across them, which is the shortest way to show that a skin is not a colour
+scheme.
 
 A cartridge that says nothing wears whatever **Launcher look** is set to in the
 wizard's Settings. A cartridge that asks wins, because the cartridge is the

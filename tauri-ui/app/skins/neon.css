@@ -1,0 +1,180 @@
+/* ==========================================================================
+   Neon — a HUD. Nothing is round and nothing is filled in.
+
+   The opposite of retro on purpose: where that one is moulded plastic with
+   deep buttons you press *into*, this is etched glass with outlines you press
+   *through*. Corners are cut rather than rounded, the accent is a light source
+   rather than a paint, and the two actions are wide and short instead of tall
+   and chunky — Eject is a bar here, not the square it is everywhere else.
+
+   Loaded on top of style.css, so this file is only the difference.
+   ========================================================================== */
+
+:root {
+  /* Fixed rather than sampled from the cover: a HUD is projected onto the
+     artwork, not printed from it. */
+  --accent: oklch(0.82 0.15 205);
+  --accent-ink: oklch(0.14 0.04 205);
+  --radius: 0px;
+
+  --hud: oklch(0.82 0.15 205);
+  --hud-dim: oklch(0.82 0.15 205 / 0.3);
+  --hud-glass: oklch(0.16 0.035 250);
+}
+
+/* ---------------------------------------------------------------- the frame */
+
+#card {
+  background: oklch(0.1 0.03 255);
+  border-radius: 0;
+  /* Cut corners, opposite ends, so the window reads as machined rather than
+     drawn. */
+  clip-path: polygon(
+    18px 0, 100% 0, 100% calc(100% - 18px),
+    calc(100% - 18px) 100%, 0 100%, 0 18px
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--hud-dim),
+    0 0 50px -12px oklch(0.6 0.18 220 / 0.55);
+}
+
+#face {
+  border-radius: 0;
+}
+
+/* A fine grid over the glass, and corner ticks where a frame would have
+   corners if it had any. */
+#face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background:
+    linear-gradient(var(--hud-dim) 1px, transparent 1px) 0 0 / 100% 34px,
+    linear-gradient(90deg, var(--hud-dim) 1px, transparent 1px) 0 0 / 34px 100%,
+    radial-gradient(130% 100% at 50% 40%, transparent 58%, oklch(0.06 0.03 255 / 0.8) 100%);
+  opacity: 0.34;
+  mix-blend-mode: screen;
+}
+
+#plate img {
+  filter: saturate(0.85) contrast(1.1) brightness(0.92);
+}
+
+/* ----------------------------------------------------------------- the type */
+
+#game-title {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 21px;
+  font-weight: 400;
+  font-stretch: 100%;
+  line-height: 1.2;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: oklch(0.97 0.02 205);
+  text-shadow: 0 0 20px oklch(0.82 0.15 205 / 0.65);
+}
+
+/* --------------------------------------------------------------- the actions
+
+   Wide and short, and outlined rather than filled. The border is an inset
+   shadow because a real border would be cut off by the clip-path along with
+   everything else. */
+
+#button-row {
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn {
+  border-radius: 0 !important;
+  clip-path: polygon(
+    9px 0, 100% 0, 100% calc(100% - 9px),
+    calc(100% - 9px) 100%, 0 100%, 0 9px
+  );
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+  transition: box-shadow 160ms linear, color 160ms linear;
+}
+
+.btn--play {
+  height: 40px;
+  background: oklch(0.82 0.15 205 / 0.09);
+  color: var(--hud);
+  letter-spacing: 0.3em;
+  font-size: 11px;
+  box-shadow: inset 0 0 0 1px var(--hud);
+}
+
+.btn--play:hover:not(:disabled) {
+  background: oklch(0.82 0.15 205 / 0.17);
+  box-shadow: inset 0 0 0 1px var(--hud), 0 0 22px -4px var(--hud);
+}
+
+/* A bar, not a square. The one place a skin can change the shape of the
+   window's furniture rather than just its colour. */
+.btn--eject {
+  width: 104px;
+  height: 40px;
+  background: transparent;
+  border: 0;
+  color: var(--hud);
+  box-shadow: inset 0 0 0 1px var(--hud-dim);
+}
+
+.btn--eject:hover:not(:disabled) {
+  background: oklch(0.82 0.15 205 / 0.1);
+  box-shadow: inset 0 0 0 1px var(--hud);
+}
+
+.btn:disabled {
+  background: transparent;
+  color: oklch(0.55 0.02 250);
+  box-shadow: inset 0 0 0 1px oklch(0.55 0.02 250 / 0.28);
+}
+
+/* ------------------------------------------------------------------ the list
+
+   Square, with the selection marked by a bar down the left edge rather than by
+   a border all the way round — a cursor rather than a container. */
+
+#game-list {
+  gap: 3px;
+  margin-top: 14px;
+}
+
+.game-row {
+  border-radius: 0;
+  border: 1px solid transparent;
+  border-left: 2px solid oklch(0.82 0.15 205 / 0.22);
+  background: var(--hud-glass);
+  padding: 6px 10px 6px 9px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+}
+
+.game-row[aria-selected="true"] {
+  border-left-color: var(--hud);
+  background: oklch(0.24 0.06 220);
+  box-shadow: -10px 0 24px -12px var(--hud);
+}
+
+.game-row__cover {
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+/* ----------------------------------------------------------------- the slot */
+
+#slot {
+  background: oklch(0.1 0.03 255);
+  color: var(--hud);
+}
+
+.pad-badge {
+  border-radius: 0;
+}

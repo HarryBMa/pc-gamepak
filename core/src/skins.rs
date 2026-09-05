@@ -21,11 +21,19 @@
 ///
 /// `("name", "what it looks like")` — the description is what Settings shows,
 /// so the list is the single place a new skin has to be added.
-pub const SKINS: [(&str, &str); 2] = [
+pub const SKINS: [(&str, &str); 4] = [
     ("default", "Dark, quiet, and out of the way of the artwork"),
     (
         "retro",
         "A beige CRT: scanlines, chunky buttons, orange and teal",
+    ),
+    (
+        "neon",
+        "A HUD: cut corners, hairline outlines, Eject as a wide bar",
+    ),
+    (
+        "cozy",
+        "Soft and warm: rounded frame, big pill Play, round Eject",
     ),
 ];
 
@@ -78,6 +86,26 @@ mod tests {
         assert_eq!(resolve("/etc/passwd"), "default");
         assert_eq!(resolve("http://example.com/x.css"), "default");
         assert_eq!(resolve("retro.css"), "default");
+    }
+
+    #[test]
+    fn every_skin_ships_a_stylesheet_to_go_with_it() {
+        // The list is the whole contract: a name here that has no file beside
+        // it resolves fine and then loads nothing, which looks exactly like a
+        // skin that did not work.
+        for (name, _) in SKINS {
+            if name == DEFAULT {
+                continue; // The stock look is style.css, which is always loaded.
+            }
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../tauri-ui/app/skins")
+                .join(format!("{name}.css"));
+            assert!(
+                path.is_file(),
+                "{name} has no stylesheet at {}",
+                path.display()
+            );
+        }
     }
 
     #[test]
