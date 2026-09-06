@@ -83,7 +83,7 @@ the reviewer, and all three are done. Verify them if you change anything.
       `main` does. All four return 200 — re-check if you re-tag:
 
       ```
-      curl -sIL -o /dev/null -w "%{http_code}" \n        https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/launcher.png
+      curl -sIL -o /dev/null -w "%{http_code}" https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/launcher.png
       ```
 
 Already correct, do not re-litigate:
