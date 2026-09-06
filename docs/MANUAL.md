@@ -130,7 +130,7 @@ launcher to choose from — a cartridge either brings a stylesheet or it does no
 which is the same arrangement the artwork already had. The look belongs to the
 cartridge and travels with it.
 
-Twelve worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
+Fifteen worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
 wood-grain television, a neon split, black-and-gold, a desktop of icons, an
 arcade cabinet, a cream one, and a Big Picture couch launcher. Copy one to
 `.gamepak/skin.css` and edit it. [SKINNING.md](SKINNING.md) is the reference:

@@ -797,6 +797,29 @@ function rowArtFor(game) {
   return game[ART_FIELD[kind]] || game.cover || "";
 }
 
+/**
+ * How big this game is, in four words a stylesheet can match on.
+ *
+ * The size is already printed on the row as text, which a skin can style but
+ * cannot lay out from — CSS has no way to read "64.2 GB" and turn it into a
+ * column span. A band on the element is the smallest thing that lets a skin
+ * treat a 60 GB install differently from a 2 GB one: a wider box on a shelf, a
+ * taller module in a rack.
+ *
+ *   .game-row[data-size="large"] { grid-column: span 2 }
+ *
+ * Bands rather than the number itself, because a skin wants three or four
+ * cases and not a scale, and because the boundaries can move here without
+ * every skin that used them having to change.
+ */
+function sizeBand(bytes) {
+  if (!bytes) return "none";
+  const gb = bytes / 1e9;
+  if (gb >= 40) return "large";
+  if (gb >= 12) return "medium";
+  return "small";
+}
+
 /** The first letter of up to three words, for a game with no picture. */
 function initialsOf(title) {
   return (title || "")
@@ -834,6 +857,7 @@ function renderRail(list) {
     row.setAttribute("aria-selected", String(index === selected));
     row.tabIndex = 0;
     row.dataset.index = String(index);
+    row.dataset.size = sizeBand(game.sizeBytes);
 
     // A row is that game, so it shows that game's picture of whichever kind the
     // skin asked for and stops there — falling through to the cartridge's would

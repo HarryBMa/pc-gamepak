@@ -23,7 +23,7 @@ It is read by the backend, capped at 256 KB, and inlined into the window as
 text — the window never opens a path on the drive, which is the same arrangement
 the artwork already had.
 
-Twelve worked examples are in [`skins/`](skins/). Copy one and edit it.
+Fifteen worked examples are in [`skins/`](skins/). Copy one and edit it.
 
 **What this trades away.** A stylesheet cannot run code, but it can move, cover
 and restyle anything on screen, including making Eject look like Play or putting
@@ -124,7 +124,9 @@ layers below are for.
     │   ├── #game-title
     │   ├── #notice             why Play is disabled, when it is
     │   └── #button-row
-    │       ├── #play-ring > #btn-play    .btn.btn--play
+    │       ├── #play-ring > #btn-play    .btn.btn--play — the ring is the
+    │       │                            flex child and is flex: 1, so set
+    │       │                            #play-ring, not .btn--play, to size it
     │       └── #btn-eject                .btn.btn--eject, carries .pad-badge
     ├── #sheet                  the ⓘ panel
     └── #toast
@@ -171,8 +173,19 @@ button. Do not undo that.
 | `#card.is-crossfaded` | the second art layer is in front |
 | `#stage.has-logo` | a logo is printed instead of the title |
 | `#game-title.is-long` | the name runs over fifteen characters |
+| `.game-row[data-size]` | `large` 40 GB+, `medium` 12 GB+, `small`, `none` |
 | `body.is-gamepad` | a controller is connected |
 | `.hidden`, `[hidden]` | do not make these visible |
+
+`data-size` is the one hook a layout can key on. The size is printed on the row
+as text, which a skin can style but cannot lay out from — CSS has no way to read
+"64.2 GB" and turn it into a column span. Bands rather than the number, because
+a skin wants three or four cases and not a scale:
+
+```css
+.game-row[data-size="large"]  { grid-column: span 2 }   /* shelf */
+.game-row[data-size="large"]  { flex-basis: 268px }     /* eurorack */
+```
 
 `is-long` sets no properties of its own. The base reads two variables deep —
 `font-size: var(--title-size, var(--auto-title-size, 40px))` — where the outer

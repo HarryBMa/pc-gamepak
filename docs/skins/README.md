@@ -1,6 +1,6 @@
 # Skin examples
 
-Twelve worked skins. None of them ship inside the launcher — copy one onto a
+Fifteen worked skins. None of them ship inside the launcher — copy one onto a
 cartridge and it wears it:
 
 ```
@@ -114,6 +114,37 @@ loading bays lit down one edge, and the row that is loaded gets a kanji state
 badge.
 
 [`akihabara.css`](akihabara.css)
+
+### shelf
+
+<img src="shelf.png" alt="The launcher wearing the shelf skin" width="440" />
+
+Game boxes standing on a shelf, seen at an angle. A grid with `perspective`,
+every box turned in 3D, and the big installs taking two columns — the first
+skin to lay out from `data-size` rather than from position.
+
+[`shelf.css`](shelf.css)
+
+### jukebox
+
+<img src="jukebox.png" alt="The launcher wearing the jukebox skin" width="440" />
+
+A wheel of covers turning around the one in front. The sibling combinator does
+the work: everything after the selected row leans one way and everything before
+it leans the other, which is what makes it a wheel and not a row of tilted
+cards.
+
+[`jukebox.css`](jukebox.css)
+
+### eurorack
+
+<img src="eurorack.png" alt="The launcher wearing the eurorack skin" width="440" />
+
+Modules bolted across rails in unequal widths. Fixed height, variable width
+from `data-size`, screws in the corners and a panel LED on the plate that is
+live. The only skin whose rows are neither a column nor a grid — they wrap.
+
+[`eurorack.css`](eurorack.css)
 
 Every one of those is the same launcher with the same markup. What changes is
 the window's size, the shape of the list, which of the four artworks is asked

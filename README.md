@@ -55,7 +55,7 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   so do the arrow keys, Enter, `E` and `I`.
 - **Skinnable, by the cartridge.** A `.gamepak/skin.css` on the drive restyles
   the launcher — its size, layout, and which of the four artworks it shows in
-  each place. Twelve worked examples with screenshots in
+  each place. Fifteen worked examples with screenshots in
   [docs/skins/](docs/skins/); [SKINNING.md](docs/SKINNING.md) is the reference.
 - **Artwork from SteamGridDB**, optional and off until you add a key. Covers,
   heroes, logos and icons are written onto the cartridge, so it looks the same
