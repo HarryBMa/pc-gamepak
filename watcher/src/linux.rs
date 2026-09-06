@@ -38,8 +38,80 @@ const MOUNTINFO: &str = "/proc/self/mountinfo";
 /// The table itself, in the format `mounts.rs` parses.
 const MOUNTS: &str = "/proc/self/mounts";
 
+/// Marks a sandbox. Its presence is how a Flatpak knows it is one.
+const FLATPAK_INFO: &str = "/.flatpak-info";
+
+/// Ask the desktop to start this watcher at login.
+///
+/// The rootless install enables `pc-gamepak-watcher.service` and that is the
+/// end of it. A Flatpak has no user unit to enable: it cannot write one into
+/// the host's systemd directory, and a unit written inside the sandbox is a
+/// unit nothing outside will ever read. The Background portal is the only door,
+/// and the entry it writes is one the user can revoke from their own settings
+/// rather than one hidden in a dotfile.
+///
+/// `gdbus` rather than a D-Bus crate. It is already in the GNOME runtime this
+/// builds against, this is one call made once per login, and a dependency that
+/// exists to send a single message is a dependency to justify at every audit.
+///
+/// Best effort, and never fatal. A desktop with no portal, or a user who
+/// declines, leaves a watcher that works for this session and does not come
+/// back at the next login — a worse product, not a broken one, and one that
+/// still opens from the menu entry.
+fn request_autostart() {
+    if !Path::new(FLATPAK_INFO).exists() {
+        return;
+    }
+
+    // `commandline` is what the desktop will run, and it runs it inside the
+    // sandbox — so it names the wrapper in /app/bin, not a path on the host.
+    let options = concat!(
+        "{'reason': <'Open a launcher when a cartridge is plugged in'>,",
+        " 'autostart': <true>,",
+        " 'background': <true>,",
+        " 'commandline': <['pc-gamepak-launch', '--watch']>}"
+    );
+
+    let asked = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.portal.Desktop",
+            "--object-path",
+            "/org/freedesktop/portal/desktop",
+            "--method",
+            "org.freedesktop.portal.Background.RequestBackground",
+            // No parent window: the watcher has none, and the portal accepts
+            // an empty identifier for exactly this case.
+            "",
+            options,
+        ])
+        .output();
+
+    match asked {
+        Ok(out) if out.status.success() => {
+            log::line("asked the desktop to start this at login");
+        }
+        Ok(out) => {
+            let why = String::from_utf8_lossy(&out.stderr);
+            log::line(&format!(
+                "autostart request refused: {}",
+                why.trim().lines().next().unwrap_or("no reason given")
+            ));
+        }
+        Err(error) => {
+            log::line(&format!("could not reach the portal: {error}"));
+        }
+    }
+}
+
 pub fn run() -> ! {
     log::line("watcher starting (mount table)");
+
+    // Outside a sandbox the installer enabled a systemd user unit and this does
+    // nothing. Inside one there is no unit to enable, so it asks instead.
+    request_autostart();
 
     // A tag on a reader is the other way a cartridge can arrive. Its own
     // thread, because this one is about to block in poll() indefinitely and
