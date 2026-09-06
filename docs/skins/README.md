@@ -11,26 +11,78 @@ Then replug the cartridge. [`../SKINNING.md`](../SKINNING.md) is the reference:
 the elements a skin styles, the two layers it owns, the states, and what the
 content security policy forbids.
 
-| File | |
-|---|---|
-| [`luna.css`](luna.css) | Explorer, about 2003: a title bar, a white pane, no artwork at all |
-| [`retro.css`](retro.css) | A wood-grain television — a screen set into a cabinet, knobs and lamps |
-| [`cyberpunk.css`](cyberpunk.css) | Wide and split: titles down the left, the hero filling the right |
-| [`phantom.css`](phantom.css) | Black and gold, a hero band over a two-up grid, and nothing else |
-| [`desktop.css`](desktop.css) | Games as a grid of shortcuts, with a taskbar |
-| [`arcade.css`](arcade.css) | A cabinet: scanlines, a marquee, and the games run sideways |
-| [`cozy.css`](cozy.css) | Cream and rounded: the light one, artwork kept out of it |
-| [`bigpicture.css`](bigpicture.css) | A hero behind, covers along the bottom, the logo in front |
+### luna
 
-They are deliberately not variations on a palette. They differ in the window's
-size, in the shape of the list — a column, a sideways strip, a grid — in which
-of the four artworks they ask for in each of the three places one can go, and in
-whether the launcher looks like a poster, a file window or an appliance.
+<img src="luna.png" alt="The launcher wearing the luna skin" width="440" />
 
-The clearest single tell is what happens when a button is pressed: `retro` sinks
-into moulded plastic, `arcade` drops a dome onto its own coloured base,
-`cyberpunk` lights a cut corner, and `cozy` barely moves. Eject is a square, a
-wide bar, a circle and a hardware key across them.
+Explorer, about 2003. A title bar, a white pane, and every game's icon at 32px. The only one that shows no artwork at all.
+
+[`luna.css`](luna.css)
+
+### retro
+
+<img src="retro.png" alt="The launcher wearing the retro skin" width="440" />
+
+A wood-grain television. The screen is set into the cabinet, the hero plays on it, and the knobs and lamps are drawn on a layer the skin owns.
+
+[`retro.css`](retro.css)
+
+### cyberpunk
+
+<img src="cyberpunk.png" alt="The launcher wearing the cyberpunk skin" width="440" />
+
+Wide and split. Titles down the left, the hero filling the right, and the selected game's logo printed over it.
+
+[`cyberpunk.css`](cyberpunk.css)
+
+### phantom
+
+<img src="phantom.png" alt="The launcher wearing the phantom skin" width="440" />
+
+Black and gold. A hero band across the top, a two-up grid under it, and nothing else. Up and down move by two.
+
+[`phantom.css`](phantom.css)
+
+### desktop
+
+<img src="desktop.png" alt="The launcher wearing the desktop skin" width="440" />
+
+Games as a grid of shortcuts with a taskbar. Asks for icons rather than covers, and the row width is measured, so the pad moves by a row.
+
+[`desktop.css`](desktop.css)
+
+### arcade
+
+<img src="arcade.png" alt="The launcher wearing the arcade skin" width="440" />
+
+A cabinet. Scanlines and a marquee, the games run sideways, and the two buttons are domes that drop onto their own plastic.
+
+[`arcade.css`](arcade.css)
+
+### cozy
+
+<img src="cozy.png" alt="The launcher wearing the cozy skin" width="440" />
+
+Cream and rounded. The light one, with the artwork kept out of it and Play sitting on a shadow it presses into.
+
+[`cozy.css`](cozy.css)
+
+### bigpicture
+
+<img src="bigpicture.png" alt="The launcher wearing the bigpicture skin" width="440" />
+
+A hero behind, covers along the bottom, the logo in front. The one the three art slots exist for.
+
+[`bigpicture.css`](bigpicture.css)
+
+Every one of those is the same launcher with the same markup. What changes is
+the window's size, the shape of the list, which of the four artworks is asked
+for in each of the three places one can go, and whether the result reads as a
+poster, a file window or an appliance.
+
+The screenshots are of the sample cartridge in the browser preview, taken
+through the same path a real drive takes: the stylesheet is handed to the
+launcher as the cartridge's own, and nothing else about the build changes.
 
 ## Trying one without a cartridge
 
