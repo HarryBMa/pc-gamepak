@@ -50,6 +50,12 @@
   </supports>
 
   <releases>
+    <release version="1.0.1" date="2026-09-06">
+      <description>
+        <p>Packaging only: the Flatpak build, and autostart through the
+        Background portal instead of a systemd user unit.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-09-05">
       <description>
         <p>First release.</p>

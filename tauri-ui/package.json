@@ -1,6 +1,6 @@
 {
   "name": "pc-gamepak-ui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Dark popup UI for the PC GamePak",
   "scripts": {
     "tauri": "tauri",

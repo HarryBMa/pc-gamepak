@@ -87,7 +87,10 @@ modules:
     sources:
       - type: git
         url: https://github.com/HarryBMa/pc-gamepak.git
-        tag: v1.0.0
+        # v1.0.0 predates packaging/flatpak/, so a build from it fails on the
+        # first `install` line below. The tag Flathub builds has to be one that
+        # contains this directory.
+        tag: v1.0.1
 
       # Flathub builds with no network, so every crate has to be here as a
       # source. Regenerate with flatpak-cargo-generator.py against each of the
