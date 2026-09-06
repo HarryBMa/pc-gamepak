@@ -19,7 +19,7 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 [![Windows Support](https://img.shields.io/badge/Windows-Supported-0078D4?logo=windows&logoColor=white)](#install)
 [![Linux Support](https://img.shields.io/badge/Linux-Supported-FCC624?logo=linux&logoColor=black)](#install)
 [![Steam Deck Support](https://img.shields.io/badge/Steam_Deck-Supported-1A9FFF?logo=steamdeck&logoColor=white)](#install)
-[![Works offline](https://img.shields.io/badge/Works-offline-2e7d52)](docs/MANUAL.md#security)
+[![Works offline](https://img.shields.io/badge/Works-offline-2e7d52)](docs/MANUAL.md)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](#build-from-source)
 [![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8B8?logo=tauri&logoColor=white)](#build-from-source)
 
@@ -100,9 +100,21 @@ Or take the installer from
 entirely. A [WinGet](https://github.com/microsoft/winget-pkgs) package is in
 review; once it lands, `winget install HarryBMa.PCGamePak` does the lot.
 
-**Linux** — clone and run `sudo linux/install.sh`, or `linux/install-user.sh`
-for a rootless install under `~/.local`. An AUR package is written and waiting
-on the AUR reopening registrations.
+**Linux** — the pacman package is written and tested, and waiting on the AUR
+reopening registrations. Building it by hand is a clone and a command:
+
+```bash
+git clone https://github.com/HarryBMa/pc-gamepak.git
+cd pc-gamepak/packaging/aur/pc-gamepak && makepkg -si
+systemctl --user enable --now pc-gamepak-watcher.service
+```
+
+There is a Flatpak too, for everything else and for the Steam Deck. Or clone and
+run `sudo linux/install.sh`, or `linux/install-user.sh` for a rootless install
+under `~/.local`.
+
+**[Full instructions, and why automount decides whether any of it
+works →](docs/INSTALL.md)**
 
 ## Usage
 
@@ -144,8 +156,9 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 
 ## More
 
-[The manual](docs/MANUAL.md) · [Writing a skin](docs/SKINNING.md) ·
-[Where the project is](docs/STATUS.md) · [Contributing](CONTRIBUTING.md)
+[Installing on Linux](docs/INSTALL.md) · [The manual](docs/MANUAL.md) ·
+[Writing a skin](docs/SKINNING.md) · [Where the project is](docs/STATUS.md) ·
+[Contributing](CONTRIBUTING.md)
 
 ## License
 
