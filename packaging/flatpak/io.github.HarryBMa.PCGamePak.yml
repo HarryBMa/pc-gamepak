@@ -22,7 +22,7 @@ app-id: io.github.HarryBMa.PCGamePak
 # webkit2gtk lives in the GNOME runtime, which is what a Tauri app needs
 # whatever desktop it ends up on.
 runtime: org.gnome.Platform
-runtime-version: '48'
+runtime-version: '49'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
