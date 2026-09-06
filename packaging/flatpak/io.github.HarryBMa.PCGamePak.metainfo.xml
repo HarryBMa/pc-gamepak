@@ -32,6 +32,25 @@
     </p>
   </description>
 
+  <screenshots>
+    <screenshot type="default">
+      <caption>A cartridge plugged in: the cover art, and Play</caption>
+      <image>https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/launcher.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>A cartridge holding several games, with a list to pick from</caption>
+      <image>https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/launcher-bundle.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The wizard writing a cartridge: pick a game, pick a drive</caption>
+      <image>https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/wizard.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The details panel: link speed, free space, and where each game lives</caption>
+      <image>https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/launcher-details.png</image>
+    </screenshot>
+  </screenshots>
+
   <launchable type="desktop-id">io.github.HarryBMa.PCGamePak.desktop</launchable>
 
   <url type="homepage">https://github.com/HarryBMa/pc-gamepak</url>

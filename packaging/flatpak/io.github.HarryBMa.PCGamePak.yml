@@ -79,11 +79,18 @@ modules:
           /app/share/applications/io.github.HarryBMa.PCGamePak.desktop
       - install -Dm644 packaging/flatpak/io.github.HarryBMa.PCGamePak.metainfo.xml
           /app/share/metainfo/io.github.HarryBMa.PCGamePak.metainfo.xml
+      # Scalable is what the rules ask for; the raster sizes are kept because
+      # a desktop that cannot render SVG falls back to them.
+      - install -Dm644 tauri-ui/src-tauri/icons/icon.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.HarryBMa.PCGamePak.svg
+      - install -Dm644 tauri-ui/src-tauri/icons/128x128@2x.png
+          /app/share/icons/hicolor/256x256/apps/io.github.HarryBMa.PCGamePak.png
       - install -Dm644 tauri-ui/src-tauri/icons/128x128.png
           /app/share/icons/hicolor/128x128/apps/io.github.HarryBMa.PCGamePak.png
       - install -Dm644 tauri-ui/src-tauri/icons/32x32.png
           /app/share/icons/hicolor/32x32/apps/io.github.HarryBMa.PCGamePak.png
-      - install -Dm644 LICENSE /app/share/licenses/pc-gamepak/LICENSE
+      - install -Dm644 LICENSE
+          /app/share/licenses/io.github.HarryBMa.PCGamePak/LICENSE
     sources:
       - type: git
         url: https://github.com/HarryBMa/pc-gamepak.git

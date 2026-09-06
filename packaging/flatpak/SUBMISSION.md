@@ -63,23 +63,29 @@ This is the item most likely to sink a resubmission. Today: first commit
 
 ---
 
-## 3. Technical gaps found in the current manifest
+## 3. Technical gaps in the manifest — fixed
 
-Each of these is real and checkable now.
+All three were found by checking the manifest against the written rules, not by
+the reviewer, and all three are done. Verify them if you change anything.
 
-- [ ] **Licence path is wrong.** The rule is
-      `$FLATPAK_DEST/share/licenses/$FLATPAK_ID/`. The manifest installs to
-      `/app/share/licenses/pc-gamepak/LICENSE`, which is neither.
-      Should be `/app/share/licenses/io.github.HarryBMa.PCGamePak/LICENSE`.
+- [x] **Licence path.** Was `/app/share/licenses/pc-gamepak/LICENSE`; the rule
+      is `$FLATPAK_DEST/share/licenses/$FLATPAK_ID/`. Now installs to
+      `/app/share/licenses/io.github.HarryBMa.PCGamePak/LICENSE`.
 
-- [ ] **No icon at the required size.** The rule is an SVG or a 256×256 PNG.
-      The manifest installs only 128×128 and 32×32.
-      `tauri-ui/src-tauri/icons/icon.svg` exists and is not installed.
+- [x] **Icon size.** The rule is an SVG or a 256×256 PNG; only 128×128 and
+      32×32 were installed. `icons/icon.svg` (512 viewBox) now goes to
+      `hicolor/scalable/`, and `128x128@2x.png` (genuinely 256×256) to
+      `hicolor/256x256/`. The two small rasters stay as fallbacks.
 
-- [ ] **No screenshots in the MetaInfo.** There is no `<screenshots>` element
-      at all, so the store page would have nothing to show. They must be
-      reachable URLs, not repo-relative paths — raw.githubusercontent.com links
-      to `docs/*.png` work.
+- [x] **Screenshots.** There was no `<screenshots>` element at all, so the
+      store page would have been blank. Four now, pinned to
+      `raw.githubusercontent.com/.../v1.0.1/docs/` so the URLs cannot move when
+      `main` does. All four return 200 — re-check if you re-tag:
+
+      ```
+      curl -sIL -o /dev/null -w "%{http_code}
+"         https://raw.githubusercontent.com/HarryBMa/pc-gamepak/v1.0.1/docs/launcher.png
+      ```
 
 Already correct, do not re-litigate:
 
