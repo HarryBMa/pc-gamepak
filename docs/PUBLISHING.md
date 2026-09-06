@@ -31,7 +31,7 @@ switch.
 |---|---|---|
 | **GitHub Releases** | The source of truth every other channel points at. Tag `v0.1.0`, CI builds Linux and Windows artefacts with checksums. | Done — `.github/workflows/release.yml` |
 | **AUR** (`pc-gamepak`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` is written |
-| **Flatpak / Flathub** | Verified on real hardware, see below — host mounts propagate into the sandbox and the watcher fires inside one. The way onto a Steam Deck, which ships Flatpak and no AUR. | Medium. `packaging/flatpak/` is written; needs vendored cargo sources for Flathub's offline build |
+| **Flatpak / Flathub** | Built, installed and run against a real cartridge — the whole product works sandboxed. The way onto a Steam Deck, which ships Flatpak and no AUR. | Done — `packaging/flatpak/`, cargo sources vendored, builds offline |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
 | **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. Published in [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket). | Low |
 
@@ -140,10 +140,32 @@ desktop: the scheme resolves to a handler (`steam.desktop`),
 than run in the sandbox. Worth confirming once packaged, since the portal may
 ask the user to confirm the handler the first time.
 
+Then the manifest was built and installed rather than left as a guess:
+`flatpak-builder` against the GNOME 49 runtime and the Rust SDK extension, with
+all 428 crates vendored so the build runs with no network, the way Flathub
+builds. It compiled first time. Installed, the launcher opened the real
+cartridge from inside the sandbox, and the watcher — run inside the Flatpak —
+logged a full plug cycle and started the launcher itself:
+
+```
+watcher starting (mount table)
+watching 103 mounted filesystems
+cartridge removed: /run/media/playbox/TOMBRAIDERC
+cartridge detected at /run/media/playbox/TOMBRAIDERC
+launcher started, pid 3
+```
+
+So the whole product works sandboxed, with no root, no udev rule and no
+privileged helper.
+
 The remaining Flatpak design question is not permissions but autostart: a
 Flatpak gets no systemd user unit, so the watcher has to ask for background
 autostart through `org.freedesktop.portal.Background` instead of being enabled
-with `systemctl --user`.
+with `systemctl --user`. Nothing else is in the way.
+
+One packaging detail for the submission: `packaging/flatpak/` has to exist in
+the tagged source the manifest points at, and v1.0.0 predates it. The manifest
+tracks a tag, so the next tag is what Flathub can build from.
 
 ## Order of work
 
