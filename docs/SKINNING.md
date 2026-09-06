@@ -23,7 +23,7 @@ It is read by the backend, capped at 256 KB, and inlined into the window as
 text — the window never opens a path on the drive, which is the same arrangement
 the artwork already had.
 
-Eight worked examples are in [`skins/`](skins/). Copy one and edit it.
+Twelve worked examples are in [`skins/`](skins/). Copy one and edit it.
 
 **What this trades away.** A stylesheet cannot run code, but it can move, cover
 and restyle anything on screen, including making Eject look like Play or putting
@@ -317,6 +317,7 @@ watcher's, and says which skin it was asked for, whether the stylesheet was
 attached, and what the window resized to. A release build has no devtools and the
 window closes on eject, so this is the only way to see inside it.
 
-The eight shipped skins are the other reference. `retro` and `terminal` are the
-most conventional, `arcade` moves the most furniture, and `phantom` is the
-shortest.
+The examples in [`skins/`](skins/) are the other reference, and they are worth
+reading in the order they diverge from the stock window: `cozy` recolours it,
+`luna` and `bricolage` rebuild it as a document, `akihabara` and `phantom` move
+the furniture, and `arcade` and `cyberpunk` change what shape the list is.

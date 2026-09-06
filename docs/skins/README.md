@@ -1,6 +1,6 @@
 # Skin examples
 
-Eight worked skins. None of them ship inside the launcher — copy one onto a
+Twelve worked skins. None of them ship inside the launcher — copy one onto a
 cartridge and it wears it:
 
 ```
@@ -74,6 +74,46 @@ Cream and rounded. The light one, with the artwork kept out of it and Play sitti
 A hero behind, covers along the bottom, the logo in front. The one the three art slots exist for.
 
 [`bigpicture.css`](bigpicture.css)
+
+### bricolage
+
+<img src="bricolage.png" alt="The launcher wearing the bricolage skin" width="440" />
+
+Lab bench equipment. Label-maker tape hanging off the header, hard black offset
+shadows, and hazard stripes down the row that is live. Shows no fill artwork at
+all — the covers are specimens in a rack.
+
+[`bricolage.css`](bricolage.css)
+
+### phosphor
+
+<img src="phosphor.png" alt="The launcher wearing the phosphor skin" width="440" />
+
+An amber terminal from 1984. The only skin with `--skin-row-art: none`, so the
+rail is type and initials rather than pictures, and the scanlines are drawn on
+the layer above everything. A disk array listing, not a shelf.
+
+[`phosphor.css`](phosphor.css)
+
+### atomic
+
+<img src="atomic.png" alt="The launcher wearing the atomic skin" width="440" />
+
+Translucent purple plastic, 1999. The only one that puts `backdrop-filter`
+between the interface and the artwork, so the hero shows through the frosted
+chassis with the circuit dots printed on it.
+
+[`atomic.css`](atomic.css)
+
+### akihabara
+
+<img src="akihabara.png" alt="The launcher wearing the akihabara skin" width="440" />
+
+A slot loader. Every panel is notched with `clip-path`, the rail is a stack of
+loading bays lit down one edge, and the row that is loaded gets a kanji state
+badge.
+
+[`akihabara.css`](akihabara.css)
 
 Every one of those is the same launcher with the same markup. What changes is
 the window's size, the shape of the list, which of the four artworks is asked
