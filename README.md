@@ -158,8 +158,8 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 ## More
 
 [Installing on Linux](docs/INSTALL.md) · [The manual](docs/MANUAL.md) ·
-[Writing a skin](docs/SKINNING.md) · [Where the project is](docs/STATUS.md) ·
-[Contributing](CONTRIBUTING.md)
+[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) ·
+[Where the project is](docs/STATUS.md) · [Contributing](CONTRIBUTING.md)
 
 ## License
 
