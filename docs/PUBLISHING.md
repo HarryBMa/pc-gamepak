@@ -31,7 +31,7 @@ switch.
 |---|---|---|
 | **GitHub Releases** | The source of truth every other channel points at. Tag `v0.1.0`, CI builds Linux and Windows artefacts with checksums. | Done — `.github/workflows/release.yml` |
 | **AUR** (`pc-gamepak`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` is written |
-| **Flatpak / Flathub** | Built, installed and run against a real cartridge — the whole product works sandboxed. The way onto a Steam Deck, which ships Flatpak and no AUR. | Done — `packaging/flatpak/`, cargo sources vendored, builds offline |
+| **Flatpak** (built from source) | Built, installed and run against a real cartridge — the whole product works sandboxed. The way onto a Steam Deck, which ships Flatpak and no AUR. Not submitted to any store; see below. | Done — `packaging/flatpak/`, cargo sources vendored, builds offline |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
 | **Scoop** | User-space, no admin, popular with the same people who own a drawer of NVMe drives. Published in [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket). | Low |
 
@@ -142,8 +142,8 @@ ask the user to confirm the handler the first time.
 
 Then the manifest was built and installed rather than left as a guess:
 `flatpak-builder` against the GNOME 49 runtime and the Rust SDK extension, with
-all 428 crates vendored so the build runs with no network, the way Flathub
-builds. It compiled first time. Installed, the launcher opened the real
+all 428 crates vendored so the build runs with no network. It compiled first
+time. Installed, the launcher opened the real
 cartridge from inside the sandbox, and the watcher — run inside the Flatpak —
 logged a full plug cycle and started the launcher itself:
 
@@ -158,14 +158,18 @@ launcher started, pid 3
 So the whole product works sandboxed, with no root, no udev rule and no
 privileged helper.
 
-The remaining Flatpak design question is not permissions but autostart: a
-Flatpak gets no systemd user unit, so the watcher has to ask for background
-autostart through `org.freedesktop.portal.Background` instead of being enabled
-with `systemctl --user`. Nothing else is in the way.
+Autostart is the one thing a Flatpak cannot do the ordinary way: it gets no
+systemd user unit, so the watcher asks for background autostart through
+`org.freedesktop.portal.Background` instead of being enabled with
+`systemctl --user`. That path is written and gated on `/.flatpak-info`.
 
-One packaging detail for the submission: `packaging/flatpak/` has to exist in
-the tagged source the manifest points at, and v1.0.0 predates it. The manifest
-tracks a tag, so the next tag is what Flathub can build from.
+`packaging/flatpak/` has to exist in the tagged source the manifest points at.
+v1.0.0 predates it; v1.0.1 contains it.
+
+**Not going to Flathub.** The submission was rejected under their generative-AI
+policy, and the reviewer asked that it not be resubmitted. The manifest stays
+because it builds a working Flatpak from this repository — see
+[INSTALL.md](INSTALL.md) — but there is no store listing and none is planned.
 
 ## Order of work
 
@@ -180,9 +184,8 @@ tracks a tag, so the next tag is what Flathub can build from.
 4. **WinGet**, via `wingetcreate` for the first submission and the
    `winget-releaser` action thereafter.
 5. **`.deb`** attached to releases via `cargo-deb`.
-6. **Flatpak**, whose two open questions are now answered (below). What is
-   left is mechanical: vendored cargo sources, so the build works with no
-   network, and a Flathub submission. Snap is not planned.
+6. **Flatpak**, built from this repository rather than from a store. Snap is
+   not planned.
 
 ## Before the first tag
 

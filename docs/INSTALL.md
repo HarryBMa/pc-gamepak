@@ -1,9 +1,9 @@
 # Installing PC GamePak on Linux
 
-There is no AUR package and no Flathub listing yet. The AUR closed new account
-registration after a security incident, so `pc-gamepak` is written and tested
-but has nowhere to be published to; Flathub needs a release tag that contains
-the Flatpak manifest, which the next one will.
+There is no AUR package: the AUR closed new account registration after a
+security incident, so `pc-gamepak` is written and tested but has nowhere to be
+published to. There is no store listing for the Flatpak either — it is built
+from this repository.
 
 Both are ready to build by hand, and this page is how. Every command here has
 been run on a real machine against a real cartridge.
@@ -55,7 +55,8 @@ wrong shape there even though the Deck is Arch. Use the Flatpak.
 ## Flatpak
 
 Works on any distribution, needs no root, and is the right answer on a Steam
-Deck. There is no Flathub listing yet, so this builds it locally.
+Deck. Built from this repository — there is no store listing, and the remote
+added below is only where the GNOME runtime comes from.
 
 ```bash
 # The runtime and the Rust SDK extension, once

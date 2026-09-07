@@ -1,9 +1,9 @@
 # PC GamePak, as a Flatpak.
 #
-# The app ID is not the Tauri identifier (com.pc-gamepak.launcher). Flathub
-# requires an ID under a domain the author demonstrably controls, and
-# pc-gamepak.com is not one — io.github.<user>.<project> is the form Flathub
-# asks for when the project lives on GitHub.
+# The app ID is not the Tauri identifier (com.pc-gamepak.launcher): an app ID
+# should sit under a domain the author controls, and pc-gamepak.com is not one.
+# io.github.<user>.<project> is the usual form for a project that lives on
+# GitHub.
 #
 # Why this is possible at all: the product used to need a udev rule, which no
 # sandbox can install. It does not any more. The watcher blocks in poll() on
@@ -95,11 +95,11 @@ modules:
       - type: git
         url: https://github.com/HarryBMa/pc-gamepak.git
         # v1.0.0 predates packaging/flatpak/, so a build from it fails on the
-        # first `install` line below. The tag Flathub builds has to be one that
-        # contains this directory.
+        # first `install` line below. The tag has to be one that contains
+        # this directory.
         tag: v1.0.1
 
-      # Flathub builds with no network, so every crate has to be here as a
+      # The build runs with no network, so every crate has to be here as a
       # source. Regenerate with flatpak-cargo-generator.py against each of the
       # three Cargo.lock files:
       #
