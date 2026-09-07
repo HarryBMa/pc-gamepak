@@ -564,7 +564,7 @@ el.toast.addEventListener("click", dismissToast);
 /**
  * Whether this cartridge is on a drive at all.
  *
- * A tag is a cartridge that never moves: it resolves to a directory on this
+ * A cartridge can also be a plain directory that never moves — it resolves to
  * machine, so there is nothing to unmount and no button to offer. The backend
  * refuses the command as well — this only keeps the window honest.
  */
@@ -1046,7 +1046,7 @@ async function init() {
   // look and then changes its mind a frame later.
   wearSkin(cartridge.skin_css ?? "");
 
-  // A tag has no drive behind it, so Eject goes away rather than failing when
+  // A directory has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
   // build that does not know the command should keep the button it had.
   try {
@@ -1432,7 +1432,7 @@ document.addEventListener("keydown", (event) => {
    Append &skin=<name> to wear one of docs/skins/ as if the cartridge carried
    it, which is the only way a look reaches the launcher.
    Append &state=noexec to see the nothing-to-play case, &state=bundle for a
-   collection, and &tag=1 for a cartridge that is a tag rather than a drive —
+   collection, and &fixed=1 for a cartridge on a path rather than a drive —
    which composes with the others.
    ========================================================================== */
 
@@ -1521,9 +1521,9 @@ async function demoInvoke(command, args) {
         games: [],
       };
     case "can_eject":
-      // A tag resolves to a directory on this machine; there is no drive to
-      // unmount and the button should not be there.
-      return !new URLSearchParams(location.search).has("tag");
+      // A cartridge on a fixed path has no drive to unmount, so the button
+      // should not be there.
+      return !new URLSearchParams(location.search).has("fixed");
     case "cartridge_health":
       // The preview shows the case worth designing for: a link that is fine,
       // a transport that is not, and a drive with no room left.

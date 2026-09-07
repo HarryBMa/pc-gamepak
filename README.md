@@ -62,8 +62,9 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   on a machine that has never heard of it.
 - **Steam-aware.** A cartridge registers as a Steam library so copied games run
   from the drive rather than being redownloaded.
-- **Tags instead of drives.** An NFC tag can stand in for a cartridge — see
-  [NFC-Cartridge-Player](https://github.com/TheStockPot/NFC-Cartridge-Player).
+- **Not an NFC project.** If you want to tap a card, a toy or a QR code to
+  launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
+  platforms and this does not do it at all.
 - **Works offline.** Nothing phones home. The only network call is the artwork
   lookup you asked for.
 

@@ -50,8 +50,8 @@ refused by the backend until the user opts in and supplies their own key.
 
 - **Insert:** the OS automounts a drive; a watcher notices (udev or `poll()` on
   `/proc/self/mountinfo` on Linux, `WM_DEVICECHANGE` on Windows) and opens the
-  launcher. NFC/PC-SC tags are a second doorbell: a UID names a directory holding
-  an ordinary `cartridge.conf`.
+  launcher. A drive is the only doorbell — tokens are
+  [Zaparoo](https://zaparoo.org/)'s job, not this one's.
 - **Launcher:** 420 × 560 window, the 3:4 of a cover, artwork filling it. The
   window is the slot and the cover is the cartridge in it: Eject rides the whole
   face out. Title, Play and an eject icon on top; the corner buttons appear under

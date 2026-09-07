@@ -113,11 +113,6 @@ pub fn run() -> ! {
     // nothing. Inside one there is no unit to enable, so it asks instead.
     request_autostart();
 
-    // A tag on a reader is the other way a cartridge can arrive. Its own
-    // thread, because this one is about to block in poll() indefinitely and
-    // PC/SC has a blocking call of its own. Does nothing unless asked for.
-    crate::nfc::spawn();
-
     let Ok(watch) = std::fs::File::open(MOUNTINFO) else {
         log::line("could not open /proc/self/mountinfo; is this Linux?");
         std::process::exit(1);

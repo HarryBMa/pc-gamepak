@@ -678,16 +678,30 @@ takes, not how the game runs.
 
 <a id="tags"></a>
 <details>
-<summary><b>Tags instead of drives</b> — NFC, which now lives in its own project</summary>
+<summary><b>Tags instead of drives</b> — use Zaparoo, not this</summary>
 <br />
 
-A cartridge carries the game. A tag only points at one that is already
+A cartridge carries the game. A token only points at one that is already
 installed, which is the right answer for a shelf of thirty titles or a 150 GB
 install that would never fit on a 2230.
 
-That idea has grown up somewhere else and is better looked after there:
+This used to ship a PC/SC reader for that — about 1,200 lines handling ACR122U
+and friends. It has been removed, because
+**[Zaparoo](https://zaparoo.org/)** does the same job properly: NFC cards, QR
+codes, barcodes, discs, Amiibo and Skylanders, USB sticks and SD cards, across
+Windows, Linux, SteamOS, Bazzite, ChimeraOS, Batocera, MiSTer and more. There
+was no version of this project that was going to beat that, and keeping a
+thinner one only split the idea.
 
-**[TheStockPot/NFC-Cartridge-Player](https://github.com/TheStockPot/NFC-Cartridge-Player)**
+The two coexist without overlapping. Zaparoo's token is an **identifier** —
+it names a game already installed on the machine. A GamePak cartridge is a
+**container** — the files, the artwork and the look travel on the drive, so it
+works on a machine that has never seen the game. Run both if you want both.
+
+Also worth seeing:
+**[TheStockPot/NFC-Cartridge-Player](https://github.com/TheStockPot/NFC-Cartridge-Player)**,
+an ESP32 and an RC522 in a 3D-printed shell reporting tag IDs to Home
+Assistant.
 
 </details>
 
@@ -884,17 +898,16 @@ units on Linux, or the logon task and install folder on Windows.
 <br />
 
 ```
-drive plugged in                          tag put on a reader
-      │                                         │
-      ├─ Linux    udev ──▶ systemd unit         └─ watcher, blocked in PC/SC,
-      └─ Windows  watcher sees the volume          asks the reader for the UID
-      │                                         │
-      ▼                                         ▼
-is there a cartridge.conf at the root?    is there one in tags/<UID>/ ?
-      │                    ╰──no──▶  nothing happens  ◀──no──╯
-      │ yes                                     │ yes
-      ╰───────────────────────┬─────────────────╯
-                              ▼
+drive plugged in
+      │
+      ├─ Linux    udev ──▶ systemd unit
+      └─ Windows  watcher sees the volume
+      │
+      ▼
+is there a cartridge.conf at the root?
+      │            ╰──no──▶  nothing happens
+      │ yes
+      ▼
 launcher opens with the cover art
       │
       ├─ Play   ──▶ starts what cartridge.conf names, then minimises
@@ -914,7 +927,7 @@ while it waits.
 |---|---|
 | **Linux** | **Nothing resident** with the system install: udev is already part of the OS, and the rule adds no process. The rootless install trades that for one process of about 2 MB, blocked in `poll()` on the mount table. |
 | **Windows** | **One process, ~2 MB, 0% CPU.** `pc-gamepak-watcher.exe` blocks on the Windows message queue — no polling, no timer. |
-| **[Tags](#tags)** | Only when switched on: one extra thread in that process, blocked in PC/SC, plus whatever the reader library maps in. Still no timer and no polling. It wakes every thirty seconds to re-check which readers exist, which costs one syscall. |
+
 
 The launcher is a webview, so it is not small *while it is on screen* — expect
 around 100 MB for the few seconds it is up, then it exits and gives all of it
@@ -1060,13 +1073,19 @@ click-to-play model in place of the auto-execute-plus-allowlist one.
 
 ### Others working on the same idea
 
+**[Zaparoo](https://zaparoo.org/)**
+([zaparoo-core](https://github.com/ZaparooProject/zaparoo-core), GPL-3.0) turns
+cards, toys, QR codes, discs, USB sticks and SD cards into shortcuts that launch
+games, on nine platforms including SteamOS and MiSTer. It is the reason this
+project no longer has NFC support: Zaparoo does that job better than a side
+feature here ever would. Its token names a game already installed; a cartridge
+carries one. Different halves of the same wish.
+
 **[TheStockPot/NFC-Cartridge-Player](https://github.com/TheStockPot/NFC-Cartridge-Player)**
-is where the tag idea above comes from, and it is worth seeing on its own terms:
-an ESP32 and an RC522 in a 3D-printed shell, reporting tag IDs to Home Assistant,
-which then dims the lights and starts the film. It is a smart-home project rather
-than a PC one, and no code is shared with it — its licence is GPL-3.0 against our
-MIT. Tags are its subject rather than ours, which is why this README now points
-at it instead of explaining them again.
+is worth seeing on its own terms: an ESP32 and an RC522 in a 3D-printed shell,
+reporting tag IDs to Home Assistant, which then dims the lights and starts the
+film. A smart-home project rather than a PC one. GPL-3.0 against our MIT, and no
+code is shared with it.
 
 **[Uplinkpro/CartLaunchCompanion](https://github.com/Uplinkpro/CartLaunchCompanion)**
 takes the opposite half of this problem, and takes it further than this project

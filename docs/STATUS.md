@@ -53,18 +53,16 @@ and turns them into a numbered plan with a time estimate; the write itself
 happens in the same window, as a log that ticks itself off. Formatting, copying,
 artwork by file picker or SteamGridDB, per-cartridge Windows tuning.
 
-### `watcher/` — both platforms, 21 tests
+### `watcher/` — both platforms, 6 tests
 
 **Windows:** a hidden top-level window blocking on `WM_DEVICECHANGE`. No polling,
 no timer, about 2 MB resident.
 
-**Tags:** a second doorbell, on its own thread. PC/SC — `WinSCard` on Windows,
-`libpcsclite` on Linux — loaded at runtime by name rather than linked, so a
-machine without a reader has no tag support instead of a watcher that will not
-start. The UID names a directory holding an ordinary `cartridge.conf`, which is
-why the launcher needed no changes at all. Off unless the tags directory exists.
-A line source (`UID <hex>` / `GONE` on a serial device or FIFO) covers readers
-people build themselves, and is how the path is tested without hardware.
+**Tags:** removed. A PC/SC reader and a line source used to be a second
+doorbell here, about 1,200 lines of it. [Zaparoo](https://zaparoo.org/) does
+tokens across nine platforms and does them better; a thinner version living
+inside a cartridge launcher was not going to catch up, and it split the idea.
+A drive is the only doorbell now.
 
 **Linux:** blocks in `poll()` on `/proc/self/mountinfo`, which the kernel wakes on
 any mount activity. Used only by the rootless install — the system install has

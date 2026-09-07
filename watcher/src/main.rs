@@ -17,10 +17,6 @@
 //!
 //! Flow: volume arrives -> is there a cartridge.conf on it? -> start the
 //! launcher with `--drive X:\` and go back to sleep.
-//!
-//! A tag on an NFC reader is the same flow with a different doorbell: the UID
-//! names a directory holding a `cartridge.conf`, and the launcher is opened on
-//! that instead. Off unless a tags directory exists — see `nfc.rs`.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -30,8 +26,6 @@ mod linux;
 mod log;
 #[cfg(not(windows))]
 mod mounts;
-mod nfc;
-mod tags;
 #[cfg(windows)]
 mod tray;
 
@@ -137,10 +131,6 @@ mod windows_watcher {
             crate::log::line("another watcher is already running; exiting");
             return;
         }
-
-        // Its own thread: this one is about to block in the message queue for
-        // the rest of the session, and PC/SC has its own blocking call.
-        crate::nfc::spawn();
 
         *SEEN.lock().expect("no other thread to poison it") = Some(HashMap::new());
 
