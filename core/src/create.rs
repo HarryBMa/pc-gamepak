@@ -849,10 +849,7 @@ pub fn create_cartridge(
             message: format!(
                 "Formatting {} to {}…",
                 request.drive_path,
-                match filesystem {
-                    format::Filesystem::Btrfs => "btrfs",
-                    format::Filesystem::Exfat => "exFAT",
-                }
+                filesystem.display_name()
             ),
             done_bytes: 0,
             total_bytes: 0,
