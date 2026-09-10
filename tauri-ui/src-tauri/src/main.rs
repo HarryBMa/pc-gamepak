@@ -55,7 +55,7 @@
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
-use gamepak_core::{create, drives, edit, format, health, settings, sgdb, tuning};
+use gamepak_core::{create, drives, edit, format, health, saves, settings, sgdb, tuning};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -96,6 +96,8 @@ fn launch_game(executable: String, drive_path: String) -> Result<(), String> {
         return Err("No executable configured for this cartridge".into());
     }
 
+    sync_portable_saves(&drive_path);
+
     let known_schemes = [
         "steam://",
         "heroic://",
@@ -117,12 +119,13 @@ fn launch_game(executable: String, drive_path: String) -> Result<(), String> {
         if !full_path.exists() {
             return Err(format!("Executable not found: {}", full_path.display()));
         }
+        let mut child = {
         #[cfg(target_os = "windows")]
         {
             Command::new(&full_path)
                 .current_dir(full_path.parent().unwrap_or(Path::new(".")))
                 .spawn()
-                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
+                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -130,8 +133,9 @@ fn launch_game(executable: String, drive_path: String) -> Result<(), String> {
                 .arg(&full_path)
                 .current_dir(full_path.parent().unwrap_or(Path::new(".")))
                 .spawn()
-                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
-        }
+                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?
+        }};
+        wait_and_resync(child, drive_path);
         Ok(())
     }
 }
@@ -161,6 +165,22 @@ fn open_uri(uri: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
         Ok(())
     }
+}
+
+fn sync_portable_saves(drive_path: &str) {
+    if drive_path.trim().is_empty() {
+        return;
+    }
+    if let Err(error) = saves::sync_cartridge(Path::new(drive_path)) {
+        eprintln!("portable save sync failed for {drive_path}: {error}");
+    }
+}
+
+fn wait_and_resync(mut child: std::process::Child, drive_path: String) {
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        sync_portable_saves(&drive_path);
+    });
 }
 
 fn auto_launch_drive(drive_path: &str) -> Result<(), String> {
@@ -325,6 +345,8 @@ fn eject_drive(drive_path: String) -> Result<(), String> {
             "This cartridge is not on a removable drive, so there is nothing to eject.".to_string(),
         );
     }
+
+    sync_portable_saves(&drive_path);
 
     #[cfg(target_os = "windows")]
     {
@@ -1499,6 +1521,8 @@ fn main() {
                 // resizing comment in open_wizard explicitly argues against.
                 open_wizard(app.handle(), settings)?;
             } else {
+                let drive = cartridge::drive_from_args(args.clone().into_iter());
+                sync_portable_saves(&drive);
                 let launcher =
                     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                         .title("PC GamePak")

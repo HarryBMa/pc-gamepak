@@ -23,6 +23,7 @@ pub mod health;
 pub mod playnite;
 pub mod portable;
 pub mod proc;
+pub mod saves;
 pub mod settings;
 pub mod sgdb;
 pub mod steam;
