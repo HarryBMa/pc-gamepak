@@ -35,7 +35,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 pub const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 1;
 
 /// The one icon this process owns.
-const ICON_ID: u32 = 1;
+pub const ICON_ID: u32 = 1;
 
 /// `GetDriveTypeW` results worth looking at.
 ///

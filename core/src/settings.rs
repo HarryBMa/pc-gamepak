@@ -12,6 +12,21 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OnCartridgeInsert {
+    None,
+    FocusUi,
+    AutoLaunchGame,
+    NotifyOnly,
+}
+
+impl Default for OnCartridgeInsert {
+    fn default() -> Self {
+        Self::FocusUi
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -28,6 +43,8 @@ pub struct Settings {
     /// the list, so a new launcher directory appearing on disk is picked up
     /// without anyone having to re-run anything.
     pub game_folder_roots: Vec<String>,
+    /// What to do when a cartridge is mounted by the OS.
+    pub on_cartridge_insert: OnCartridgeInsert,
 
     // ---- What Create does without asking ---------------------------------
     //
@@ -83,6 +100,7 @@ impl Default for Settings {
             steamgriddb_enabled: false,
             steamgriddb_api_key: String::new(),
             game_folder_roots: Vec::new(),
+            on_cartridge_insert: OnCartridgeInsert::FocusUi,
             default_filesystem: "exfat".to_string(),
             // Costs a read pass over the drive and is worth it: the alternative
             // is finding out from a crash months later.
@@ -195,6 +213,7 @@ mod tests {
         let chosen = Settings {
             steamgriddb_enabled: true,
             steamgriddb_api_key: "  abc123  ".to_string(),
+            on_cartridge_insert: OnCartridgeInsert::NotifyOnly,
             ..Settings::default()
         };
         save_to(&path, &chosen).unwrap();
@@ -213,6 +232,7 @@ mod tests {
         let path = scratch.join("settings.json");
 
         let chosen = Settings {
+            on_cartridge_insert: OnCartridgeInsert::AutoLaunchGame,
             default_filesystem: "btrfs".to_string(),
             // Every value here is the opposite of the default, so a field that
             // is silently dropped shows up as a mismatch rather than passing by
@@ -232,6 +252,7 @@ mod tests {
     #[test]
     fn a_fresh_install_writes_a_named_cartridge_and_ejects_it() {
         let fresh = Settings::default();
+        assert_eq!(fresh.on_cartridge_insert, OnCartridgeInsert::FocusUi);
         assert!(fresh.default_icon, "a cartridge should name itself");
         assert!(fresh.default_eject);
         assert!(fresh.default_register_steam);

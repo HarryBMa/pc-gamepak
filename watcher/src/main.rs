@@ -26,6 +26,8 @@ mod linux;
 mod log;
 #[cfg(not(windows))]
 mod mounts;
+mod notifications;
+mod settings;
 #[cfg(windows)]
 mod tray;
 
@@ -225,7 +227,7 @@ mod windows_watcher {
                     if (*header).dbch_devicetype == DBT_DEVTYP_VOLUME {
                         let volume = lparam as *const DevBroadcastVolume;
                         for letter in letters_from_mask((*volume).dbcv_unitmask) {
-                            on_volume_arrived(letter);
+                            on_volume_arrived(hwnd, letter);
                         }
                     }
                 }
@@ -371,7 +373,7 @@ mod windows_watcher {
             .collect()
     }
 
-    fn on_volume_arrived(letter: char) {
+    fn on_volume_arrived(hwnd: HWND, letter: char) {
         let now = Instant::now();
 
         {
@@ -402,8 +404,30 @@ mod windows_watcher {
             seen.insert(letter, now);
         }
 
-        if crate::launcher::open(&root).is_some() {
-            crate::log::line(&format!("{letter}: opened the launcher"));
+        let action = crate::settings::on_insert();
+        match action {
+            crate::settings::OnInsert::None => {
+                crate::log::line(&format!("{letter}: insert action disabled"));
+                return;
+            }
+            crate::settings::OnInsert::FocusUi => {
+                if crate::launcher::open(&root).is_some() {
+                    crate::log::line(&format!("{letter}: opened the launcher"));
+                }
+            }
+            crate::settings::OnInsert::AutoLaunchGame => {
+                if crate::launcher::auto_launch(&root) {
+                    crate::log::line(&format!("{letter}: auto-launch started"));
+                }
+            }
+            crate::settings::OnInsert::NotifyOnly => {
+                let body = format!("Cartridge ready on {letter}:");
+                if crate::notifications::cartridge_ready(hwnd, "PC GamePak", &body) {
+                    crate::log::line(&format!("{letter}: showed arrival notification"));
+                } else {
+                    crate::log::line(&format!("{letter}: could not show arrival notification"));
+                }
+            }
         }
 
         // Every cartridge already opts out of the OS running anything on its

@@ -547,6 +547,15 @@
         <p class="group">Defaults for a new cartridge</p>
         <div class="group__body">
           <label class="field">
+            <span class="field__label">When a cartridge is inserted</span>
+            <select id="set-on-insert">
+              <option value="focus_ui">Open the launcher</option>
+              <option value="auto_launch_game">Launch the game</option>
+              <option value="notify_only">Show a notification</option>
+              <option value="none">Do nothing</option>
+            </select>
+          </label>
+          <label class="field">
             <span class="field__label">Filesystem</span>
             <select id="set-filesystem">
               <option value="exfat">exFAT</option>

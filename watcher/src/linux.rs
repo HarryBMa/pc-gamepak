@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 use crate::launcher;
 use crate::log;
 use crate::mounts::{self, Mount};
+use crate::{notifications, settings};
 
 /// The same drive arriving twice in quick succession — a remount, or a desktop
 /// that mounts and immediately re-mounts — should open one window, not two.
@@ -154,8 +155,24 @@ pub fn run() -> ! {
             }
             recent.insert(arrived.clone(), now);
             log::line(&format!("cartridge detected at {}", arrived.display()));
-            if let Some(child) = launcher::open(&arrived) {
-                open.insert(arrived.clone(), child);
+            match settings::on_insert() {
+                settings::OnInsert::None => {
+                    log::line("insert action disabled");
+                }
+                settings::OnInsert::FocusUi => {
+                    if let Some(child) = launcher::open(&arrived) {
+                        open.insert(arrived.clone(), child);
+                    }
+                }
+                settings::OnInsert::AutoLaunchGame => {
+                    launcher::auto_launch(&arrived);
+                }
+                settings::OnInsert::NotifyOnly => {
+                    let body = format!("Cartridge ready at {}", arrived.display());
+                    if !notifications::cartridge_ready("PC GamePak", &body) {
+                        log::line("could not show arrival notification");
+                    }
+                }
             }
         }
 

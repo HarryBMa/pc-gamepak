@@ -184,6 +184,7 @@ const el = {
   setSgdb: $("set-sgdb"),
   sgdbKeyField: $("sgdb-key-field"),
   setSgdbKey: $("set-sgdb-key"),
+  setOnInsert: $("set-on-insert"),
   setFilesystem: $("set-filesystem"),
   setCopy: $("set-copy"),
   setVerify: $("set-verify"),
@@ -2164,6 +2165,7 @@ function applySettings() {
   el.setSgdb.checked = Boolean(settings.steamgriddbEnabled);
   el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
+  el.setOnInsert.value = settings.onCartridgeInsert ?? "focus_ui";
   el.setFilesystem.value = settings.defaultFilesystem ?? "exfat";
   el.setVerify.checked = Boolean(settings.defaultVerify);
   el.setIcon.checked = settings.defaultIcon !== false;
@@ -2317,6 +2319,7 @@ async function saveSettings() {
       settings: {
         steamgriddbEnabled: el.setSgdb.checked,
         steamgriddbApiKey: el.setSgdbKey.value.trim(),
+        onCartridgeInsert: el.setOnInsert.value,
         defaultFilesystem: el.setFilesystem.value,
         defaultVerify: el.setVerify.checked,
         defaultIcon: el.setIcon.checked,
@@ -2839,7 +2842,11 @@ async function demoInvoke(command, args) {
       ] };
     case "get_settings":
       // The preview mirrors a fresh install: offline until switched on.
-      return { steamgriddbEnabled: false, steamgriddbApiKey: "" };
+      return {
+        steamgriddbEnabled: false,
+        steamgriddbApiKey: "",
+        onCartridgeInsert: "focus_ui",
+      };
     case "set_settings":
       return args.settings;
     case "suggest_collection_name": {

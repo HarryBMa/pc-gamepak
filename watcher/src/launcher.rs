@@ -14,14 +14,27 @@ use crate::log;
 ///
 /// Not waited on: the launcher outlives the wake that started it.
 pub fn open(path: &Path) -> Option<Child> {
+    spawn(path, false)
+}
+
+/// Launch the cartridge's configured game without opening the UI.
+pub fn auto_launch(path: &Path) -> bool {
+    spawn(path, true).is_some()
+}
+
+fn spawn(path: &Path, auto_launch: bool) -> Option<Child> {
     let Some(launcher) = installed_at() else {
         log::line("pc-gamepak is not installed anywhere I can find it");
         return None;
     };
 
     let mut command = Command::new(&launcher);
+    if auto_launch {
+        command.arg("--auto-launch");
+    } else {
+        command.arg("--drive");
+    }
     command
-        .arg("--drive")
         .arg(path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -29,11 +42,26 @@ pub fn open(path: &Path) -> Option<Child> {
 
     match command.spawn() {
         Ok(child) => {
-            log::line(&format!("launcher started, pid {}", child.id()));
+            log::line(&format!(
+                "{} started, pid {}",
+                if auto_launch {
+                    "auto-launch helper"
+                } else {
+                    "launcher"
+                },
+                child.id()
+            ));
             Some(child)
         }
         Err(e) => {
-            log::line(&format!("could not start the launcher: {e}"));
+            log::line(&format!(
+                "could not start the {}: {e}",
+                if auto_launch {
+                    "auto-launch helper"
+                } else {
+                    "launcher"
+                }
+            ));
             None
         }
     }

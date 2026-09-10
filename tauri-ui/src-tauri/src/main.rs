@@ -4,6 +4,7 @@
 //
 //   pc-gamepak --drive <path>    the popup, opened on insert
 //   pc-gamepak --create          the create-cartridge wizard
+//   pc-gamepak --auto-launch <path> launch the cartridge's primary game and exit
 //
 // Exactly one window is built, so the wizard costs nothing when a cartridge is
 // inserted and the popup costs nothing while making one.
@@ -160,6 +161,14 @@ fn open_uri(uri: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
         Ok(())
     }
+}
+
+fn auto_launch_drive(drive_path: &str) -> Result<(), String> {
+    let cartridge = cartridge::read_cartridge_info(drive_path)?;
+    if cartridge.executable.trim().is_empty() {
+        return Err("No executable configured for this cartridge".into());
+    }
+    launch_game(cartridge.executable, drive_path.to_string())
 }
 
 /// Take the keyboard, not just the front of the screen.
@@ -1428,6 +1437,14 @@ fn main() {
     if let Some(index) = args.iter().position(|arg| arg == "--eject") {
         let drive = args.get(index + 1).cloned().unwrap_or_default();
         std::process::exit(run_elevated_eject(&drive) as i32);
+    }
+    if let Some(index) = args.iter().position(|arg| arg == "--auto-launch") {
+        let drive = args.get(index + 1).cloned().unwrap_or_default();
+        if let Err(error) = auto_launch_drive(&drive) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
     }
     let settings = args.iter().any(|arg| arg == "--settings");
     let wizard = settings || args.iter().any(|arg| arg == "--create");
