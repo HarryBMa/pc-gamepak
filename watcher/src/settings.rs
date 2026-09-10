@@ -49,7 +49,9 @@ fn settings_path() -> PathBuf {
     {
         if let Ok(local) = std::env::var("LOCALAPPDATA") {
             if !local.trim().is_empty() {
-                return PathBuf::from(local).join("PC-GamePak").join("settings.json");
+                return PathBuf::from(local)
+                    .join("PC-GamePak")
+                    .join("settings.json");
             }
         }
         PathBuf::from("settings.json")

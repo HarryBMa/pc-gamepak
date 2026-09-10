@@ -7,7 +7,7 @@ pub fn cartridge_ready(
     body: &str,
 ) -> bool {
     use windows_sys::Win32::UI::Shell::{
-        NIIF_INFO, NIF_INFO, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW,
+        Shell_NotifyIconW, NIF_INFO, NIIF_INFO, NIM_MODIFY, NOTIFYICONDATAW,
     };
 
     let mut data: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
