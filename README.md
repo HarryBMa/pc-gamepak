@@ -137,6 +137,22 @@ executable=steam://rungameid/413150
 cover=cover.jpg
 ```
 
+Portable save sync is optional and lives alongside it in
+`.pc-gamepak/config.json`:
+
+```json
+{
+  "savePaths": [
+    "~/AppData/Roaming/StardewValley/Saves",
+    { "path": "~/Documents/My Games/Stardew Valley", "cartridgePath": "stardew/profile-2" }
+  ]
+}
+```
+
+On insert, PC GamePak syncs those saves with `.pc-gamepak/saves/` on the
+cartridge, preferring a symlink and falling back to copying when the OS will not
+link there.
+
 ## Build from source
 
 Needs [Rust](https://rustup.rs) and Node 18+. On Windows also the Visual Studio

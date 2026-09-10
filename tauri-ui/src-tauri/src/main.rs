@@ -120,21 +120,22 @@ fn launch_game(executable: String, drive_path: String) -> Result<(), String> {
             return Err(format!("Executable not found: {}", full_path.display()));
         }
         let mut child = {
-        #[cfg(target_os = "windows")]
-        {
-            Command::new(&full_path)
-                .current_dir(full_path.parent().unwrap_or(Path::new(".")))
-                .spawn()
-                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            Command::new("bash")
-                .arg(&full_path)
-                .current_dir(full_path.parent().unwrap_or(Path::new(".")))
-                .spawn()
-                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?
-        }};
+            #[cfg(target_os = "windows")]
+            {
+                Command::new(&full_path)
+                    .current_dir(full_path.parent().unwrap_or(Path::new(".")))
+                    .spawn()
+                    .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Command::new("bash")
+                    .arg(&full_path)
+                    .current_dir(full_path.parent().unwrap_or(Path::new(".")))
+                    .spawn()
+                    .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?
+            }
+        };
         wait_and_resync(child, drive_path);
         Ok(())
     }

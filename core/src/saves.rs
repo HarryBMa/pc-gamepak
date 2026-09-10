@@ -71,7 +71,7 @@ pub fn sync_cartridge(root: &Path) -> Result<SyncSummary, String> {
     Ok(summary)
 }
 
-pub fn configured_saves(root: &Path) -> Result<Vec<ResolvedSave>, String> {
+fn configured_saves(root: &Path) -> Result<Vec<ResolvedSave>, String> {
     let path = root.join(CONFIG_PATH);
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(Vec::new());
@@ -98,7 +98,11 @@ fn resolve_entry(root: &Path, entry: SaveEntry) -> Result<ResolvedSave, String> 
         return Err("save path in .pc-gamepak/config.json may not be empty".to_string());
     }
 
-    let relative = match raw_cartridge.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let relative = match raw_cartridge
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(path) => confined_relative(path)?,
         None => PathBuf::from(safe_component(name_for_save(&local))),
     };
@@ -205,7 +209,8 @@ fn expand_env_vars(raw: &str) -> String {
                     }
                 } else {
                     let mut end = i + 1;
-                    while end < chars.len() && (chars[end].is_ascii_alphanumeric() || chars[end] == '_')
+                    while end < chars.len()
+                        && (chars[end].is_ascii_alphanumeric() || chars[end] == '_')
                     {
                         end += 1;
                     }
@@ -403,7 +408,7 @@ fn should_copy(
 
     let source_time = modified(from_meta);
     let dest_time = modified(to_meta);
-    Ok(source_time > dest_time || to_meta.len() != from_meta.len())
+    Ok(source_time >= dest_time)
 }
 
 fn modified(meta: &std::fs::Metadata) -> SystemTime {
@@ -413,7 +418,8 @@ fn modified(meta: &std::fs::Metadata) -> SystemTime {
 fn files_match(a: &Path, b: &Path) -> Result<bool, String> {
     use std::io::Read;
 
-    let mut left = std::fs::File::open(a).map_err(|e| format!("could not read {}: {e}", a.display()))?;
+    let mut left =
+        std::fs::File::open(a).map_err(|e| format!("could not read {}: {e}", a.display()))?;
     let mut right =
         std::fs::File::open(b).map_err(|e| format!("could not read {}: {e}", b.display()))?;
     let mut left_buf = [0u8; 65_536];
@@ -491,9 +497,13 @@ fn try_link_file(link: &Path, target: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use crate::testutil::Scratch;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn reads_simple_and_named_save_entries() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
         let scratch = Scratch::new("saves-config");
         std::fs::create_dir_all(scratch.join(CONFIG_DIR)).unwrap();
         std::fs::write(
@@ -513,7 +523,10 @@ mod tests {
         let saves = configured_saves(scratch.path()).unwrap();
         assert_eq!(saves.len(), 2);
         assert_eq!(saves[0].local_path, scratch.join("home/My Game/Saves"));
-        assert_eq!(saves[0].cartridge_path, scratch.join(".pc-gamepak/saves/Saves"));
+        assert_eq!(
+            saves[0].cartridge_path,
+            scratch.join(".pc-gamepak/saves/Saves")
+        );
         assert_eq!(
             saves[1].cartridge_path,
             scratch.join(".pc-gamepak/saves/profiles/main")
@@ -536,6 +549,7 @@ mod tests {
 
     #[test]
     fn missing_local_directory_becomes_a_symlink_when_possible() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
         let scratch = Scratch::new("saves-link");
         std::env::set_var("HOME", scratch.join("home"));
         std::fs::create_dir_all(scratch.join(CONFIG_DIR)).unwrap();
@@ -555,6 +569,7 @@ mod tests {
 
     #[test]
     fn existing_local_save_is_copied_onto_the_cartridge() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
         let scratch = Scratch::new("saves-copy-to-cart");
         std::env::set_var("HOME", scratch.join("home"));
         let local = scratch.join("home/Game/Saves");
@@ -577,6 +592,7 @@ mod tests {
 
     #[test]
     fn cartridge_changes_are_copied_back_when_linking_is_not_possible() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
         let scratch = Scratch::new("saves-copy-back");
         std::env::set_var("HOME", scratch.join("home"));
         let local = scratch.join("home/Game/Saves");
