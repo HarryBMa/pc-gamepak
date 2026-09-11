@@ -449,7 +449,15 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
         )
     };
 
+    // The conf is rendered from scratch, which is how anything left from an
+    // earlier write goes away. Save declarations are the exception: nothing in
+    // this editor can write one, so a rewrite would drop the lines somebody
+    // typed in by hand and orphan the saves already on the drive.
     let conf_path = root.join("cartridge.conf");
+    let conf = match std::fs::read_to_string(&conf_path) {
+        Ok(previous) => crate::saves::preserve(&previous, &conf),
+        Err(_) => conf,
+    };
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
@@ -834,5 +842,30 @@ mod tests {
 
         let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
         assert!(conf.contains("steam://rungameid/367520"), "{conf}");
+    }
+
+    #[test]
+    fn renaming_a_cartridge_does_not_orphan_its_saves() {
+        // The editor renders cartridge.conf from scratch, and nothing in it
+        // can write a save line — so without care, renaming a cartridge would
+        // drop the declaration and leave the saves on the drive attached to
+        // nothing.
+        let scratch = Scratch::new("edit-keeps-saves");
+        scratch.write(
+            "cartridge.conf",
+            b"title=Old name\nexecutable=steam://rungameid/1\nsave=Saves|{appdata}/Foo/Saves\n",
+        );
+
+        update_at(
+            scratch.path(),
+            &request("New name", &[("New name", "steam://rungameid/1")]),
+        )
+        .expect("update");
+
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).expect("read back");
+        assert!(conf.contains("title=New name"), "{conf}");
+        assert!(conf.contains("save=Saves|{appdata}/Foo/Saves"), "{conf}");
+        // And the declaration still parses against the renamed cartridge.
+        assert_eq!(crate::saves::declared(scratch.path()).len(), 1);
     }
 }

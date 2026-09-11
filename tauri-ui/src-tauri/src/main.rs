@@ -17,6 +17,12 @@
 //   cartridge_health(drive_path)             -> Health
 //   read_cartridge_for_edit(drive_path)      -> Editable
 //   update_cartridge(request)                -> UpdateResult
+//   cartridge_stats(drive_path)              -> Stats  (launches and hours,
+//                                               read from the cartridge)
+//   save_slots(drive_path)                   -> Vec<SlotStatus>
+//   sync_saves(drive_path)                   -> Vec<SyncOutcome>  (on insert)
+//   push_saves(drive_path)                   -> Vec<SyncOutcome>  (on eject)
+//   resolve_save_conflict(drive_path, slot_id, keep) -> SyncOutcome
 //   open_wizard_settings()                   -> ()  (opens/focuses the
 //                                               wizard, straight to Settings)
 //
@@ -54,10 +60,12 @@
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
-use gamepak_core::{create, drives, edit, format, health, settings, sgdb, tuning};
+use gamepak_core::{create, drives, edit, format, health, saves, settings, sgdb, stats, tuning};
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
@@ -90,10 +98,19 @@ fn drive_path() -> String {
 /// `executable` can be a URI (steam://, heroic://, ...) or a path relative
 /// to `drive_path`.
 #[tauri::command]
-fn launch_game(executable: String, drive_path: String) -> Result<(), String> {
+fn launch_game(
+    executable: String,
+    drive_path: String,
+    title: Option<String>,
+) -> Result<(), String> {
     if executable.is_empty() {
         return Err("No executable configured for this cartridge".into());
     }
+
+    // Before the game starts, and before anything that can fail. A launch that
+    // is never counted is a missing row in a stats file; a launch that fails
+    // because a stats file could not be written is a broken launcher.
+    count_the_launch(&drive_path, &executable, title.unwrap_or_default());
 
     let known_schemes = [
         "steam://",
@@ -160,6 +177,144 @@ fn open_uri(uri: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
         Ok(())
     }
+}
+
+// --------------------------------------------------------------------------
+// What the cartridge remembers: hours played, and saves
+// --------------------------------------------------------------------------
+
+/// Sessions opened by `launch_game` and not yet closed.
+///
+/// Keyed the way the stats file is keyed, so the window can close a session by
+/// naming the game it started rather than holding a handle it would have to
+/// serialise. At most a handful of entries — one per Play — and they live
+/// only as long as the launcher window does.
+fn playing() -> &'static Mutex<HashMap<String, stats::Session>> {
+    static PLAYING: OnceLock<Mutex<HashMap<String, stats::Session>>> = OnceLock::new();
+    PLAYING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Count a launch, if the user has left that switched on.
+///
+/// The title comes from the window rather than being re-read here. It is only
+/// decoration inside the stats file — the `executable` is what keys a row —
+/// and reading it back off the drive would mean parsing the whole cartridge,
+/// covers inlined as `data:` URIs and all, on every press of Play.
+///
+/// Every failure here is swallowed into the debug log on purpose: a read-only
+/// cartridge, a full drive, or a `.gamepak` directory somebody made read-only
+/// are all reasons not to have a count, and none of them is a reason not to
+/// play the game.
+fn count_the_launch(drive_path: &str, executable: &str, title: String) {
+    if !settings::load().track_playtime {
+        return;
+    }
+
+    // Pressing Play on a second game means the first one is over. Without
+    // this both sessions stay open until the window closes and both are
+    // credited with the whole evening, which is worse than counting nothing.
+    end_every_session();
+
+    match stats::record_launch(Path::new(drive_path), executable, &title) {
+        Ok(session) => {
+            if let Ok(mut open) = playing().lock() {
+                open.insert(stats::key_for(executable), session);
+            }
+        }
+        Err(why) => debug_log(format!("stats: {why}")),
+    }
+}
+
+/// Everything this cartridge has recorded, for the details sheet.
+#[tauri::command]
+fn cartridge_stats(drive_path: String) -> stats::Stats {
+    stats::read(Path::new(&drive_path))
+}
+
+/// Close every open session and add its hours.
+///
+/// Called when the launcher window goes away, when the cartridge is ejected,
+/// and when a second game is started. The launcher does not own the game's
+/// process — on Steam it is not even a descendant of ours — so the window's
+/// own lifetime is the honest bound on what can be measured here. Watching
+/// the process itself is Phase 4's job.
+fn end_every_session() {
+    let Ok(mut open) = playing().lock() else {
+        return;
+    };
+    for (_, session) in open.drain() {
+        if let Err(why) = stats::record_session_end(&session) {
+            debug_log(format!("stats: {why}"));
+        }
+    }
+}
+
+/// What the cartridge declares, resolved against this machine.
+///
+/// Read-only, and callable whether or not syncing is switched on: the details
+/// sheet shows what a cartridge *would* sync, which is how somebody decides
+/// whether to turn it on.
+#[tauri::command]
+fn save_slots(drive_path: String) -> Vec<saves::SlotStatus> {
+    saves::status(Path::new(&drive_path))
+}
+
+/// Reconcile the cartridge's saves with this machine's, on insert.
+#[tauri::command]
+fn sync_saves(drive_path: String) -> Result<Vec<saves::SyncOutcome>, String> {
+    if !settings::load().save_sync {
+        return Ok(Vec::new());
+    }
+    Ok(collect(saves::attach_all(Path::new(&drive_path))))
+}
+
+/// The same, on the way out.
+#[tauri::command]
+fn push_saves(drive_path: String) -> Result<Vec<saves::SyncOutcome>, String> {
+    if !settings::load().save_sync {
+        return Ok(Vec::new());
+    }
+    Ok(collect(saves::detach_all(Path::new(&drive_path))))
+}
+
+/// Settle a conflict the way the user chose.
+///
+/// `keep` is `"host"` or `"cartridge"` — which copy to keep, not which to
+/// throw away, because that is the question somebody is actually answering.
+/// The other one is moved aside and kept regardless.
+#[tauri::command]
+fn resolve_save_conflict(
+    drive_path: String,
+    slot_id: String,
+    keep: String,
+) -> Result<saves::SyncOutcome, String> {
+    let root = Path::new(&drive_path);
+    let mut status = saves::status(root)
+        .into_iter()
+        .find(|status| status.slot.id == slot_id)
+        .ok_or_else(|| format!("no save slot called {slot_id} on this cartridge"))?;
+
+    status.direction = match keep.as_str() {
+        "host" => saves::Direction::Push,
+        "cartridge" => saves::Direction::Pull,
+        other => return Err(format!("keep must be host or cartridge, not {other}")),
+    };
+    saves::sync_slot(root, &status)
+}
+
+/// Report what worked and log what did not, rather than failing the lot.
+///
+/// One unwritable save directory must not stop the other three from arriving,
+/// and the window has nothing useful to do with a half-failure anyway.
+fn collect(results: Vec<Result<saves::SyncOutcome, String>>) -> Vec<saves::SyncOutcome> {
+    let mut done = Vec::new();
+    for result in results {
+        match result {
+            Ok(outcome) => done.push(outcome),
+            Err(why) => debug_log(format!("saves: {why}")),
+        }
+    }
+    done
 }
 
 /// Take the keyboard, not just the front of the screen.
@@ -316,6 +471,15 @@ fn eject_drive(drive_path: String) -> Result<(), String> {
             "This cartridge is not on a removable drive, so there is nothing to eject.".to_string(),
         );
     }
+
+    // Before the drive goes. This is the only moment a linked save can be
+    // turned back into a real directory, and the last moment a copied one can
+    // be written — after this the volume is gone and both are somebody's
+    // afternoon. Errors are logged rather than raised: a save that could not
+    // be written is not a reason to leave a drive mounted that the user has
+    // asked to remove, and holding the cartridge hostage over it is worse.
+    let _ = push_saves(drive_path.clone());
+    end_every_session();
 
     #[cfg(target_os = "windows")]
     {
@@ -1443,6 +1607,11 @@ fn main() {
             debug_logging,
             debug_log,
             can_eject,
+            cartridge_stats,
+            save_slots,
+            sync_saves,
+            push_saves,
+            resolve_save_conflict,
             list_games,
             game_cover,
             get_settings,
@@ -1495,7 +1664,19 @@ fn main() {
                         .visible(false)
                         .build()?;
                 round_dwm_corners(&launcher);
-                let _ = launcher; // keep the window alive and preserve the builder's side effects.
+                // The window closing is the last chance to add the hours to
+                // the drive. Play does not block — the game is a process we do
+                // not own — so the session is open from the click until the
+                // launcher goes away, which is the honest bound on what this
+                // can measure without watching processes.
+                launcher.on_window_event(|event| {
+                    if matches!(
+                        event,
+                        tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. }
+                    ) {
+                        end_every_session();
+                    }
+                });
             }
             Ok(())
         })

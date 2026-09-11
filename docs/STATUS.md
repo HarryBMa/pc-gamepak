@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 209 tests
+### `core/` — `gamepak-core`, 275 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -21,7 +21,9 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `playnite` | Reads a Playnite JSON library export: one list covering Steam, GOG, Epic, Xbox, itch, emulators. Finds Playnite on Windows and through Proton prefixes on Linux. |
 | `portable` | Ranks the executables in a copied game folder so Play points at the game rather than its uninstaller. |
 | `settings` | What the user has switched on, stored beside the artwork cache. Everything defaults to off. |
+| `saves` | Saves that travel with the cartridge. Reads `save=` lines whose paths are written as a `{token}` the host resolves — the three platforms disagree about where saves go — and reconciles the two copies against what *this machine* last saw of each, kept per host on the drive. Only the side that changed is copied; both changing is a conflict that writes nothing; whatever is about to be replaced is moved aside and kept. Symlink mode for people who want one copy rather than two. |
 | `sgdb` | SteamGridDB artwork search, download and cache. Refuses every request until the user opts in and supplies a key. |
+| `stats` | Launches, hours and last-played in `.gamepak/stats.json` on the drive, so the count follows the cartridge rather than the PC. The launch is written before the game starts, so a crash costs the hours and keeps the count. No write here can fail a launch. |
 | `steam` | Steam's own manifests: `libraryfolders.vdf`, `appmanifest_*.acf`, the library cache for covers. Hand-written KeyValues parser. |
 | `steamlib` | Copies a Steam game onto a cartridge and registers the drive as a Steam library, so Steam plays from the cartridge. Also unregisters one, and asks a running Steam to shut down so those edits survive its exit. |
 | `trim` | Tells the drive which blocks it no longer has to keep. Treats "this enclosure will not" as a fact, not a failure. |
@@ -33,7 +35,14 @@ the wizard make is testable on any machine, in CI, without a webview.
 
 `pc-gamepak --drive <path>` is the popup; `pc-gamepak --create` is the wizard.
 Exactly one window is ever built, so neither mode costs anything for the other.
-24 commands, no command that takes a path to read.
+44 commands, no command that takes a path to read.
+
+The launcher counts what it starts and, if asked to, carries the saves. Both
+are off the same principle: the cartridge is the thing that travels, so the
+history and the save belong on it. Counting is on — it writes one file, to the
+drive the user just pressed Play on. Syncing saves is **off** until switched on,
+because it is the one thing here that writes to a directory in the user's home
+on the say-so of a file on a drive.
 
 **Launcher** — the artwork fills a 420 × 560 window, which is the slot the
 cartridge is seated in: Eject rides the whole face out and leaves the slot
@@ -164,7 +173,10 @@ Ranked by how much it matters.
    wizard offers to check a cartridge that is sitting in front of you, which is
    where someone would actually look for it.
 7. **Windows code signing.** Unsigned means SmartScreen on every download.
-8. **macOS** is not supported at all — no watcher, no installer, no icons.
+8. **macOS** is not supported at all — no watcher, no installer, no icons. The
+   save-path tokens resolve for it (`~/Library/Application Support`,
+   `~/Library/Preferences`), which is the only part of the platform that has
+   been written.
 9. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
    pointed at both as the way to install, and neither has ever been in the
    repository — `linux/install.sh`, `linux/install-user.sh` and
@@ -172,7 +184,13 @@ Ranked by how much it matters.
    `shell scripts` job still globs `./*.sh` expecting them, which is why that
    job is red on `main`: either write the wrappers, or narrow the glob to
    `linux/*.sh`.
-10. **The settings the design asks for that no command answers.** Per-source
+10. **Saves and hours have never met a second machine.** The round trip is
+   tested — play on A, carry to B, play, carry back — but in one process with
+   two scratch directories standing in for two PCs, which is not the same as a
+   Deck and a desktop disagreeing about a clock. The conflict path is the one
+   to watch: it is meant to refuse, and a refusal nobody notices is a feature
+   that quietly does nothing.
+11. **The settings the design asks for that no command answers.** Per-source
    toggles with game counts, the artwork cache's size and an Empty button, a
    copy-speed default, and the launcher-on-the-cartridge options are all drawn
    in the design and absent here. The dialog is grouped the way the design asks

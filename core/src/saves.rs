@@ -515,6 +515,149 @@ fn slugify(label: &str) -> String {
     }
 }
 
+/// Carry a cartridge's save declarations across a rewrite of its `cartridge.conf`.
+///
+/// The wizard's editor renders the conf from scratch — that is how it drops
+/// whatever was left over from an earlier write — which would also drop every
+/// `save=` line somebody typed in by hand, and with it the cartridge's link to
+/// the saves already sitting in `.gamepak/saves/`. Renaming a cartridge would
+/// quietly orphan them.
+///
+/// So the declarations are lifted out of the old text and put back into the
+/// new one, in the section they belong to. A `[game]` section is matched by its
+/// `executable`, not by its position: the editor exists partly to reorder
+/// games, and a line that followed the wrong one would point a game at another
+/// game's saves.
+///
+/// Lines are re-emitted verbatim. Anything for a game that is no longer on the
+/// cartridge is dropped, which is the right answer — the game is gone.
+pub fn preserve(old: &str, new: &str) -> String {
+    let mut carried: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (owner, line) in declaration_lines(old) {
+        carried.entry(owner).or_default().push(line);
+    }
+    if carried.is_empty() {
+        return new.to_string();
+    }
+
+    let mut out = String::new();
+    for block in blocks(new) {
+        let owner = owner_of(&block);
+        let carried_here = carried.get(&owner).cloned().unwrap_or_default();
+        if carried_here.is_empty() {
+            out.push_str(&block);
+            continue;
+        }
+        // After the section's own keys, before the blank line that ends it, so
+        // the result reads the way a hand-written conf does — and so the next
+        // `[game]` is still separated from this one.
+        let trimmed = block.trim_end_matches('\n');
+        let stripped = block.len() - trimmed.len();
+        out.push_str(trimmed);
+        out.push('\n');
+        for line in carried_here {
+            out.push_str(&line);
+            out.push('\n');
+        }
+        // One of the stripped newlines has just been put back by the line
+        // above; the rest were the blank line between sections. A final block
+        // with no newline at all gains one, which a conf should have anyway.
+        for _ in 1..stripped {
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// The save lines in a conf, each with the owner it belongs to.
+///
+/// The owner is a `[game]` section's executable key, or the empty string for
+/// anything outside one — which is where `savemode` always lives and where a
+/// single-game cartridge's `save=` lines live too.
+fn declaration_lines(conf: &str) -> Vec<(String, String)> {
+    let mut found: Vec<(usize, String)> = Vec::new();
+    let mut owner_of_section: BTreeMap<usize, String> = BTreeMap::new();
+    let mut section = 0usize;
+    let mut in_game = false;
+
+    for raw in conf.lines() {
+        let line = raw.trim();
+        if line.starts_with('[') {
+            if let Some(end) = line.find(']') {
+                let name = line[1..end].trim().to_lowercase();
+                in_game = name == "game";
+                if in_game {
+                    section += 1;
+                }
+            }
+            continue;
+        }
+        let Some(eq) = line.find('=') else { continue };
+        let key = line[..eq].trim().to_lowercase();
+        let index = if in_game { section } else { 0 };
+        if key == "executable" || key == "open" {
+            owner_of_section.insert(index, crate::stats::key_for(line[eq + 1..].trim()));
+            continue;
+        }
+        if key == "savemode" || key == "save" || key.starts_with("save.") {
+            // A cartridge-wide key even when it is written inside a section.
+            let index = if key == "savemode" { 0 } else { index };
+            found.push((index, raw.trim_end().to_string()));
+        }
+    }
+
+    found
+        .into_iter()
+        .map(|(index, line)| {
+            let owner = if index == 0 {
+                String::new()
+            } else {
+                owner_of_section.get(&index).cloned().unwrap_or_default()
+            };
+            (owner, line)
+        })
+        .collect()
+}
+
+/// Split a conf into its sections, each keeping its own trailing blank lines.
+fn blocks(conf: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for line in conf.split_inclusive('\n') {
+        if line.trim_start().starts_with('[') && !current.trim().is_empty() {
+            out.push(std::mem::take(&mut current));
+        }
+        current.push_str(line);
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
+}
+
+/// Which owner a rendered section belongs to, by the same rule.
+fn owner_of(block: &str) -> String {
+    let is_game = block
+        .lines()
+        .find(|line| line.trim_start().starts_with('['))
+        .map(|line| line.trim().to_lowercase().starts_with("[game"))
+        .unwrap_or(false);
+    if !is_game {
+        return String::new();
+    }
+    for line in block.lines() {
+        let line = line.trim();
+        let Some(eq) = line.find('=') else { continue };
+        if matches!(
+            line[..eq].trim().to_lowercase().as_str(),
+            "executable" | "open"
+        ) {
+            return crate::stats::key_for(line[eq + 1..].trim());
+        }
+    }
+    String::new()
+}
+
 // --------------------------------------------------------------------------
 // The sync index
 // --------------------------------------------------------------------------
@@ -1862,6 +2005,71 @@ mod tests {
                 "untouched"
             );
         });
+    }
+
+    // ---- surviving a rewrite --------------------------------------------
+
+    #[test]
+    fn a_rewrite_keeps_a_hand_written_save_line() {
+        let old = "title=Old name\nexecutable=steam://rungameid/1\nsave=Saves|{appdata}/Foo\n";
+        let new = "title=New name\nexecutable=steam://rungameid/1\ncover=.gamepak/cover.png\n";
+        let kept = preserve(old, new);
+        assert!(kept.contains("save=Saves|{appdata}/Foo"), "{kept}");
+        assert!(kept.contains("title=New name"), "{kept}");
+        assert!(!kept.contains("Old name"), "{kept}");
+    }
+
+    #[test]
+    fn the_mode_is_kept_too() {
+        let kept = preserve(
+            "savemode=link\nsave={appdata}/A/S\n",
+            "title=X\nexecutable=x://1\n",
+        );
+        assert!(kept.contains("savemode=link"), "{kept}");
+    }
+
+    #[test]
+    fn a_reordered_bundle_keeps_each_line_with_its_own_game() {
+        // The editor exists partly to reorder games. A line that stayed at its
+        // old index would point a game at another game's saves.
+        let old = "[collection]\ntitle=Two\n\n                   [game]\ntitle=A\nexecutable=steam://rungameid/1\nsave=A|{appdata}/A\n\n                   [game]\ntitle=B\nexecutable=steam://rungameid/2\nsave=B|{appdata}/B\n";
+        let new = "[collection]\ntitle=Two\n\n                   [game]\ntitle=B\nexecutable=steam://rungameid/2\n\n                   [game]\ntitle=A\nexecutable=steam://rungameid/1\n";
+
+        let slots = parse_declarations(&preserve(old, new));
+        assert_eq!(slots.len(), 2);
+        assert_eq!(
+            slots[0].label, "B",
+            "the rail was reordered, so B comes first"
+        );
+        assert_eq!(slots[0].game.as_deref(), Some("steam://rungameid/2"));
+        assert_eq!(slots[1].label, "A");
+        assert_eq!(slots[1].game.as_deref(), Some("steam://rungameid/1"));
+    }
+
+    #[test]
+    fn a_game_taken_off_the_cartridge_takes_its_line_with_it() {
+        let old = "[collection]\ntitle=Two\n\n                   [game]\ntitle=A\nexecutable=steam://rungameid/1\nsave=A|{appdata}/A\n\n                   [game]\ntitle=B\nexecutable=steam://rungameid/2\nsave=B|{appdata}/B\n";
+        let new = "[collection]\ntitle=Two\n\n                   [game]\ntitle=A\nexecutable=steam://rungameid/1\n";
+
+        let slots = parse_declarations(&preserve(old, new));
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].label, "A");
+    }
+
+    #[test]
+    fn a_conf_with_nothing_to_carry_is_returned_unchanged() {
+        let new = "title=X\nexecutable=x://1\n";
+        assert_eq!(preserve("title=Old\nexecutable=x://1\n", new), new);
+    }
+
+    #[test]
+    fn the_blank_line_between_sections_survives() {
+        let old = "[collection]\ntitle=T\n\n[game]\nexecutable=x://1\nsave=A|{appdata}/A\n";
+        let new = "[collection]\ntitle=T\n\n[game]\nexecutable=x://1\n\n[game]\nexecutable=x://2\n";
+        let kept = preserve(old, new);
+        // Two game sections still, not one run together.
+        assert_eq!(kept.matches("[game]").count(), 2, "{kept}");
+        assert!(kept.contains("save=A|{appdata}/A\n\n[game]"), "{kept}");
     }
 
     #[test]

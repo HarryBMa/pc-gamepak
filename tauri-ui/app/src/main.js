@@ -6,13 +6,16 @@
  *
  * Backend contract (src-tauri/src/main.rs):
  *   parse_cartridge({ drivePath })            -> { title, cover, cover_path, background, logo, executable, drive_path }
- *   launch_game({ executable, drivePath })    -> ()
+ *   launch_game({ executable, drivePath, title }) -> ()
  *   eject_drive({ drivePath })                -> ()
  *   focus_window()                            -> ()
  *   debug_logging() / debug_log(line)         -> diagnostics, off by default
  *   get_settings() / set_settings(settings)   -> Settings
  *   can_eject({ drivePath })                  -> bool
  *   cartridge_health({ drivePath })           -> { link, transport, label, filesystem, usedPercent, warnings[] }
+ *   cartridge_stats({ drivePath })            -> { games: { key: { launches, seconds, lastPlayed, … } } }
+ *   sync_saves({ drivePath })                 -> SyncOutcome[]  (empty when off)
+ *   save_slots({ drivePath })                 -> SlotStatus[]
  *
  * `cover` arrives as a data URI already. There is no command that takes a path
  * to read, so the webview cannot ask the backend for arbitrary files.
@@ -653,6 +656,10 @@ function select(index) {
 
   const row = el.gameList.querySelector(`.game-row[data-index="${index}"]`);
 
+  // The sheet's Played row is about the selected game, so it moves with the
+  // rail rather than staying on whatever was picked when the sheet was drawn.
+  if (cartridge) renderSpecs(cartridge);
+
   // Focus follows the selection whenever it is already in the list. A row
   // clicked with the mouse keeps the focus ring, so arrowing away from it left
   // two rows lit in two different styles — the ring on the clicked one and the
@@ -1066,6 +1073,14 @@ async function init() {
     el.cartMark.hidden = false;
   }
   renderIdentity(cartridge);
+  try {
+    played = (await invoke("cartridge_stats", { drivePath }))?.games ?? {};
+  } catch (error) {
+    // An older backend, or a cartridge whose stats file will not read. The
+    // sheet is worth drawing either way.
+    debugLog(`stats: ${error}`);
+    played = {};
+  }
   renderSpecs(cartridge);
   renderPaths(cartridge);
 
@@ -1097,14 +1112,107 @@ async function init() {
   setBusy(false);
   await showWindow();
   seat();
+  // After the window, deliberately. Copying a save directory takes as long as
+  // it takes, and the cartridge should be on screen while it happens rather
+  // than the launcher sitting blank behind a file copy nobody can see.
+  await syncSaves(drivePath);
   // Only now is there something to point at: with a pad connected the cursor
   // starts on Play.
 }
+
+/** What the cartridge remembers, keyed as the stats file keys it. */
+let played = {};
+/** One line about the saves, once they have been looked at. */
+let saveNote = "";
 
 function renderSpecs(info) {
   el.specs.replaceChildren();
   const list = info.games ?? [];
   if (list.length > 1) specRow(el.specs, "Games", String(list.length));
+  renderPlayed(info);
+  if (saveNote) specRow(el.specs, "Saves", saveNote);
+}
+
+/**
+ * How often this cartridge has been played, and where.
+ *
+ * Read from the drive rather than from this machine, which is the only reason
+ * it is worth showing: Steam already knows how long you have played on *this*
+ * PC. A cartridge with no history yet gets no row, because "0 launches" is a
+ * line of furniture rather than a fact anyone wanted.
+ */
+function renderPlayed(info) {
+  const entry = played[keyFor(currentGame()?.executable ?? info.executable ?? "")];
+  if (!entry || !entry.launches) return;
+
+  const parts = [];
+  if (entry.seconds >= 60) parts.push(duration(entry.seconds));
+  parts.push(`${entry.launches} ${entry.launches === 1 ? "launch" : "launches"}`);
+  specRow(el.specs, "Played", parts.join(" · "));
+
+  if (entry.lastPlayed) {
+    const where = entry.lastHost ? ` on ${entry.lastHost}` : "";
+    specRow(el.specs, "Last played", `${since(entry.lastPlayed)}${where}`, true);
+  }
+}
+
+/** Hours and minutes, never seconds: nobody reads a playtime to the second. */
+function duration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+  if (!hours) return `${minutes} min`;
+  return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
+}
+
+/** A rough distance in the past, which is all anybody wants from this. */
+function since(unix) {
+  const days = Math.floor((Date.now() / 1000 - unix) / 86400);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return new Date(unix * 1000).toLocaleDateString();
+}
+
+/**
+ * The same key the stats file uses, so a row written on Windows is found on
+ * Linux. Kept in step with `stats::key_for` in core: separators normalised,
+ * and case folded for URIs only.
+ */
+function keyFor(executable) {
+  const trimmed = String(executable ?? "").trim().replaceAll("\\", "/");
+  return /^[a-z][a-z0-9+.-]+:\/\//i.test(trimmed) ? trimmed.toLowerCase() : trimmed;
+}
+
+/**
+ * Reconcile the saves, and say so only when there is something to say.
+ *
+ * The backend answers with an empty list when the user has not switched
+ * syncing on, so this costs one call and draws nothing in that case. A
+ * conflict is the exception: it is the one outcome where the launcher did
+ * *not* do the thing the user asked for, and finding that out later — from a
+ * save that is three sessions old — is exactly what this feature exists to
+ * prevent.
+ */
+async function syncSaves(drivePath) {
+  let slots = [];
+  try {
+    await invoke("sync_saves", { drivePath });
+    slots = (await invoke("save_slots", { drivePath })) ?? [];
+  } catch (error) {
+    debugLog(`saves: ${error}`);
+    return;
+  }
+  if (!slots.length) return;
+
+  const conflicts = slots.filter((slot) => slot.direction === "conflict");
+  const carried = slots.filter((slot) => slot.cartridgeBytes > 0).length;
+  saveNote = carried ? `${carried} on the cartridge` : "";
+  renderSpecs(cartridge);
+
+  if (conflicts.length) {
+    const names = conflicts.map((slot) => slot.slot.label).join(", ");
+    toast(`${names}: both copies changed, so neither was overwritten.`, true);
+  }
 }
 
 function showCover(src) {
@@ -1257,6 +1365,9 @@ async function doPlay() {
     await invoke("launch_game", {
       executable: game.executable,
       drivePath: cartridge.drive_path,
+      // Only decoration in the stats file, but reading it back off the drive
+      // would mean parsing the whole cartridge again to get it.
+      title: game.title ?? cartridge.title ?? "",
     });
     toast("Launched");
     // The game has the screen now. The launcher steps back to the taskbar
@@ -1524,6 +1635,46 @@ async function demoInvoke(command, args) {
       // A cartridge on a fixed path has no drive to unmount, so the button
       // should not be there.
       return !new URLSearchParams(location.search).has("fixed");
+    case "cartridge_stats":
+      // A cartridge that has been somewhere: the preview is the only place
+      // the Played rows can be looked at without a drive in hand.
+      return {
+        version: 1,
+        games: {
+          "steam://rungameid/310970": {
+            title: "God of War (2018)",
+            launches: 9,
+            seconds: 47_520,
+            firstPlayed: Math.floor(Date.now() / 1000) - 86_400 * 40,
+            lastPlayed: Math.floor(Date.now() / 1000) - 86_400 * 2,
+            lastHost: "deck",
+          },
+          "steam://rungameid/1091500": {
+            title: "Cyberpunk 2077",
+            launches: 3,
+            seconds: 9_300,
+            firstPlayed: Math.floor(Date.now() / 1000) - 86_400 * 9,
+            lastPlayed: Math.floor(Date.now() / 1000) - 86_400,
+            lastHost: "workshop",
+          },
+        },
+      };
+    case "sync_saves":
+      return [];
+    case "save_slots":
+      return [
+        {
+          slot: { id: "saves", label: "Saves", template: "{appdata}/Foo/Saves", mode: "copy" },
+          hostPath: "/home/you/.config/Foo/Saves",
+          direction: "inSync",
+          hostNewest: 0,
+          cartridgeNewest: 0,
+          hostBytes: 4096,
+          cartridgeBytes: 4096,
+          lastSync: 0,
+          detail: "",
+        },
+      ];
     case "cartridge_health":
       // The preview shows the case worth designing for: a link that is fine,
       // a transport that is not, and a drive with no room left.

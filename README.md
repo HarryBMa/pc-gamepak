@@ -62,6 +62,14 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   on a machine that has never heard of it.
 - **Steam-aware.** A cartridge registers as a Steam library so copied games run
   from the drive rather than being redownloaded.
+- **The cartridge counts its own hours.** Launches, playtime and last-played go
+  on the drive, not on the PC, so the count follows the cartridge between
+  machines.
+- **Saves that travel too**, optional and off until you turn it on. A cartridge
+  can say where its saves live — as `{appdata}/Foo/Saves`, resolved by whichever
+  platform reads it — and insert and eject carry whichever copy changed. If both
+  changed, neither is touched and the launcher says so; anything replaced is
+  kept beside it.
 - **Not an NFC project.** If you want to tap a card, a toy or a QR code to
   launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
   platforms and this does not do it at all.

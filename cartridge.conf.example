@@ -30,11 +30,60 @@
 #   If omitted, the launcher looks for cover.png, cover.jpg, poster.png or box.png
 #   at the root.
 #
+# save  (optional, repeatable)
+#   Where this game keeps its saves on the host, so they can travel with the
+#   cartridge. Written as
+#
+#     save=Label|{token}/rest/of/the/path
+#
+#   The label is optional; without one the last part of the path names it.
+#   Repeat the key for a game that keeps saves in more than one place.
+#
+#   The {token} is required and is the point: a save path cannot be written
+#   down literally, because the three platforms disagree about where it goes.
+#   Each token resolves on the host that reads it:
+#
+#     {home}          the user's home directory
+#     {documents}     Documents (the localised name, on Linux)
+#     {savedgames}    Saved Games
+#     {appdata}       Windows %APPDATA%    · macOS ~/Library/Application Support
+#                     · Linux $XDG_CONFIG_HOME (~/.config)
+#     {localappdata}  Windows %LOCALAPPDATA% · macOS ~/Library/Application Support
+#                     · Linux $XDG_DATA_HOME (~/.local/share)
+#     {appsupport}    as {localappdata}, named for the macOS case
+#     {prefs}         macOS ~/Library/Preferences · %APPDATA% · ~/.config
+#
+#   A path that resolves to a whole home, Documents or AppData directory is
+#   refused: a save declaration has to name one game's saves inside one of
+#   them, not the directory itself.
+#
+#   Where one platform genuinely differs — a Windows game whose saves are
+#   inside a Proton prefix, say — write a platform line as well. Where both
+#   exist, the platform one wins on that platform and the plain one covers the
+#   rest:
+#
+#     save=Saves|{appdata}/Foo/Saves
+#     save.linux=Saves|{home}/.steam/steam/steamapps/compatdata/1/pfx/Foo
+#
+#   Syncing is off until the user turns it on. When it is on, the two copies
+#   are compared against what this machine last saw of each; only the side
+#   that changed is copied, both changing is a conflict that writes nothing,
+#   and whatever is about to be replaced is moved aside and kept first.
+#
+# savemode  (optional, cartridge-wide)
+#   copy (the default) or link. `link` replaces the host's save directory with
+#   a symlink onto the cartridge, so there is only ever one copy. It is faster
+#   and exact, and it costs two things: Windows refuses symlinks to an
+#   unprivileged process unless Developer Mode is on, and a drive pulled
+#   without ejecting leaves the game's save directory dangling. Use copy
+#   unless you have a reason.
+#
 # ----- Example -----
 
 executable=steam://rungameid/1091500
 title=Cyberpunk 2077
 cover=cover.jpg
+save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
 
 # ----- More examples -----
 #
@@ -61,6 +110,9 @@ cover=cover.jpg
 #   title       - Game name shown in the game list (required)
 #   executable  - What Play should start for this game (required)
 #   cover       - Per-game thumbnail, relative to this file (optional)
+#   save        - Where that game keeps its saves (optional, repeatable).
+#                 Same form as above; a save line inside a [game] section
+#                 belongs to that game.
 #
 # ----- Bundle example -----
 #
@@ -77,6 +129,7 @@ cover=cover.jpg
 # title=God of War Ragnarök
 # executable=steam://rungameid/2322010
 # cover=cover_1.jpg
+# save=Ragnarök|{savedgames}/God of War Ragnarok
 #
 # Steam games are stored under steamapps/ as usual.
 # GOG / other games are stored under Games/<Title>/ for organisation.

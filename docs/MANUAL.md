@@ -116,6 +116,53 @@ what it just launched. A cartridge with one game on it has no rail at all.
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
 
+### Hours, and saves that travel
+
+A cartridge counts its own launches. `.gamepak/stats.json` on the drive holds
+how many times each game has been started, how long for, and when it was last
+played and on which machine — so the count follows the cartridge rather than
+staying on the PC that happened to play it. The launcher shows it under the ⓘ.
+The launch is written before the game starts, so a crash costs the hours and
+keeps the count; a cartridge that cannot be written to simply does not get one,
+and nothing about Play changes.
+
+The save is the harder half, and the one that makes a second machine feel like
+starting over. Steam Cloud covers the games that are in it and nothing covers a
+GOG game, an emulator, or a folder copied onto a drive by hand. A cartridge can
+say where its saves live:
+
+```ini
+executable=steam://rungameid/413150
+title=Stardew Valley
+save=Stardew Valley|{appdata}/StardewValley/Saves
+```
+
+`{appdata}` is the point: the three platforms disagree about where saves go, so
+a cartridge names a *role* and the host resolves it. The full list of tokens is
+in `cartridge.conf.example`.
+
+**It is off until you turn it on** — Settings → *Sync cartridge saves*.
+Everything else the launcher does on insert reads the cartridge; this writes to
+a directory in your home that a file on the drive named, which is a thing to
+opt into.
+
+When it is on, insert and eject each reconcile the two copies:
+
+| | |
+|---|---|
+| Only the host's copy changed | it goes to the cartridge |
+| Only the cartridge's changed | it comes to the host |
+| This machine has no copy at all | the cartridge's arrives |
+| **Both changed** | **nothing is written**, and the launcher says so |
+
+"Changed" is measured against what *this machine* last saw of each side, kept
+per host on the drive — so it means the same thing on a PC that synced an hour
+ago and a Deck that synced in March. Anything about to be replaced is moved
+aside first and kept, three deep, as `<name>.gamepak-backup-<time>` beside it.
+
+A conflict is refused rather than resolved. Picking a winner silently is how a
+save-sync tool eats an eighty-hour run.
+
 ### Skins
 
 A cartridge carries its own look, or it wears the stock one. Put a stylesheet at
@@ -789,6 +836,11 @@ CARTRIDGE/
 ├── cartridge.conf
 ├── cover.jpg
 ├── autorun.inf          drive name and icon in Explorer
+├── .gamepak/
+│   ├── stats.json       launches and hours, written by the launcher
+│   └── saves/           the saves, if the cartridge declares any
+│       ├── index.json   what each machine last saw
+│       └── stardew/
 ├── Games/               a copied non-Steam game
 │   └── Tunic/
 │       └── TUNIC.exe
@@ -796,6 +848,10 @@ CARTRIDGE/
     ├── appmanifest_367520.acf
     └── common/Hollow Knight/
 ```
+
+Everything under `.gamepak/` is written by the launcher, not by you — apart
+from `skin.css`, which is a cartridge's own. Deleting the directory loses the
+history and the carried saves and breaks nothing else.
 
 `executable=` takes any URI the OS can handle — `steam://`, `heroic://`, `gog://`,
 `epic://`, `playnite://`, `lutris://`, `http://`, `https://` — or a path to a file

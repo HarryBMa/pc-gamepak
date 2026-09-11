@@ -194,6 +194,8 @@ const el = {
   setTuneRow: $("set-tune-row"),
   setTrim: $("set-trim"),
   setCopyRate: $("set-copy-rate"),
+  setPlaytime: $("set-playtime"),
+  setSaveSync: $("set-save-sync"),
   settingsSave: $("settings-save"),
   settingsStatus: $("settings-status"),
 
@@ -2175,6 +2177,11 @@ function applySettings() {
   el.setTrim.checked = Boolean(settings.defaultTrim);
   el.setCopyRate.value = String(settings.defaultCopyRateMbS ?? 0);
   el.setFormat.checked = Boolean(settings.defaultFormat);
+  // On unless it has been switched off: it writes to the cartridge only, and
+  // only because Play was pressed.
+  el.setPlaytime.checked = settings.trackPlaytime !== false;
+  // Off unless it has been switched on: it writes to the user's home.
+  el.setSaveSync.checked = Boolean(settings.saveSync);
   // Tuning edits Defender and Search, which exist on one platform.
   el.setTuneRow.hidden = platform !== "windows";
   el.tuneNow.hidden = platform !== "windows";
@@ -2328,6 +2335,8 @@ async function saveSettings() {
         defaultTrim: el.setTrim.checked,
         defaultCopyRateMbS: Number(el.setCopyRate.value) || 0,
         defaultFormat: el.setFormat.checked,
+        trackPlaytime: el.setPlaytime.checked,
+        saveSync: el.setSaveSync.checked,
         gameFolderRoots: settings.gameFolderRoots ?? [],
       },
     });

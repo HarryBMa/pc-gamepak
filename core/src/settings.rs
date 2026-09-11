@@ -75,6 +75,26 @@ pub struct Settings {
     /// label to be sent back before it will touch a filesystem — this decides
     /// whether Create *offers* to format, never whether the gate applies.
     pub default_format: bool,
+
+    // ---- What the cartridge remembers ------------------------------------
+    /// Reconcile the save directories a cartridge declares, on insert and on
+    /// eject.
+    ///
+    /// **Off**, and the only one of the two that is. Everything else this
+    /// project does on insert reads the cartridge; this writes to a directory
+    /// in the user's home that they did not name, on the say-so of a file on a
+    /// drive. That is a thing to opt into, however carefully `saves` goes
+    /// about it.
+    pub save_sync: bool,
+    /// Keep launches, hours and last-played in `.gamepak/stats.json` on the
+    /// cartridge.
+    ///
+    /// **On.** It writes one small file, it writes it only to the drive the
+    /// user just pressed Play on, and a cartridge that cannot be written to
+    /// simply does not get one. The point of the feature is that the count
+    /// survives being carried to another machine, which a default of off would
+    /// quietly undo for everybody who never found the switch.
+    pub track_playtime: bool,
 }
 
 impl Default for Settings {
@@ -100,6 +120,8 @@ impl Default for Settings {
             // should not be slowed for a problem it does not have.
             default_copy_rate_mb_s: 0,
             default_format: false,
+            save_sync: false,
+            track_playtime: true,
         }
     }
 }
@@ -222,11 +244,23 @@ mod tests {
             default_eject: false,
             default_register_steam: false,
             default_format: true,
+            save_sync: true,
+            track_playtime: false,
             ..Settings::default()
         };
         save_to(&path, &chosen).unwrap();
 
         assert_eq!(load_from(&path), chosen);
+    }
+
+    #[test]
+    fn a_fresh_install_counts_hours_and_leaves_the_home_directory_alone() {
+        let fresh = Settings::default();
+        // The cartridge's own file, written only because Play was pressed.
+        assert!(fresh.track_playtime);
+        // A directory in the user's home, named by a file on somebody else's
+        // drive. That one is asked for.
+        assert!(!fresh.save_sync);
     }
 
     #[test]
