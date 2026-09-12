@@ -195,26 +195,36 @@ checksum names an artefact, so it cannot be written until the artefact exists.
    centres. `--set` leaves a `TODO` there rather than inheriting the last
    release's notes under a new number.
 4. Change the changelog heading from `unreleased` to the date.
-5. Merge to `main`. Tags belong on `main`, not on a branch.
+5. Run the `release` workflow by hand — Actions → release → Run workflow — and
+   give it the version. It builds and packages both platforms and stops before
+   publishing anything, which is the cheap way to find out that a file the
+   packaging step copies does not exist. That has happened twice: once a
+   PowerShell script that was never written failed the whole Windows job, and a
+   tag produced no Windows artefact at all.
+
+   The version has to be given as the input. The workflow used to take it from
+   the ref, so a dry run on a branch built a version named after the branch and
+   uploaded nothing — the one failure the dry run could not catch was its own.
+6. Merge to `main`. Tags belong on `main`, not on a branch.
 
 **The tag**
 
-6. `git tag v<version> && git push origin v<version>`. The workflow builds both
+7. `git tag v<version> && git push origin v<version>`. The workflow builds both
    platforms, computes the checksums, and creates the release **as a draft**.
    Look at it before publishing: a tag is cheap to delete before anyone has
    downloaded it and expensive afterwards.
 
 **After the artefacts exist**
 
-7. Put the real checksums where `SHA256-PENDING-RELEASE` is. They are in the
+8. Put the real checksums where `SHA256-PENDING-RELEASE` is. They are in the
    `.sha256` files the workflow uploads beside each artefact — the AUR one is of
    the source tarball GitHub generates for the tag, not of the release archive.
-8. `node tools/check-versions.mjs --release`. Same check, and it also fails on any
+9. `node tools/check-versions.mjs --release`. Same check, and it also fails on any
    remaining placeholder. Run it before submitting a manifest anywhere.
-9. **Scoop** needs nothing: `checkver` and `autoupdate` in
+10. **Scoop** needs nothing: `checkver` and `autoupdate` in
    [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket) read the
    `.sha256` themselves.
-10. **WinGet** via `wingetcreate` for a first submission, the `winget-releaser`
+11. **WinGet** via `wingetcreate` for a first submission, the `winget-releaser`
     action thereafter. **AUR** from the tarball with the real checksum — the
     plain name, since the `-git` suffix is what the AUR reserves for a package
     tracking a branch.

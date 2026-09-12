@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build (for a dry run; no release is published)"
-        required: false
+        description: "Version to build, e.g. v1.1.0 (a dry run; nothing is published)"
+        required: true
 
 permissions:
   contents: write
@@ -43,8 +43,24 @@ jobs:
       # The tarball is what someone untars and runs ./linux/install.sh from, and
       # what the AUR package builds against.
       - name: Package
+        env:
+          # Read through the environment rather than interpolated into the
+          # script, so a dispatch input cannot become shell.
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          # A tag push takes its version from the tag. A dry run has to take it
+          # from the input: GITHUB_REF_NAME is then a branch name, and a branch
+          # name here contains a slash, which turns the staging directory into a
+          # nested path and leaves the artefact glob below matching nothing.
+          # That is what the dry run existed to catch and could not.
+          ref="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          version="${ref#v}"
+          case "$version" in
+            "" | */* | *[[:space:]]*)
+              echo "::error::'$ref' is not a tag to build. Pass one as the input, e.g. v1.1.0."
+              exit 1
+              ;;
+          esac
           staging="pc-gamepak-${version}-linux-x86_64"
           mkdir -p "$staging"
           cp tauri-ui/src-tauri/target/release/pc-gamepak "$staging/"
@@ -83,8 +99,17 @@ jobs:
 
       - name: Package
         shell: pwsh
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          $version = "${env:GITHUB_REF_NAME}" -replace '^v', ''
+          # As in the linux job: the input is what makes a dry run build the
+          # version it says rather than the branch it ran from.
+          $ref = if ($env:INPUT_TAG) { $env:INPUT_TAG } else { $env:GITHUB_REF_NAME }
+          $version = $ref -replace '^v', ''
+          if ($version -eq '' -or $version -match '[/\s]') {
+            Write-Output "::error::'$ref' is not a tag to build. Pass one as the input, e.g. v1.1.0."
+            exit 1
+          }
           $staging = "pc-gamepak-$version-windows-x86_64"
           New-Item -ItemType Directory -Path $staging | Out-Null
           Copy-Item tauri-ui/src-tauri/target/release/pc-gamepak.exe $staging
