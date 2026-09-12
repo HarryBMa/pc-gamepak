@@ -1003,3 +1003,187 @@ against the published v0.1.0 artefact rather than in theory:
   manifest's `NestedInstallerFiles`; the hash matches a fresh download.
   `wingetcreate show` confirms the package is not yet in winget-pkgs, so the
   first submission goes through moderation.
+
+---
+
+## 2026-09-12 — 1.1.0 on hardware: first NTFS cartridge, insert detection
+
+`claude/pc-gamepak-architecture-8evhux` fast-forwarded into `main` (13 commits:
+saves, stats, insert actions, busy-check, shaders, front-end register, NTFS by
+default, 1.1.0). This is the first time any of it has run on Windows.
+
+### It did not build on Windows
+
+CI checks core on Linux only, so `busy.rs` — the Windows half of "what is
+holding this drive" — had never been compiled for the platform it is for.
+Fixed in `aa781dc`:
+
+| Fault | Effect |
+|---|---|
+| `Win32_System_Diagnostics_ToolHelp` and `Win32_System_Threading` missing from windows-sys features | core did not compile |
+| `.is_null()` on handles, which are `isize` in windows-sys 0.52 | core did not compile |
+| `Process32NextW` called without `Process32FirstW` | would have compiled into a process walk that returns nothing — "no one is holding the drive" with a game running from it |
+| `home` and `shaders` tests expected `a/b` where `Path::join` makes `a\b` | 2 of 343 tests failed |
+
+The third is the one worth remembering. It passes review, it passes type
+checking once the first two are fixed, and it is wrong in the direction that
+lets an eject proceed.
+
+After the fixes: core **343 passed**, watcher **6 passed**, clippy and fmt
+clean. `npm run build` produced `PC GamePak_1.1.0_x64-setup.exe` and the MSI.
+
+Open issue 1 is still open on this host: plain `cargo` resolves to the 1.87 MSI
+and fails. `rust-toolchain.toml` now pins **1.88.0**, and everything above ran
+with `%USERPROFILE%\.cargo\bin` first on PATH. (`core/Cargo.toml`'s comment on
+the `image` pin still says the toolchain file holds 1.87; it is stale.)
+
+### The host, since last time
+
+| Item | Value |
+|---|---|
+| Cartridge enclosure | Realtek RTL9210B-CG, 119.2 GB, **GPT**, found as empty NTFS `New Volume` (D:) |
+| Port | `Port_#0001.Hub_#0004` — the AMD chipset port recorded as clean on 2026-09-01 |
+| Host controller | **AMD USB 3.20 eXtensible Host Controller** (`VEN_1022&DEV_43FD`) — walked to, not inferred from the hub name |
+| Driver | `UASPStor` |
+| `TOMB RAIDER` | not connected; `bigfile.005.tiger` still unchecked |
+| C: free | **8.4 GB** of 930 GB — down from 23.3 GB |
+
+### Two old questions, answered by the code that is now here
+
+- **Open question 5 (the drive list offers internal disks): settled.**
+  `build-cart drives` offers exactly one drive, D:. B:, E: and F: are gone,
+  because `drives.rs` now asks each volume's disk for its `BusType` and keeps
+  USB. The cartridge is still found, which is the thing narrowing the filter
+  used to cost.
+- **The 44 unreachable games: reached.** `build-cart games` lists **86**, with
+  `Folder`, `Epic`, `Ubisoft`, `Blizzard` and `Xbox` sources beside Steam. The
+  Playnite problem is still reported in as many words, as fixed on 2026-08-20.
+
+### Phase 3 and 4 — FTL, NTFS — **PASS**
+
+Driven by `build-cart`:
+
+```json
+{ "drivePath": "D:\\", "title": "FTL: Faster Than Light",
+  "executable": "steam://rungameid/212680", "appId": "212680",
+  "formatDrive": true, "formatFilesystem": "ntfs", "formatLabel": "FTL",
+  "formatConfirmation": "New Volume (D:)", "copyGame": true,
+  "closeSteam": true, "writeIcon": true }
+```
+
+The first attempt, without `closeSteam`, refused before touching the drive:
+*"Steam is running, and it rewrites its library list from memory when it exits,
+so anything changed now would be undone."* Right call — the 2026-09-01 run
+closed Steam without being asked. A script driving `build-cart` now has to say so.
+
+| Result | |
+|---|---|
+| Format | NTFS, label `FTL` |
+| Copied | 287,269,659 bytes, 13 files, into `SteamLibrary/steamapps/common` |
+| Registered with Steam | yes — `D:\SteamLibrary` in `libraryfolders.vdf` |
+| Verify during build | *"Checked all 13 files against what was written; every one matches."* |
+| Whole build, format included | **10.7 s** |
+| `verify-cart D:\` afterwards | intact, **619 MB/s**, same digest `fcce34e2…` |
+| `UASPStor` / `disk` / `Ntfs` events in the window | **none** |
+| Root | `cartridge.conf`, `.gamepak/`, `SteamLibrary/`, hidden `autorun.inf` |
+
+Small and fast enough that it proves the pipeline, not the link. The failures of
+2026-09-01 lived in sustained 100 GB writes; this was not one.
+
+**Bug, not fixed: progress passes 100%.** The copy step printed `100.1%` and
+`100.2%`, and the Steam registration step carried `100.2%` over. Whatever the
+denominator is, it is smaller than what gets copied.
+
+`libraryfolders.vdf` also still lists `H:\SteamLibrary`, a cartridge that is not
+plugged in. Whether Steam or unregistering should clear that is its own
+question; noted, not chased.
+
+### Phase 5 — insert detection **PASS**, Play **not tested**, Eject **not tested**
+
+The installed watcher (scheduled task, `%LOCALAPPDATA%\PC-GamePak`, pre-1.1.0)
+was stopped and the 1.1.0 watcher run in its place with `PC_GAMEPAK_LAUNCHER`
+pointing at the new launcher. A replug was simulated with `Disable-PnpDevice` /
+`Enable-PnpDevice` on the enclosure's USB node — a real removal and arrival as
+far as the storage stack is concerned.
+
+| Check | Result |
+|---|---|
+| D: gone after disable | yes |
+| D: back with `cartridge.conf` after enable | 5.9 s |
+| Watcher log | `D: opened the launcher` |
+| Launcher | 1.1.0, window `PC GamePak`, **27.4 MB** resident |
+| Window | title, Play, eject; placeholder art because `build-cart` fetched no cover |
+
+The installed watcher was put back afterwards.
+
+**Play was not tested, deliberately.** The launcher window was open, but the
+desktop was in active use at the time, and Windows' foreground lock meant a
+synthetic click could not be relied on to reach the launcher rather than
+whatever the user had in front of them. Injecting input into someone's live
+session to click a button is not a test worth that risk, so it stopped there.
+Play and Eject want one click each from a person.
+
+Cosmetic: the placeholder monogram reads **FFT** for *FTL: Faster Than Light* —
+the initials of `FTL:`, `Faster`, `Than`, taking the first letter of the
+abbreviation as though it were a word.
+
+### Bug: the Windows health readout cannot warn about anything
+
+The launcher's health panel exists to catch the two failures this project has
+actually hit — a USB 2.0 link and a BOT bridge. On Windows it can catch neither.
+
+`health::probe` (`core/src/health.rs:300`):
+
+- returns `mbps: None` unconditionally, so `link_mbps` is never set, and
+- reads `Get-PhysicalDisk ... BusType`, which is `USB` for every enclosure, and
+  `windows_transport` maps `USB` to an empty string.
+
+So `advise()`, which is correct and tested, is only ever handed nothing on
+Windows. The 2026-08-20 cartridge on the AMD USB 2.0 controller at 18 MB/s would
+have shown a clean panel.
+
+What the device tree does give, measured on this enclosure:
+
+| Source | Value | Usable |
+|---|---|---|
+| `DEVPKEY_Device_Service` on the USB node | `UASPStor` (BOT would be `USBSTOR`) | **yes** — exactly the UASP/BOT answer |
+| Parent walk to the host controller | `AMD USB 3.20 eXtensible Host Controller` | **yes, as a ceiling** — it names a USB 2.0 controller as one |
+| `{3464F7A4-2444-40B1-980A-E0903CB6D912} 10` | 3 | **no** — also 3 on a Generic USB 2.0 hub and on a Bluetooth adapter. Looks like a speed enum, is not one |
+
+The exact negotiated speed needs `IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX_V2`
+on the parent hub. The service name and the controller walk are enough to catch
+BOT and a USB 2.0 port, which are the cases that have cost data here. Not
+implemented yet.
+
+### Watcher findings, from its log
+
+- **The tray icon fails when started by the scheduled task.** `could not add the
+  tray icon; carrying on without it` on 2026-09-10 20:28 and 2026-09-11 19:35,
+  both task starts. Started from a shell today it added the icon fine. Likely
+  the task running before Explorer's notification area exists.
+- **Timestamps are UTC and do not say so.** `18:13:41 D: opened the launcher`
+  was 20:13:41 local. Anyone reading the log against the event log, which is
+  local, is two hours out.
+
+### `notify_only` does nothing on Windows
+
+The launcher decides the insert reaction (`core/src/insert.rs`), and for
+`Notify` on Windows `notify()` prints *"notify_only is not implemented on
+Windows"* to a stderr nobody sees. The setting can be chosen and has no effect.
+`copilot/phase-1-ecosystem-integration` has a tray balloon for exactly this in
+`watcher/src/notifications.rs` — the watcher owns the tray icon and is resident,
+which is what a Windows notification needs. Its settings and insert logic are
+superseded by what merged; that file is not.
+
+### Phase status
+
+| Phase | Status |
+|---|---|
+| 0 — build and unit tests | **PASS** — 349 tests on Windows, after 4 Windows-only faults fixed |
+| 1 — prepare the NVMe | **PASS** |
+| 2 — wizard, non-destructive | drive list now USB-only; game list 86 incl. folders |
+| 3 — format and copy | **PASS** — NTFS, 287 MB, verified, no bus events |
+| 4 — cartridge contents | **PASS** |
+| 5 — insert detection, Play, Eject | **PARTIAL** — insert **PASS**; Play and Eject need a hand click |
+| 6 — rewrite with Steam running | refuses without `closeSteam`; with it, closes Steam and registers. Not yet a *rewrite* of an existing cartridge |
+| 7–9 | Not started |
