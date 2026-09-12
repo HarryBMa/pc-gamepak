@@ -871,10 +871,7 @@ pub fn create_cartridge(
             message: format!(
                 "Formatting {} to {}…",
                 request.drive_path,
-                match filesystem {
-                    format::Filesystem::Btrfs => "btrfs",
-                    format::Filesystem::Exfat => "exFAT",
-                }
+                filesystem.display_name()
             ),
             done_bytes: 0,
             total_bytes: 0,
@@ -3109,13 +3106,25 @@ mod tests {
     fn derives_a_label_the_chosen_filesystem_will_accept() {
         use format::Filesystem;
 
-        // exFAT is the default, and its 11-character limit is the tight one.
-        assert_eq!(default_label("Hollow Knight"), "Hollow Knig");
-        assert_eq!(default_label("Cinder & Salt"), "Cinder Salt");
+        // NTFS is the default now and has room for 32 characters, so the
+        // cartridge gets the game's actual name rather than a truncation.
+        assert_eq!(default_label("Hollow Knight"), "Hollow Knight");
+        assert_eq!(default_label("God of War Ragnarok"), "God of War Ragnarok");
         assert_eq!(default_label("!!!"), "Cartridge");
         assert_eq!(default_label(""), "Cartridge");
 
-        // btrfs has room for the whole name.
+        // exFAT's eleven characters are the tight case, and the reason the
+        // limit is per filesystem rather than one number.
+        assert_eq!(
+            default_label_for(Filesystem::Exfat, "Hollow Knight"),
+            "Hollow Knig"
+        );
+        assert_eq!(
+            default_label_for(Filesystem::Exfat, "Cinder & Salt"),
+            "Cinder Salt"
+        );
+
+        // btrfs has room for the whole name, however long.
         assert_eq!(
             default_label_for(Filesystem::Btrfs, "Hollow Knight"),
             "Hollow Knight"
@@ -3123,7 +3132,7 @@ mod tests {
 
         // Whatever it produces must pass the formatter's own check, for the
         // filesystem it was derived for.
-        for filesystem in [Filesystem::Exfat, Filesystem::Btrfs] {
+        for filesystem in [Filesystem::Ntfs, Filesystem::Exfat, Filesystem::Btrfs] {
             for title in [
                 "Hollow Knight",
                 "Cinder & Salt",

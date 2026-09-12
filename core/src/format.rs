@@ -10,18 +10,36 @@
 //!   3. the caller echoed the drive's current label back exactly;
 //!   4. formatting was explicitly asked for, per cartridge. It is never implied.
 //!
-//! **exFAT is the default**, because the point of a cartridge is that it works
-//! in whatever machine it is plugged into: Windows, Linux and macOS all read it
-//! with no driver to install.
+//! **NTFS is the default**, and it took hardware to work out why. exFAT was the
+//! obvious answer — Windows, Linux and macOS all read it with nothing to install
+//! — and it is the one filesystem here that cannot hold what a cartridge needs
+//! to carry:
 //!
-//! btrfs is offered for people who want it — it brings TRIM (`discard=async`)
-//! and transparent zstd compression — but it is a deliberate choice, not a
-//! default. Windows cannot read btrfs without [WinBtrfs], a third-party kernel
-//! driver, and a cartridge that needs a driver installed first is not really a
-//! cartridge. The two headline benefits are also thinner than they look here: a
-//! USB bridge only passes TRIM through when it speaks UASP and honours UNMAP,
-//! and game data is already compressed, so zstd buys single-digit percentages
-//! for CPU on every read.
+//! * **No symlinks.** Steam installs a compatibility tool into the library the
+//!   game lives in, so launching a Windows game from an exFAT cartridge makes
+//!   Steam try to unpack Proton onto it. Proton contains 1,892 symlinks and the
+//!   first one ends the install — `AppError_11`, "Disk write error", which says
+//!   nothing about why.
+//! * **No executable bit.** Nothing on an exFAT cartridge is executable, which
+//!   is why a carried Linux game has to be a shell script and why the launcher
+//!   runs one through `bash`.
+//! * **No permissions that persist**, so `chmod` does not survive a replug.
+//!
+//! NTFS has all three, Windows reads it natively, and the Linux kernel's `ntfs3`
+//! driver mounts it read-write through udisks like any other removable volume —
+//! measured on this project's own hardware, at `/run/media/$USER/…` with
+//! `uid=1000` and no root.
+//!
+//! The cost, stated plainly: **macOS reads NTFS but does not write it.** A
+//! cartridge handed to a Mac can be played from and copied off, and cannot take
+//! a save or a playtime count back. exFAT remains the choice for a cartridge
+//! that has to be writable on all three.
+//!
+//! btrfs is the third option and is unchanged: TRIM (`discard=async`) and
+//! transparent zstd compression, on Linux only, since Windows cannot read it
+//! without [WinBtrfs]. Both benefits are thinner than they look here — a USB
+//! bridge only passes TRIM through when it speaks UASP and honours UNMAP, and
+//! game data is already compressed.
 //!
 //! [WinBtrfs]: https://github.com/maharmstone/btrfs
 
@@ -31,6 +49,8 @@ use crate::drives;
 
 const BTRFS_MAX_LABEL: usize = 256;
 const EXFAT_MAX_LABEL: usize = 11;
+/// NTFS volume labels are 32 UTF-16 code units.
+const NTFS_MAX_LABEL: usize = 32;
 
 /// Allocation unit for a cartridge's exFAT filesystem.
 ///
@@ -44,8 +64,16 @@ const EXFAT_CLUSTER_BYTES: &str = "128K";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Filesystem {
+    /// The default. Holds symlinks, the executable bit and permissions, which
+    /// is what a cartridge carrying a game actually needs; written by Windows
+    /// natively and by the kernel's `ntfs3` driver on Linux. Read-only on macOS.
     #[default]
+    Ntfs,
+    /// Readable and writable everywhere, and unable to hold a symlink. The right
+    /// answer for a cartridge that only points at games, or one that has to be
+    /// written by a Mac.
     Exfat,
+    /// Linux only, and the most capable of the three where that is no obstacle.
     Btrfs,
 }
 
@@ -55,14 +83,17 @@ impl Filesystem {
         match self {
             Self::Btrfs => BTRFS_MAX_LABEL,
             Self::Exfat => EXFAT_MAX_LABEL,
+            Self::Ntfs => NTFS_MAX_LABEL,
         }
     }
 
-    #[cfg_attr(not(windows), allow(dead_code))]
-    fn display_name(self) -> &'static str {
+    /// What to call this filesystem to a person, and to `Format-Volume`, which
+    /// happens to take the same spellings.
+    pub fn display_name(self) -> &'static str {
         match self {
             Self::Btrfs => "btrfs",
             Self::Exfat => "exFAT",
+            Self::Ntfs => "NTFS",
         }
     }
 }
@@ -281,15 +312,18 @@ fn run_format(
     // Format-Volume needs administrator, so it is elevated on its own rather
     // than requiring the whole wizard to run as admin.
     //
-    // exFAT is built into Windows. btrfs is not: it needs WinBtrfs
+    // NTFS and exFAT are both built into Windows, and `Format-Volume` takes
+    // either name as-is. btrfs is not: it needs WinBtrfs
     // (https://github.com/maharmstone/btrfs) installed first, which is why it
-    // is an option here rather than the default.
+    // is Linux-only in practice.
     // exFAT gets the same 128 KB allocation unit the Linux path asks for, so a
     // cartridge is laid out identically whichever machine made it. btrfs has no
     // equivalent knob here and takes its own default.
     let allocation = match filesystem {
         Filesystem::Exfat => " -AllocationUnitSize 131072",
-        Filesystem::Btrfs => "",
+        // NTFS and btrfs both take their own default — see `mkfs_command` for
+        // why NTFS does not want the exFAT treatment.
+        Filesystem::Ntfs | Filesystem::Btrfs => "",
     };
     let script = format!(
         "$ErrorActionPreference='Stop'; \
@@ -486,6 +520,23 @@ pub fn mkfs_command(
                 label.to_string(),
                 device.to_string(),
             ],
+            // -f is "fast": skip zeroing the volume, which on a 1 TB cartridge
+            // is the difference between a minute and an afternoon. Deliberately
+            // not -F ("force, even if mounted"): the call chain unmounts first,
+            // and if that did not take, failing loudly is the better outcome.
+            //
+            // No -c: NTFS keeps its own default cluster size, unlike the exFAT
+            // arm below. The 128 KB there buys fewer allocation-table lookups
+            // per gigabyte, which is a FAT-family problem — NTFS allocates in
+            // extents and does not have it, and a non-default cluster size on
+            // NTFS costs compatibility for nothing.
+            Filesystem::Ntfs => vec![
+                "mkfs.ntfs".to_string(),
+                "-f".to_string(),
+                "-L".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
             // -F is exfatprogs' equivalent of the above (-f there means
             // "full format" instead).
             Filesystem::Exfat => vec![
@@ -635,14 +686,40 @@ mod tests {
     }
 
     #[test]
-    fn the_default_filesystem_is_the_one_that_works_everywhere() {
-        // A cartridge is meant to be plugged into whatever is in front of you,
-        // and only exFAT is readable everywhere without installing a driver.
-        assert_eq!(Filesystem::default(), Filesystem::Exfat);
-        // So the default label check is the strict one, and a label that passes
-        // it is usable on either filesystem.
-        assert!(check_label(&"A".repeat(11)).is_ok());
-        assert!(check_label(&"A".repeat(12)).is_err());
-        assert!(check_label_for(Filesystem::Btrfs, &"A".repeat(12)).is_ok());
+    fn the_default_filesystem_is_the_one_that_can_hold_a_game() {
+        // exFAT reads everywhere and cannot hold a symlink, which is what Steam
+        // needs 1,892 of to put Proton on a cartridge. NTFS can, Windows writes
+        // it natively, and Linux mounts it with ntfs3 — so that is the default
+        // now, and the cost is that macOS reads it without writing it.
+        assert_eq!(Filesystem::default(), Filesystem::Ntfs);
+
+        // Each one's own limit, which is the thing callers have to respect.
+        assert!(check_label_for(Filesystem::Exfat, &"A".repeat(11)).is_ok());
+        assert!(check_label_for(Filesystem::Exfat, &"A".repeat(12)).is_err());
+        assert!(check_label_for(Filesystem::Ntfs, &"A".repeat(32)).is_ok());
+        assert!(check_label_for(Filesystem::Ntfs, &"A".repeat(33)).is_err());
+        assert!(check_label_for(Filesystem::Btrfs, &"A".repeat(200)).is_ok());
+
+        // The wrapper follows the default, so it is no longer the strictest of
+        // the three. Anything derived for one filesystem and used on another
+        // has to be checked against that one — which `default_label_for` and
+        // `check_label_for` are for, and which every real caller uses.
+        assert!(check_label(&"A".repeat(32)).is_ok());
+        assert!(check_label(&"A".repeat(33)).is_err());
+    }
+
+    #[test]
+    fn a_label_that_fits_exfat_fits_all_three() {
+        // The property worth having: eleven characters is the floor, so a
+        // cartridge named for the tightest filesystem can be reformatted to any
+        // of the others without renaming it.
+        let tight = "CINDER SALT";
+        assert_eq!(tight.len(), 11);
+        for filesystem in [Filesystem::Ntfs, Filesystem::Exfat, Filesystem::Btrfs] {
+            assert!(
+                check_label_for(filesystem, tight).is_ok(),
+                "{filesystem:?} rejected {tight:?}"
+            );
+        }
     }
 }

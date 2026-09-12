@@ -92,7 +92,9 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 | macOS | Not yet — the drive layer needs a rewrite |
 
 Any removable drive works: NVMe in a USB enclosure, a portable SSD, or a USB
-stick. exFAT for cross-platform cartridges, btrfs for Linux-only ones.
+stick. NTFS by default — it is the only one of the three that can hold the
+symlinks Steam needs to install Proton onto a cartridge; exFAT when a Mac has to
+write to the drive, btrfs for Linux-only cartridges.
 
 ## Install
 

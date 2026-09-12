@@ -185,6 +185,7 @@ const el = {
   sgdbKeyField: $("sgdb-key-field"),
   setSgdbKey: $("set-sgdb-key"),
   setFilesystem: $("set-filesystem"),
+  filesystemHint: $("filesystem-hint"),
   setCopy: $("set-copy"),
   setVerify: $("set-verify"),
   setIcon: $("set-icon"),
@@ -2168,7 +2169,8 @@ function applySettings() {
   el.setSgdb.checked = Boolean(settings.steamgriddbEnabled);
   el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
-  el.setFilesystem.value = settings.defaultFilesystem ?? "exfat";
+  el.setFilesystem.value = settings.defaultFilesystem ?? "ntfs";
+  describeFilesystem();
   el.setVerify.checked = Boolean(settings.defaultVerify);
   el.setIcon.checked = settings.defaultIcon !== false;
   el.setEject.checked = settings.defaultEject !== false;
@@ -2736,6 +2738,32 @@ function describeOnInsert() {
   };
   el.onInsertHint.textContent = hints[el.setOnInsert.value] ?? "";
 }
+
+/**
+ * Say what each filesystem costs, where the choice is made.
+ *
+ * The consequences are not guessable from the name and they are not small: one
+ * of the three cannot hold a symlink, which is what Steam needs 1,892 of to put
+ * Proton on a cartridge, and another cannot be read by Windows at all.
+ */
+function describeFilesystem() {
+  const hints = {
+    ntfs:
+      "Holds symlinks, so Steam can install Proton onto the cartridge. Windows " +
+      "writes it natively, Linux mounts it with ntfs3. macOS can read it but not " +
+      "write to it.",
+    exfat:
+      "Readable and writable on Windows, Linux and macOS alike — and cannot hold " +
+      "a symlink, so Steam cannot unpack Proton onto it and a carried Linux game " +
+      "has to be a shell script. Volume names are limited to 11 characters.",
+    btrfs:
+      "Linux only: Windows needs a third-party driver. Brings TRIM and " +
+      "compression, both of which matter less here than they sound.",
+  };
+  el.filesystemHint.textContent = hints[el.setFilesystem.value] ?? "";
+}
+
+el.setFilesystem.addEventListener("change", describeFilesystem);
 
 el.setOnInsert.addEventListener("change", describeOnInsert);
 

@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 335 tests
+### `core/` — `gamepak-core`, 336 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -17,7 +17,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `create` | The build pipeline: close Steam and drop its stale entry → format → copy → check the launch target → cover art → `cartridge.conf` → `autorun.inf` → trim and report. Game lists from Playnite and Steam, collection naming, per-game covers. |
 | `edit` | Rewrites a cartridge's metadata — name, artwork, which games are listed and in what order — without copying or deleting anything. |
 | `drives` | Which volumes may be written to — an allowlist of automount locations, never a denylist. Parses `/proc/mounts`; Win32 volume APIs on Windows. |
-| `format` | exFAT and btrfs, behind four gates: removable allowlist re-derived here, not the system drive, the current label typed back exactly, and explicitly asked for. |
+| `format` | NTFS, exFAT and btrfs, behind four gates: removable allowlist re-derived here, not the system drive, the current label typed back exactly, and explicitly asked for. |
 | `home` | A carried game's whole home directory, on the cartridge. `portable_home=yes` and the launcher starts the game with `HOME` (and the XDG, or Windows, equivalents) pointed at `.gamepak/home/`, so every save it writes lands on the drive with nothing declared and nothing copied. The cache stays on the host. Kazeta's mechanism, minus the overlay it does not need. |
 | `insert` | What plugging a cartridge in should do — a window, the game, a notification, or nothing — and the rule that auto-launch will only ever start a URI the host already has a handler for, never a program carried on the drive. Lives in core so all three things that open a launcher get the same answer. |
 | `health` | Negotiated link speed, UASP vs BOT, how full the drive is, and the volume's own name and filesystem. sysfs on Linux; the transport only, lazily, on Windows. |
@@ -109,8 +109,15 @@ Ranked by how much it matters.
 
 1. **A tagged release.** Everything downstream — AUR, WinGet, Scoop — points at
    artefacts that do not exist yet. Nothing else on this list unblocks as much.
-2. **Real hardware, partly answered — and the answer was not clean.** Two
-   cartridges have now been written by this code on real drives:
+2. **Real hardware: answered, and the history is worth keeping.** The project
+   owner reports repeated end-to-end runs since, with the **God of War
+   Ragnarök** and **Tomb Raider** cartridges both working — so the open question
+   here is no longer whether this writes a usable cartridge. What follows is the
+   record of how it got there, because it is the reason `verify` is on by default
+   and the reason a user reporting corruption should be asked about their cable
+   before their drive.
+
+   The two earliest cartridges:
 
    | Cartridge | Written | Verified |
    |---|---|---|
@@ -127,7 +134,8 @@ Ranked by how much it matters.
    That is the case for `verify` existing, and it is why it is now on by
    default.
 
-   **One path is now proven good, and one is still actively corrupting data.**
+   At the time this was written, one path was proven good and one was still
+   corrupting data. Both have since been run through repeatedly and work.
 
    On the AMD chipset port, `PLAYSTATION` was rewritten as a single-game Stardew
    Valley cartridge — format to exFAT, copy, register with Steam, verify — and
@@ -153,10 +161,11 @@ Ranked by how much it matters.
    it. A bad link does not merely fail a copy, it can damage a game already
    written and already verified.
 
-   Still untested: a sustained write big enough to be interesting. The clean run
-   was 0.75 GB and the corrupt one 107 GB, so the wizard's running panel — the
-   throughput, the countdown, the log — still has not been watched through
-   anything long.
+   What is still not written down here is the *detail* of those later runs — the
+   throughputs, whether the running panel behaved across a hundred gigabytes,
+   which enclosure and port each used. `docs/HARDWARE-REPORT.md` is where that
+   belongs, and it stops at the early runs. Somebody's word that it works is not
+   the same artefact as a log, and only one of the two survives being forgotten.
 
    Related, and now fixed: until PR #10 nothing on Windows compiled at all —
    `gamepak-core` had no `windows-sys` dependency despite calling the Win32

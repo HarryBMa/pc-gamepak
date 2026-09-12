@@ -36,7 +36,11 @@ pub struct Settings {
     // declare, and serde dropped them on the floor, so every one of them reset
     // on the next run. They live here now because Create stopped asking: it
     // reads them and gets on with it.
-    /// `exfat` or `btrfs`.
+    /// `ntfs`, `exfat` or `btrfs`.
+    ///
+    /// NTFS by default: it is the only one of the three that holds a symlink,
+    /// and Steam unpacking Proton onto a cartridge needs 1,892 of them. See
+    /// [`crate::format`] for what each one costs.
     pub default_filesystem: String,
     /// Read the cartridge back and check it against what was written.
     ///
@@ -111,7 +115,7 @@ impl Default for Settings {
             steamgriddb_enabled: false,
             steamgriddb_api_key: String::new(),
             game_folder_roots: Vec::new(),
-            default_filesystem: "exfat".to_string(),
+            default_filesystem: "ntfs".to_string(),
             // Costs a read pass over the drive and is worth it: the alternative
             // is finding out from a crash months later.
             default_verify: true,

@@ -645,9 +645,42 @@ anything runs.
 
 ### Which filesystem
 
-**exFAT is the default, and it is the right answer for a cartridge you hand to
-someone.** Windows, Linux and macOS all read it with nothing to install, which
-is the entire point of a thing you carry between machines.
+**NTFS is the default, and it took hardware to work out why.** exFAT was the
+obvious answer and held that place for a long time — Windows, Linux and macOS all
+read it with nothing to install, which is the entire point of a thing you carry
+between machines. It is also the one filesystem here that cannot hold what a
+cartridge needs to carry.
+
+| | NTFS | exFAT | btrfs |
+|---|---|---|---|
+| Windows | read/write | read/write | driver needed |
+| Linux | read/write (`ntfs3`) | read/write | read/write |
+| macOS | **read only** | read/write | no |
+| Symlinks | yes | **no** | yes |
+| Executable bit | yes | **no** | yes |
+| `chmod` survives a replug | yes | **no** | yes |
+| Steam can install Proton onto it | yes | **no** | yes |
+| Volume name | 32 characters | **11** | 255 |
+
+The three "no"s in the exFAT column are one problem with three faces:
+
+- **Proton.** Steam installs a compatibility tool into the library the game
+  lives in, so launching a Windows game from an exFAT cartridge makes Steam try
+  to unpack Proton *onto the cartridge*. Proton contains 1,892 symlinks, and the
+  first one ends it — `AppError_11`, "Disk write error", which tells you nothing
+  about why. On NTFS, Steam installs Proton onto the cartridge like any other
+  drive and no per-game setting is needed.
+- **Carried Linux games.** Nothing on an exFAT volume is executable, which is
+  why the launcher starts a carried game through `bash` and why
+  `cartridge.conf.example` shows a `start.sh` rather than a binary.
+- **Saves.** `portable_home` gives a carried game its whole home directory on
+  the drive; a game that creates a symlink inside its own config directory will
+  fail to on exFAT.
+
+**The cost of the new default, stated plainly: macOS reads NTFS and does not
+write it.** A cartridge handed to a Mac can be played from and copied off, and
+cannot take a save or a playtime count back. If that matters more to you than
+Proton does, pick exFAT — it is one dropdown away and always will be.
 
 **btrfs is there for enthusiasts**, and it is a real choice with real costs:
 
@@ -663,10 +696,11 @@ is the entire point of a thing you carry between machines.
   once and read for years, which is the workload flash wear cares least about.
 
 Pick btrfs if your cartridges live on Linux machines you control and you want
-the filesystem's other properties. Otherwise exFAT.
+the filesystem's other properties. Otherwise NTFS, unless a Mac has to write to
+the drive.
 
-The drive name follows the filesystem: exFAT allows 11 characters, btrfs has
-room for the whole title. On Linux the relevant mount options are set by the
+The drive name follows the filesystem: exFAT allows 11 characters, NTFS 32, and
+btrfs has room for the whole title. On Linux the relevant mount options are set by the
 desktop environment or `/etc/fstab`.
 
 </details>
