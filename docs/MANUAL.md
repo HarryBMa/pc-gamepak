@@ -867,6 +867,36 @@ install that would never fit on a 2230.
 
 This used to ship a PC/SC reader for that — about 1,200 lines handling ACR122U
 and friends. It has been removed, because
+**[StreamLight](https://github.com/FoggyBytes/StreamLight)** and
+**[ArtMoon](https://github.com/onaiaku/ArtMoon)** (both GPL-3.0) are
+gamepad-first forks of [Moonlight](https://github.com/moonlight-stream/moonlight-qt),
+each paired with a host-side companion — StreamTweak and ArtLight. They stream a
+PC to a television rather than carrying it on a drive, so they are not the same
+idea; what they are is the most careful work anywhere on the question this
+project's launcher also has to answer, which is *what a game menu should feel
+like from a sofa*.
+
+Three things they get right. **Every action is reachable from the pad** — host
+tabs, library, settings tabs and dialogs, with the dialogs navigable by
+construction rather than one at a time. **A prompt bar along the bottom** says
+what each button does on the screen you are on, and is clickable. And **the
+prompts follow the device in your hands**: touch the keyboard and each glyph
+becomes the key to press; pick the pad back up and they return to controller
+icons, with the brand detected.
+
+That last one is now this launcher's behaviour too, and it was a real fault
+before: `is-gamepad` went on when a pad *connected*, so a PC with a controller
+attached showed pad icons to whoever was typing. It follows the button presses
+now.
+
+The other two are not taken, and the reason is the shape of the thing. This
+launcher has exactly four actions, so they sit on the four face buttons and the
+prompt is drawn on each button rather than in a bar — there is nothing to
+navigate *to*. Where their model would earn its keep here is the wizard, which
+has tabs, lists, dialogs and text fields and no pad support at all. Note both
+are GPL-3.0 against this project's MIT, so no code can move between them; these
+are ideas, read and reimplemented.
+
 **[Zaparoo](https://zaparoo.org/)** does the same job properly: NFC cards, QR
 codes, barcodes, discs, Amiibo and Skylanders, USB sticks and SD cards, across
 Windows, Linux, SteamOS, Bazzite, ChimeraOS, Batocera, MiSTer and more. There

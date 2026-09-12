@@ -308,6 +308,35 @@ with `Name`, `Id`, `Exec`, `Icon`, `Runtime`, `GamescopeOptions`), so a
 `.kzi` written beside `cartridge.conf` would let one drive do both. Neither is
 built and neither is decided.
 
+## What the Moonlight forks got right
+
+[StreamLight](https://github.com/FoggyBytes/StreamLight) and
+[ArtMoon](https://github.com/onaiaku/ArtMoon) (both GPL-3.0, so ideas only —
+nothing can be copied into an MIT project) are gamepad-first Moonlight forks.
+They solve a different problem, and they have thought harder than this has about
+what a game menu feels like from a sofa.
+
+**Taken: prompts follow the device in your hands.** `is-gamepad` went on when a
+pad *connected* and came off only when the last one disconnected, so a desktop
+with a controller attached — or a Deck in desktop mode with a keyboard — showed
+face-button icons to somebody typing. It now goes on at the first button press
+and comes off at the next keystroke. Small, and it was wrong before.
+
+**Not taken, and deliberately: a prompt bar, and brand-specific glyphs.** Their
+bottom bar names what each button does on the current screen; this launcher has
+four actions on four face buttons and draws each prompt on the button it belongs
+to, so there is no bar to put anything in. They detect the pad's make and show
+Xbox, PlayStation or Nintendo lettering; this shows the action's own icon
+instead, which reads correctly on all three and cannot be detected wrongly. Both
+of those are defensible the way they are.
+
+**Where their model would actually help: the wizard.** It has ten settings tabs,
+several dialogs, dropdowns and text fields, and no gamepad support at all —
+which is fine on a desk and the whole problem on a Deck. `NavigableDialog` and
+`NavigableItemDelegate` in ArtMoon are the shape of the answer: pad reachability
+as a property of the widget, not something retrofitted per dialog. Not written
+here, and the largest piece of Phase 5's ten-foot UI that is still missing.
+
 ## The rootless Linux install
 
 Built. `linux/install-user.sh` puts everything under `$HOME` and runs the watcher

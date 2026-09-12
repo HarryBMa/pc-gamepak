@@ -586,7 +586,12 @@ body.is-gamepad #play-ring:has(:focus) {
    A keycap is only useful to someone with a keyboard, and only worth showing
    once they have reached for the window. Face-button lettering differs between
    Xbox, PlayStation and Switch pads, so a controller gets the action's own
-   icon instead — the one prompt that reads correctly on all three. */
+   icon instead — the one prompt that reads correctly on all three.
+
+   `is-gamepad` follows the device in someone's hands rather than the device
+   plugged in: gamepad.js sets it on the first button press and clears it on the
+   next keystroke, so a controller left on the table does not decide what a
+   person at the keyboard is shown. */
 
 .btn__key {
   position: relative;
