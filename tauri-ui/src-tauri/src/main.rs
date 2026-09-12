@@ -413,6 +413,13 @@ fn act_on_insert(reaction: insert::Reaction) {
             if let Err(why) = launch_game(executable, drive, Some(title)) {
                 eprintln!("could not start the game: {why}");
             }
+            // And closed again at once. This process is about to exit, so
+            // nothing here can measure how long the game runs — the heartbeat
+            // needs a launcher that stays up, which is what the window is. The
+            // session is closed rather than abandoned so the cartridge is not
+            // left carrying an open record that never advances and gets settled
+            // as zero on some later insert.
+            end_every_session();
         }
         insert::Reaction::Notify { title, body } => notify(&title, &body),
     }
