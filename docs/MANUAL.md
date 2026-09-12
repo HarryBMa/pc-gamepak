@@ -1129,6 +1129,54 @@ click-to-play model in place of the auto-execute-plus-allowlist one.
 
 ### Others working on the same idea
 
+**[Kazeta](https://github.com/kazetaos/kazeta)** (MIT) is the most complete
+answer to this idea that anyone has built, and it answers a different question:
+it is not a program you install, it is **the whole operating system**. An
+Arch-based image boots greetd straight into a gamescope session with no desktop
+behind it, looks for a `*.kzi` file within two levels of `/media` or
+`/run/media`, and if there is not one, shows a BIOS screen. There is nothing to
+escape from because there is nothing else there.
+
+Its cartridge is a few `Key=value` lines — `Name`, `Id`, `Exec`, `Icon`,
+`Runtime`, `GamescopeOptions` — which is the same idea as `cartridge.conf` and
+about the same size. Two things around it are not the same idea at all:
+
+- **A cart can be one file.** `.kzp` is an erofs image that gets mounted, so a
+  whole game is a single immutable blob with a hash. (In the in-development
+  2026.0 release, not the current stable one.) `.kzr` is the same trick for a
+  runtime: Proton arrives as an image mounted *under* the game rather than
+  unpacked onto the drive — which, read next to what this project learned about
+  Proton's 1892 symlinks and exFAT, is the tidier fix by a distance.
+- **Saves need no save paths.** The cart is an overlayfs lowerdir, a host
+  directory is the upperdir, and the result is mounted as the game's `$HOME`.
+  Everything the game writes is captured without anyone knowing where the game
+  puts it. Saves live on the host and move to external "memory cards" as
+  `<cart-id>.tar` on purpose, which is the opposite of the choice here.
+  Playtime is a log of ISO-8601 start/end pairs inside the save, re-stamped
+  every sixty seconds so a crash costs a minute.
+
+**[kazeta-creator](https://github.com/kazetaos/kazeta-creator)** (MIT) is the
+wizard's counterpart and the best idea in either repository: a Python CLI over a
+`contentdb.yaml` of **recipes**, not games. Each entry names where to get the
+files, how to unpack them, what to run, which runtime, and the xxh3 hash the
+finished cart must have. So the community shares the recipe, everyone builds a
+byte-identical cart, and the file that makes that possible is also a
+compatibility list. It refuses to build a game nobody has written a recipe for,
+which is a feature.
+
+Where PC GamePak differs, and it is one difference with many consequences: this
+runs on the operating system you already have. Kazeta owns the session, so it
+can overlay a game's whole home directory and hand it a read-only cart; a
+launcher on somebody's Windows desktop cannot do either, which is why saves here
+are declared per game and why a cartridge here can be a *key* that points at an
+installed copy rather than carrying the game at all. A cartridge here can also
+hold a collection, and there is a wizard that makes one. If you want a console —
+one that boots, has no desktop, and never shows you a window — Kazeta is the
+project, and it is further along at being that than this is at anything.
+
+Both are MIT, which the three below are not: code could move between these two
+projects if it ever should.
+
 **[Zaparoo](https://zaparoo.org/)**
 ([zaparoo-core](https://github.com/ZaparooProject/zaparoo-core), GPL-3.0) turns
 cards, toys, QR codes, discs, USB sticks and SD cards into shortcuts that launch

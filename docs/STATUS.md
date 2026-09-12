@@ -197,6 +197,66 @@ Ranked by how much it matters.
    and reports what was actually scanned instead of offering switches that would
    do nothing.
 
+## What Kazeta settles, and what it does not
+
+[Kazeta](https://github.com/kazetaos/kazeta) and
+[kazeta-creator](https://github.com/kazetaos/kazeta-creator) (both MIT) are the
+closest prior art there is, and reading them changes what is worth building
+here. Recorded now rather than rediscovered later; the manual's *Thanks* section
+credits them properly.
+
+Kazeta is an operating system, not a program: an Arch image that boots greetd
+into gamescope with no desktop, finds a `*.kzi` within two levels of `/media` or
+`/run/media`, and shows a BIOS screen when there is no cart. That single fact —
+**it owns the session** — is what lets it do three things this project cannot,
+and the honest reading of each is different.
+
+| | Kazeta | Here |
+|---|---|---|
+| Saves | The cart is an overlayfs lowerdir, a host directory the upperdir, the result is the game's `$HOME`. No save paths are known or needed. | `save=` lines declaring where each game keeps its saves, resolved per platform |
+| Where saves live | On the host, moved to external "memory cards" as `<cart-id>.tar` | On the cartridge |
+| Playtime | ISO-8601 start/end pairs in `.kazeta/var/playtime.log`, re-stamped every 60s | Launch count and seconds in `.gamepak/stats.json` |
+| A cart | One immutable erofs image (`.kzp`) with a hash, or a directory | A directory with a text file in it |
+| Runtimes | Proton as a `.kzr` image mounted *under* the game | Steam's own Proton, on the host |
+| Reach | One OS, which you install instead of yours | Windows and Linux you already run |
+
+**1. The overlay is better than declared save paths, where it is available.**
+It cannot miss a path, needs no per-game knowledge, and captures a game that
+writes somewhere nobody documented. `saves` is the weaker mechanism and it is
+the weaker mechanism *on purpose*: a launcher that starts a game inside the
+user's own desktop session cannot overlay that game's home directory, and on
+Windows cannot do it at all. So the token vocabulary stays. What it does suggest
+is a Linux-only path worth considering later — for games the cartridge carries
+and this project launches itself, a bind or overlay mount would make the
+declaration unnecessary. Not a commitment; a note that the ceiling here is lower
+than it looked.
+
+**2. Proton as a mounted image is the answer to the exFAT symlink problem.**
+This project's own finding — Steam unpacking Proton onto a cartridge dies on the
+first of 1892 symlinks, because exFAT has none — is a problem Kazeta does not
+have, because a runtime never gets unpacked anywhere. Worth remembering before
+building anything clever about shader caches or per-game Proton pinning.
+
+**3. `kazeta-creator`'s recipe model is the best idea in either repository.**
+`contentdb.yaml` holds recipes, not games: where to get the files, how to
+unpack, what to run, which runtime, and the xxh3 hash the finished cart must
+match. The community shares recipes, everyone builds a byte-identical cart, and
+the same file is a compatibility list as a side effect. `build-cart` already
+takes a JSON `CartridgeRequest`, which is the same shape one step short of the
+idea — it has no declared output hash, so two people running it do not find out
+whether they got the same cartridge. Cheap to add, and it would make
+`verify-cart` mean something across machines rather than only against the
+manifest a single write produced.
+
+**What none of this changes.** Kazeta replaces the operating system, so it cannot
+be the thing you plug a cartridge into on a work laptop, a Windows gaming PC, or
+a Mac — which is the whole premise here, and is not a premise Kazeta is competing
+for. The formats are close enough to read each other (`.kzi` is `Key=value`
+with `Name`, `Id`, `Exec`, `Icon`, `Runtime`, `GamescopeOptions`), so a
+`.kzi` arm in `cartridge` would let a Kazeta cart open in this launcher, and a
+`.kzi` written beside `cartridge.conf` would let one drive do both. Neither is
+built and neither is decided.
+
 ## The rootless Linux install
 
 Built. `linux/install-user.sh` puts everything under `$HOME` and runs the watcher
