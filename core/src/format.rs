@@ -31,6 +31,12 @@ use crate::drives;
 
 const BTRFS_MAX_LABEL: usize = 256;
 const EXFAT_MAX_LABEL: usize = 11;
+const NTFS_MAX_LABEL: usize = 32;
+const EXT4_MAX_LABEL: usize = 16;
+const XFS_MAX_LABEL: usize = 12;
+const F2FS_MAX_LABEL: usize = 512;
+const HFSPLUS_MAX_LABEL: usize = 255;
+const APFS_MAX_LABEL: usize = 255;
 
 /// Allocation unit for a cartridge's exFAT filesystem.
 ///
@@ -44,27 +50,197 @@ const EXFAT_CLUSTER_BYTES: &str = "128K";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Filesystem {
+    /// The default, and the only one every desktop reads without help.
     #[default]
     Exfat,
+    Ntfs,
     Btrfs,
+    Ext4,
+    Xfs,
+    F2fs,
+    #[serde(rename = "hfsplus")]
+    HfsPlus,
+    Apfs,
+}
+
+/// One filesystem, described well enough for the wizard to explain the choice.
+///
+/// The wizard reads this rather than carrying its own list, because the two
+/// drifting apart is how a label limit ends up wrong in one place only.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilesystemInfo {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub label_limit: usize,
+    /// What it is for, in the terms someone picking a cartridge format needs.
+    pub summary: &'static str,
+    /// Which desktops read it with nothing installed.
+    pub native_on: &'static [&'static str],
+    /// What has to be installed first, anywhere it is not native. Empty when
+    /// there is nothing to say.
+    pub needs: &'static str,
+    /// Whether a Windows game can be run from it through Proton. This is the
+    /// question that decides most cartridges, and the answer is "does it have
+    /// symlinks": Steam installs a compatibility tool into the game's own
+    /// library, and Proton is built out of them.
+    pub runs_proton: bool,
+    /// Whether the wizard can create it on the machine it is running on.
+    pub can_create_here: bool,
 }
 
 impl Filesystem {
+    pub const ALL: [Self; 8] = [
+        Self::Exfat,
+        Self::Ntfs,
+        Self::Btrfs,
+        Self::Ext4,
+        Self::Xfs,
+        Self::F2fs,
+        Self::HfsPlus,
+        Self::Apfs,
+    ];
+
     /// Longest volume label this filesystem will take.
     pub fn label_limit(self) -> usize {
         match self {
             Self::Btrfs => BTRFS_MAX_LABEL,
             Self::Exfat => EXFAT_MAX_LABEL,
+            Self::Ntfs => NTFS_MAX_LABEL,
+            Self::Ext4 => EXT4_MAX_LABEL,
+            Self::Xfs => XFS_MAX_LABEL,
+            Self::F2fs => F2FS_MAX_LABEL,
+            Self::HfsPlus => HFSPLUS_MAX_LABEL,
+            Self::Apfs => APFS_MAX_LABEL,
         }
     }
 
-    #[cfg_attr(not(windows), allow(dead_code))]
-    fn display_name(self) -> &'static str {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Exfat => "exfat",
+            Self::Ntfs => "ntfs",
+            Self::Btrfs => "btrfs",
+            Self::Ext4 => "ext4",
+            Self::Xfs => "xfs",
+            Self::F2fs => "f2fs",
+            Self::HfsPlus => "hfsplus",
+            Self::Apfs => "apfs",
+        }
+    }
+
+    /// What to call it in front of a person.
+    pub fn display_name(self) -> &'static str {
         match self {
             Self::Btrfs => "btrfs",
             Self::Exfat => "exFAT",
+            Self::Ntfs => "NTFS",
+            Self::Ext4 => "ext4",
+            Self::Xfs => "XFS",
+            Self::F2fs => "F2FS",
+            Self::HfsPlus => "HFS+",
+            Self::Apfs => "APFS",
         }
     }
+
+    /// The tool that creates it, so a missing one can be named before the
+    /// drive is touched rather than after.
+    pub fn mkfs_tool(self) -> &'static str {
+        match self {
+            Self::Exfat => "mkfs.exfat",
+            Self::Ntfs => "mkfs.ntfs",
+            Self::Btrfs => "mkfs.btrfs",
+            Self::Ext4 => "mkfs.ext4",
+            Self::Xfs => "mkfs.xfs",
+            Self::F2fs => "mkfs.f2fs",
+            Self::HfsPlus => "mkfs.hfsplus",
+            Self::Apfs => "mkfs.apfs",
+        }
+    }
+
+    /// Does a Windows game run from it through Proton?
+    ///
+    /// Symlinks are the whole question. Steam installs a compatibility tool
+    /// into the library the game lives in, and Proton is roughly two thousand
+    /// symlinks; a filesystem without them fails the install and Steam reports
+    /// "Disk write error", naming nothing useful.
+    pub fn runs_proton(self) -> bool {
+        !matches!(self, Self::Exfat)
+    }
+
+    /// Does it store ownership on disk, rather than taking it from the mount?
+    ///
+    /// The ones that do come back owned by root, because mkfs ran under pkexec,
+    /// and the next write anyone makes fails with EACCES until that is undone.
+    pub fn stores_ownership(self) -> bool {
+        matches!(
+            self,
+            Self::Btrfs | Self::Ext4 | Self::Xfs | Self::F2fs | Self::HfsPlus | Self::Apfs
+        )
+    }
+
+    /// Can Windows' own Format-Volume make it?
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub fn windows_can_create(self) -> bool {
+        matches!(self, Self::Exfat | Self::Ntfs | Self::Btrfs)
+    }
+
+    fn summary(self) -> &'static str {
+        match self {
+            Self::Exfat => "Reads everywhere with nothing installed. The safe default \u{2014} but Windows games will not run from it through Proton on Linux.",
+            Self::Ntfs => "Reads natively on Windows and Linux, and Proton works. The best choice for a cartridge used on both.",
+            Self::Btrfs => "Linux at its best: checksums, compression, snapshots. Windows needs WinBtrfs installed.",
+            Self::Ext4 => "The plain Linux choice. Everything works and nothing is clever.",
+            Self::Xfs => "Linux, tuned for very large files. Good for a cartridge of a few enormous games.",
+            Self::F2fs => "Linux, designed for flash. Worth measuring against ext4 on a cheap USB drive.",
+            Self::HfsPlus => "The older Mac format. Linux reads and writes it, but cannot create one without hfsprogs.",
+            Self::Apfs => "The modern Mac format. Linux needs the linux-apfs-rw driver to read it at all.",
+        }
+    }
+
+    fn native_on(self) -> &'static [&'static str] {
+        match self {
+            Self::Exfat => &["Windows", "Linux", "macOS"],
+            Self::Ntfs => &["Windows", "Linux"],
+            Self::Btrfs => &["Linux"],
+            Self::Ext4 => &["Linux"],
+            Self::Xfs => &["Linux"],
+            Self::F2fs => &["Linux"],
+            Self::HfsPlus => &["macOS", "Linux"],
+            Self::Apfs => &["macOS"],
+        }
+    }
+
+    fn needs(self) -> &'static str {
+        match self {
+            Self::Exfat => "",
+            Self::Ntfs => "",
+            Self::Btrfs => "WinBtrfs, to read it on Windows",
+            Self::Ext4 => "Nothing on Linux. Not readable on Windows or macOS.",
+            Self::Xfs => "Nothing on Linux. Not readable on Windows or macOS.",
+            Self::F2fs => "Nothing on Linux. Not readable on Windows or macOS.",
+            Self::HfsPlus => "hfsprogs, to create one on Linux",
+            Self::Apfs => "linux-apfs-rw, to read it on Linux",
+        }
+    }
+
+    /// Everything the wizard needs to offer this as a choice.
+    pub fn info(self) -> FilesystemInfo {
+        FilesystemInfo {
+            id: self.id(),
+            name: self.display_name(),
+            label_limit: self.label_limit(),
+            summary: self.summary(),
+            native_on: self.native_on(),
+            needs: self.needs(),
+            runs_proton: self.runs_proton(),
+            can_create_here: crate::proc::tool_exists(self.mkfs_tool()),
+        }
+    }
+}
+
+/// Every filesystem the wizard can offer, in the order it should show them.
+pub fn all_filesystems() -> Vec<FilesystemInfo> {
+    Filesystem::ALL.iter().map(|f| f.info()).collect()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -289,7 +465,9 @@ fn run_format(
     // equivalent knob here and takes its own default.
     let allocation = match filesystem {
         Filesystem::Exfat => " -AllocationUnitSize 131072",
-        Filesystem::Btrfs => "",
+        // NTFS's default cluster is right for a mixed drive and Format-Volume
+        // rejects the large ones exFAT is happy with, so it is left alone.
+        _ => "",
     };
     let script = format!(
         "$ErrorActionPreference='Stop'; \
@@ -375,8 +553,8 @@ fn run_format(
     // options say. mkfs.btrfs, above, ran as root (via pkexec), so the root
     // of the new filesystem is owned by root right now; without reclaiming
     // it, the very next write anyone makes here fails with EACCES.
-    if filesystem == Filesystem::Btrfs {
-        reclaim_btrfs_ownership(&device);
+    if filesystem.stores_ownership() {
+        reclaim_ownership(&device);
     }
 
     // A fresh filesystem carries a fresh label, and udisks automounts by
@@ -401,7 +579,7 @@ fn run_format(
 /// Reuses the elevation `mkfs.btrfs` itself already needed, so this costs no
 /// extra prompt beyond the one formatting was always going to ask for.
 #[cfg(not(windows))]
-fn reclaim_btrfs_ownership(device: &str) {
+fn reclaim_ownership(device: &str) {
     let Ok(uid_out) = crate::proc::command("id").arg("-u").output() else {
         return;
     };
@@ -494,6 +672,54 @@ pub fn mkfs_command(
                 "-c".to_string(),
                 EXFAT_CLUSTER_BYTES.to_string(),
                 "-n".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
+            // --fast writes the metadata and skips zeroing the volume, which on
+            // a 128 GB drive is the difference between seconds and an hour.
+            Filesystem::Ntfs => vec![
+                "mkfs.ntfs".to_string(),
+                "--force".to_string(),
+                "--fast".to_string(),
+                "--label".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
+            // -m 0 leaves nothing reserved for root. The 5% default exists so a
+            // full root filesystem is still repairable; on a cartridge it is
+            // six gigabytes of a 128 GB drive given up for nothing.
+            Filesystem::Ext4 => vec![
+                "mkfs.ext4".to_string(),
+                "-F".to_string(),
+                "-m".to_string(),
+                "0".to_string(),
+                "-L".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
+            Filesystem::Xfs => vec![
+                "mkfs.xfs".to_string(),
+                "-f".to_string(),
+                "-L".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
+            Filesystem::F2fs => vec![
+                "mkfs.f2fs".to_string(),
+                "-f".to_string(),
+                "-l".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
+            Filesystem::HfsPlus => vec![
+                "mkfs.hfsplus".to_string(),
+                "-v".to_string(),
+                label.to_string(),
+                device.to_string(),
+            ],
+            Filesystem::Apfs => vec![
+                "mkfs.apfs".to_string(),
+                "-L".to_string(),
                 label.to_string(),
                 device.to_string(),
             ],
