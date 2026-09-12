@@ -68,10 +68,41 @@ jobs:
           cargo build --release --manifest-path watcher/Cargo.toml
           cp watcher/target/release/pc-gamepak-watcher "$staging/"
           cp -r linux "$staging/"
+          # Both installers look here for the icon in a tarball, and it was
+          # never shipped: `install.sh` listed it as a required file and refused
+          # to run at all from an unpacked release.
+          mkdir -p "$staging/icons"
+          cp tauri-ui/src-tauri/icons/128x128.png "$staging/icons/"
           # No `|| true` here on purpose: it used to cover for gamepak-linux.sh,
           # a menu wrapper that was never written, and in doing so would have
           # hidden a missing README or LICENSE just as quietly.
           cp cartridge.conf.example README.md LICENSE "$staging/"
+
+          # Everything install.sh and install-user.sh read out of the tarball,
+          # checked here rather than by the first person to untar it. Twice now a
+          # release has shipped without a file its own installer needed, and both
+          # times the packaging step went green.
+          for needed in \
+            pc-gamepak \
+            pc-gamepak-watcher \
+            icons/128x128.png \
+            linux/install.sh \
+            linux/install-user.sh \
+            linux/pc-gamepak.desktop \
+            linux/99-pc-gamepak.rules \
+            linux/pc-gamepak@.service \
+            linux/pc-gamepak-remove@.service \
+            linux/pc-gamepak-watcher.service \
+            linux/gamepak-launcher-helper.sh \
+            linux/gamepak-remove-helper.sh \
+            linux/eject.sh
+          do
+            if [ ! -e "$staging/$needed" ]; then
+              echo "::error::the tarball is missing $needed, which the installers read"
+              exit 1
+            fi
+          done
+
           tar -czf "${staging}.tar.gz" "$staging"
           sha256sum "${staging}.tar.gz" > "${staging}.tar.gz.sha256"
 

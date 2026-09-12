@@ -149,6 +149,12 @@ launch a cartridge, use Zaparoo.
 - Flathub's actual requirements are documented and the manifest meets them.
 - `tools/check-versions.mjs` checks that every one of the fourteen places the
   version is written agrees, and can move them all at once.
+- **The Linux release tarball installs.** It shipped without the icon file
+  `install.sh` listed as required, so unpacking a release and running the
+  installer stopped on its first check — and `install.sh` looked for the
+  launcher only where a source build leaves it, so a tarball carrying the
+  binary reported it as "not built yet". Both fixed; the icon is in the tarball,
+  and packaging now fails if anything the installers read is missing from it.
 
 ## 1.0.1 — 2026-09-06
 
