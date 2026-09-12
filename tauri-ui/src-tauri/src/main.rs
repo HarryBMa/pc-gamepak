@@ -26,6 +26,9 @@
 //                                               read from the cartridge)
 //   save_slots(drive_path)                   -> Vec<SlotStatus>
 //   carried_home(drive_path)                 -> String | null
+//   frontends()                              -> [{ id, name, kind, installed,
+//                                               implemented, on }]
+//   set_frontend(id, on)                     -> the same list, updated
 //   sync_saves(drive_path)                   -> Vec<SyncOutcome>  (on insert)
 //   push_saves(drive_path)                   -> Vec<SyncOutcome>  (on eject)
 //   resolve_save_conflict(drive_path, slot_id, keep) -> SyncOutcome
@@ -67,7 +70,8 @@
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, drives, edit, format, health, home, insert, saves, settings, sgdb, stats, tuning,
+    busy, create, drives, edit, format, frontend, health, home, insert, saves, settings, sgdb,
+    stats, tuning,
 };
 
 use std::collections::HashMap;
@@ -344,6 +348,44 @@ fn save_slots(drive_path: String) -> Vec<saves::SlotStatus> {
     saves::status(Path::new(&drive_path))
 }
 
+/// Every front-end this build knows about, and whether each is on.
+///
+/// The settings dialog needs all three parts: the name, whether the plugin is
+/// actually installed, and whether it has been switched on. A switch for a plugin
+/// that is not there would be a switch that does nothing.
+#[tauri::command]
+fn frontends() -> Vec<FrontEndState> {
+    let enabled = settings::load().frontends;
+    frontend::known()
+        .into_iter()
+        .map(|front| FrontEndState {
+            on: enabled.is_on(front.id),
+            front,
+        })
+        .collect()
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontEndState {
+    #[serde(flatten)]
+    front: frontend::FrontEnd,
+    on: bool,
+}
+
+/// Switch one front-end on or off.
+///
+/// Its own command rather than a field on `set_settings`, because the dialog
+/// toggles these one at a time and a round trip through the whole settings
+/// object would make two toggles in quick succession lose the first.
+#[tauri::command]
+fn set_frontend(id: String, on: bool) -> Result<Vec<FrontEndState>, String> {
+    let mut current = settings::load();
+    current.frontends.set(&id, on);
+    settings::save(&current)?;
+    Ok(frontends())
+}
+
 /// The home directory this cartridge carries, if it carries one.
 ///
 /// Read-only and cheap, so the details sheet can say "this cartridge keeps the
@@ -428,9 +470,16 @@ fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
     if args.iter().any(|arg| arg == "--show") {
         return None;
     }
-    let action = settings::load().on_cartridge_insert;
-    if action == insert::InsertAction::FocusUi {
+    let settings = settings::load();
+    if settings.frontends.is_on(frontend::LAUNCHER)
+        && settings.on_cartridge_insert == insert::InsertAction::FocusUi
+    {
         return None; // The common path, and no cartridge read needed to know it.
+    }
+    // The launcher not being a front-end at all is decided before the cartridge
+    // is read: there is nothing to read it for.
+    if !settings.frontends.is_on(frontend::LAUNCHER) {
+        return Some(insert::Reaction::Quit);
     }
 
     let drive = cartridge::drive_from_args(args.iter().cloned());
@@ -440,7 +489,7 @@ fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
     // A cartridge that cannot be read is a window's problem to explain, not
     // something to silently act on.
     let info = cartridge::read_cartridge_info(&drive).ok()?;
-    Some(insert::decide(action, &info))
+    Some(insert::decide_for(&settings, &info))
 }
 
 /// Carry out a reaction that does not need a window.
@@ -1957,6 +2006,8 @@ fn main() {
             cartridge_stats,
             save_slots,
             carried_home,
+            frontends,
+            set_frontend,
             sync_saves,
             push_saves,
             resolve_save_conflict,

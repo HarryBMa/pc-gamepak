@@ -195,6 +195,8 @@ const el = {
   setTuneRow: $("set-tune-row"),
   setTrim: $("set-trim"),
   setCopyRate: $("set-copy-rate"),
+  frontends: $("frontends"),
+  frontendsWarning: $("frontends-warning"),
   setOnInsert: $("set-on-insert"),
   onInsertHint: $("on-insert-hint"),
   setPlaytime: $("set-playtime"),
@@ -2293,6 +2295,7 @@ function openCartridgePicker() {
 
 function openSettings() {
   applySettings();
+  void renderFrontends();
   renderSources();
   el.settingsStatus.textContent = "";
   el.settingsDialog.showModal();
@@ -2746,6 +2749,76 @@ function describeOnInsert() {
  * of the three cannot hold a symlink, which is what Steam needs 1,892 of to put
  * Proton on a cartridge, and another cannot be read by Windows at all.
  */
+/**
+ * Draw the front-ends, each with its own switch.
+ *
+ * Built from what the backend knows rather than hardcoded here, so a front-end
+ * added later appears without this file changing. Three states matter and are
+ * all shown: switched on, installed, and implemented at all — a switch for a
+ * plugin that is not on the machine would be a switch that does nothing, and one
+ * for a plugin nobody has written yet would be worse.
+ */
+async function renderFrontends() {
+  let list = [];
+  try {
+    list = (await invoke("frontends")) ?? [];
+  } catch (error) {
+    el.frontends.textContent = "Could not read which front-ends are set up.";
+    console.error("[pc-gamepak]", error);
+    return;
+  }
+
+  el.frontends.replaceChildren();
+  for (const front of list) {
+    const row = document.createElement("label");
+    row.className = "opt";
+
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.id = `frontend-${front.id}`;
+    box.checked = Boolean(front.on);
+    // Not installed, or not written: the switch would do nothing either way.
+    box.disabled = !front.implemented || !front.installed;
+    box.addEventListener("change", () => {
+      void invoke("set_frontend", { id: front.id, on: box.checked })
+        .then(() => renderFrontends())
+        .catch((error) => {
+          box.checked = !box.checked;
+          console.error("[pc-gamepak]", error);
+        });
+    });
+
+    const body = document.createElement("span");
+    body.className = "opt__body";
+    const label = document.createElement("span");
+    label.className = "opt__label";
+    label.textContent = front.name;
+    const hint = document.createElement("span");
+    hint.className = "opt__hint";
+    hint.textContent = frontendHint(front);
+    body.append(label, hint);
+    row.append(box, body);
+    el.frontends.append(row);
+  }
+
+  // Everything off is allowed — somebody may want a cartridge that waits to be
+  // opened — and is worth saying out loud, because it is rarely the intention.
+  const anyOn = list.some((front) => front.on);
+  el.frontendsWarning.hidden = anyOn;
+  el.frontendsWarning.textContent = anyOn
+    ? ""
+    : "Nothing will happen when a cartridge is plugged in. Open it from the tray or the desktop entry.";
+}
+
+/** What to say under a front-end's name. */
+function frontendHint(front) {
+  if (!front.implemented) return `${front.description} Not built yet.`;
+  if (!front.installed) {
+    return `${front.description} Not found${front.installPath ? ` at ${front.installPath}` : ""}.`;
+  }
+  return front.description;
+}
+
 function describeFilesystem() {
   const hints = {
     ntfs:

@@ -115,6 +115,24 @@ pub enum Reaction {
     Notify { title: String, body: String },
 }
 
+/// The one call the launcher makes: everything the settings say, applied.
+///
+/// Split from [`decide`] so the two questions stay separate and both stay
+/// tested. This one asks whether the launcher is a front-end at all — a Deck with
+/// the Decky row switched on and the launcher off must not have a window appear
+/// over the top of it — and only then what the launcher should do about the
+/// cartridge.
+pub fn decide_for(settings: &crate::settings::Settings, cartridge: &CartridgeInfo) -> Reaction {
+    if !settings.frontends.is_on(crate::frontend::LAUNCHER) {
+        // Something else is the front-end. Note that this is not the same as
+        // `InsertAction::None`: that is the launcher being the front-end and
+        // choosing to stay out of the way, which keeps its tray and its desktop
+        // entry as the way in. Either way, no window.
+        return Reaction::Quit;
+    }
+    decide(settings.on_cartridge_insert, cartridge)
+}
+
 /// Turn a setting and a cartridge into one thing to do.
 ///
 /// Falls back to `ShowWindow` rather than doing nothing whenever the chosen
@@ -438,6 +456,40 @@ mod tests {
         assert_eq!(
             decide(InsertAction::AutoLaunchGame, &cartridge("Broken", "")),
             Reaction::ShowWindow
+        );
+    }
+
+    #[test]
+    fn the_launcher_stays_out_of_the_way_when_a_plugin_is_the_front_end() {
+        // The Deck arrangement: the row on the Steam home screen is the
+        // front-end, and a window appearing over the top of it would be the bug.
+        let mut settings = crate::settings::Settings::default();
+        settings.frontends.set(crate::frontend::LAUNCHER, false);
+        settings.frontends.set(crate::frontend::DECKY, true);
+
+        let cart = cartridge("Hollow Knight", "steam://rungameid/367520");
+        assert_eq!(decide_for(&settings, &cart), Reaction::Quit);
+
+        // And it overrides the insert action rather than being overridden by it:
+        // a launcher that is not a front-end does not auto-launch either.
+        settings.on_cartridge_insert = InsertAction::AutoLaunchGame;
+        assert_eq!(decide_for(&settings, &cart), Reaction::Quit);
+    }
+
+    #[test]
+    fn with_the_launcher_on_the_insert_action_decides() {
+        let mut settings = crate::settings::Settings::default();
+        let cart = cartridge("Hollow Knight", "steam://rungameid/367520");
+        // The default install: a window.
+        assert_eq!(decide_for(&settings, &cart), Reaction::ShowWindow);
+
+        settings.on_cartridge_insert = InsertAction::AutoLaunchGame;
+        assert_eq!(
+            decide_for(&settings, &cart),
+            Reaction::Launch {
+                executable: "steam://rungameid/367520".to_string(),
+                title: "Hollow Knight".to_string(),
+            }
         );
     }
 

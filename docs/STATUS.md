@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 336 tests
+### `core/` — `gamepak-core`, 348 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -19,6 +19,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `drives` | Which volumes may be written to — an allowlist of automount locations, never a denylist. Parses `/proc/mounts`; Win32 volume APIs on Windows. |
 | `format` | NTFS, exFAT and btrfs, behind four gates: removable allowlist re-derived here, not the system drive, the current label typed back exactly, and explicitly asked for. |
 | `home` | A carried game's whole home directory, on the cartridge. `portable_home=yes` and the launcher starts the game with `HOME` (and the XDG, or Windows, equivalents) pointed at `.gamepak/home/`, so every save it writes lands on the drive with nothing declared and nothing copied. The cache stays on the host. Kazeta's mechanism, minus the overlay it does not need. |
+| `frontend` | The register of places a cartridge can open: the built-in launcher, the Decky row, a Playnite extension that is named but unwritten. Holds which are on, detects whether each plugin is actually installed, and keeps a front-end this build has never heard of rather than dropping it. The contract with a plugin is one boolean in `settings.json` — no socket, no daemon, nothing to version. |
 | `insert` | What plugging a cartridge in should do — a window, the game, a notification, or nothing — and the rule that auto-launch will only ever start a URI the host already has a handler for, never a program carried on the drive. Lives in core so all three things that open a launcher get the same answer. |
 | `health` | Negotiated link speed, UASP vs BOT, how full the drive is, and the volume's own name and filesystem. sysfs on Linux; the transport only, lazily, on Windows. |
 | `playnite` | Reads a Playnite JSON library export: one list covering Steam, GOG, Epic, Xbox, itch, emulators. Finds Playnite on Windows and through Proton prefixes on Linux. |
@@ -38,7 +39,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 
 `pc-gamepak --drive <path>` is the popup; `pc-gamepak --create` is the wizard.
 Exactly one window is ever built, so neither mode costs anything for the other.
-48 commands, no command that takes a path to read.
+50 commands, no command that takes a path to read.
 
 The launcher counts what it starts and, if asked to, carries the saves. Both
 are off the same principle: the cartridge is the thing that travels, so the

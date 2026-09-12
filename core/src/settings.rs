@@ -90,7 +90,15 @@ pub struct Settings {
     /// drive. That is a thing to opt into, however carefully `saves` goes
     /// about it.
     pub save_sync: bool,
-    /// What happens when a cartridge is plugged in.
+    /// Which front-ends handle a cartridge. See [`crate::frontend`].
+    ///
+    /// The launcher is on and every plugin is off until somebody says otherwise.
+    /// A plugin — the Decky row, a Playnite extension — reads this same file to
+    /// find out whether it is the designated front-end, which is the whole of
+    /// the contract between them.
+    pub frontends: crate::frontend::Frontends,
+    /// What happens when a cartridge is plugged in, *if* the launcher is one of
+    /// the front-ends that is on.
     ///
     /// `focus_ui` — a window, which is what this has always done and what it
     /// still does unless told otherwise. `none`, `notify_only` and
@@ -134,6 +142,7 @@ impl Default for Settings {
             default_format: false,
             save_sync: false,
             track_playtime: true,
+            frontends: crate::frontend::Frontends::default(),
             on_cartridge_insert: crate::insert::InsertAction::default(),
         }
     }
@@ -265,6 +274,23 @@ mod tests {
         save_to(&path, &chosen).unwrap();
 
         assert_eq!(load_from(&path), chosen);
+    }
+
+    #[test]
+    fn a_malformed_frontends_value_does_not_reset_every_other_setting() {
+        // `load_from` treats an unparseable file as no file, so one bad value
+        // would silently undo everything the user has configured.
+        let scratch = crate::testutil::Scratch::new("settings-frontends");
+        let path = scratch.join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"frontends":["launcher"],"steamgriddbApiKey":"kept"}"#,
+        )
+        .unwrap();
+
+        let loaded = load_from(&path);
+        assert!(loaded.frontends.is_on(crate::frontend::LAUNCHER));
+        assert_eq!(loaded.steamgriddb_api_key, "kept");
     }
 
     #[test]

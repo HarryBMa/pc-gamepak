@@ -20,6 +20,7 @@ pub mod drives;
 pub mod edit;
 pub mod folders;
 pub mod format;
+pub mod frontend;
 pub mod health;
 pub mod home;
 pub mod insert;

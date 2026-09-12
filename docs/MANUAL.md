@@ -116,10 +116,44 @@ what it just launched. A cartridge with one game on it has no rail at all.
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
 
-### What happens when you plug one in
+### Where a cartridge opens
 
-By default, a window. **Settings → When a cartridge is plugged in** offers four
-answers:
+The launcher is one answer, not the only one. It ships with the project and is on
+by default, because a cartridge that does nothing when you plug it in is broken
+and because it is the only front-end that needs no second install. Everything else
+is a **plugin**, and **Settings → Where a cartridge opens** is the list:
+
+| | |
+|---|---|
+| **PC GamePak launcher** | The cartridge's own window. Built in, on by default. |
+| **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-decky). |
+| **Playnite library** | Cartridge games in Playnite's library while the drive is in. Not built yet, and listed so the shape is visible. |
+
+A plugin has to be installed before its switch does anything, and the dialog says
+so rather than offering a dead control. More than one may be on: a desktop that
+also runs Playnite may reasonably want both its window and a library entry. A Deck
+almost certainly wants only the row — switch the launcher off there and no window
+appears over the top of it.
+
+All of them off is allowed, and the dialog says what it means: nothing happens on
+insert, and the tray icon or desktop entry is how you open a cartridge.
+
+The whole contract between the launcher and a plugin is one boolean in
+`settings.json`:
+
+```json
+{ "frontends": { "launcher": false, "decky": true } }
+```
+
+No socket, no daemon, nothing to keep in step. A plugin reads that file, finds
+whether it is the designated front-end, and behaves accordingly — which is what
+lets one be written in Python inside Steam's process tree and another in C# inside
+Playnite's.
+
+### What the launcher does when you plug one in
+
+If the launcher is one of the front-ends that is on, **Settings → When a cartridge
+is plugged in** decides what it does about it:
 
 | | |
 |---|---|
@@ -141,6 +175,11 @@ handled by a launcher already installed on your machine, opening a game you
 already own, through an association the operating system made. An executable on
 the drive is a stranger's binary, and a setting left switched on is not consent
 to run it.
+
+Switching the launcher off in the list above is not the same as *Nothing* here.
+*Nothing* is the launcher being the front-end and choosing to stay out of the
+way; off is another front-end having the job. Either way no window appears, and
+only the first keeps the tray as the way in.
 
 The decision is made by the launcher rather than by whatever opened it, because
 three different things do — the resident watcher, the udev helper on a system
