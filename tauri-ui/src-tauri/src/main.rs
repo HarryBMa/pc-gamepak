@@ -218,17 +218,65 @@ fn count_the_launch(drive_path: &str, executable: &str, title: String) {
     match stats::record_launch(Path::new(drive_path), executable, &title) {
         Ok(session) => {
             if let Ok(mut open) = playing().lock() {
-                open.insert(stats::key_for(executable), session);
+                open.insert(stats::key_for(executable), session.clone());
             }
+            beat(session);
         }
         Err(why) => debug_log(format!("stats: {why}")),
     }
 }
 
+/// Re-stamp an open session on the drive, once a minute, until it is closed.
+///
+/// One thread per session, which sounds worse than it is: there is one session
+/// at a time in practice, the thread is asleep for all but a few milliseconds
+/// of each minute, and it ends itself as soon as the session leaves the table.
+/// The alternative — a timer owned by the window — would stop ticking in
+/// exactly the case this exists for, which is the window not getting to finish.
+///
+/// Without this, a crash or a power cut costs the whole session's hours. With
+/// it, the cost is whatever happened since the last beat. Kazeta does the same
+/// thing, and the sixty seconds is its number too.
+fn beat(session: stats::Session) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(stats::HEARTBEAT_SECONDS));
+        // Still the session the launcher thinks is running? If Eject or the
+        // window closing has drained the table, this thread's work is done.
+        let still_open = playing()
+            .lock()
+            .map(|open| open.contains_key(session.key()))
+            .unwrap_or(false);
+        if !still_open {
+            return;
+        }
+        if let Err(why) = stats::touch_session(&session) {
+            // A cartridge that has gone is the ordinary way for this to end.
+            debug_log(format!("stats heartbeat: {why}"));
+            return;
+        }
+    });
+}
+
 /// Everything this cartridge has recorded, for the details sheet.
+///
+/// Settles an abandoned session before reading, which is why this is the one
+/// read here that writes. A cartridge turning up is exactly the moment to
+/// account for the last run that did not get to finish — and doing it here
+/// means the hours are in the total the sheet is about to show, rather than
+/// appearing on the next launch as if from nowhere.
 #[tauri::command]
 fn cartridge_stats(drive_path: String) -> stats::Stats {
-    stats::read(Path::new(&drive_path))
+    let root = Path::new(&drive_path);
+    if settings::load().track_playtime {
+        if let Some(seconds) = stats::recover(root) {
+            if seconds > 0 {
+                debug_log(format!(
+                    "stats: recovered {seconds}s from a session that did not close"
+                ));
+            }
+        }
+    }
+    stats::read(root)
 }
 
 /// Close every open session and add its hours.

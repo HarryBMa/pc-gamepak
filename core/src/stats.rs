@@ -34,6 +34,20 @@ pub const STATS_FILE: &str = "stats.json";
 /// be told apart from this one rather than silently misread.
 pub const STATS_VERSION: u32 = 1;
 
+/// How often an open session re-stamps itself on the drive.
+///
+/// Taken from Kazeta, which does the same thing for the same reason: it writes
+/// `playtime_end` every sixty seconds while a game runs, so a crash or a
+/// yanked drive costs a minute rather than the whole session. This project
+/// counted the launch before the game started and called losing the hours
+/// "honest undercounting", which it was — and a minute of loss is more honest
+/// still for one small write a minute.
+///
+/// Sixty seconds, not less: this lands on removable flash, and a cartridge
+/// being written to every second for an eight-hour session is a cost nobody
+/// asked for to sharpen a number nobody reads to the minute.
+pub const HEARTBEAT_SECONDS: u64 = 60;
+
 /// The longest a single session is allowed to contribute.
 ///
 /// Wall clock is the only clock available — a game is a process the launcher
@@ -55,6 +69,32 @@ pub struct Stats {
     /// ordered file produces a stable diff, and a stats file that reshuffles
     /// itself on every launch is one that looks corrupt to anyone reading it.
     pub games: BTreeMap<String, GameStats>,
+    /// The session that is running now, if one is.
+    ///
+    /// On the drive rather than in the launcher's memory, because the whole
+    /// point is to survive the launcher not getting to finish. A record left
+    /// here by a run that died is picked up by [`recover`] and turned into the
+    /// hours it managed before it went.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_session: Option<OpenSession>,
+}
+
+/// A session in progress, as the drive records it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OpenSession {
+    /// Which game, keyed as [`key_for`] keys it.
+    pub key: String,
+    /// Unix seconds when Play was pressed.
+    pub started: u64,
+    /// Unix seconds at the last heartbeat. This is the number that decides how
+    /// much a crashed session is credited with.
+    pub heartbeat: u64,
+    /// Which machine had it open. Cosmetic, and useful in exactly the case
+    /// that is hardest to reason about later: a cartridge pulled out of one PC
+    /// and plugged into another, where the second one settles the first one's
+    /// session.
+    pub host: String,
 }
 
 /// One game's history, across every host that has played it.
@@ -183,6 +223,9 @@ pub fn record_launch(root: &Path, executable: &str, title: &str) -> Result<Sessi
     let host = host_name();
 
     let mut stats = read(root);
+    // Settle whatever the last run left behind before opening a new session,
+    // or opening this one would overwrite it and lose those hours for good.
+    let _ = settle(&mut stats);
     let entry = stats.games.entry(key.clone()).or_default();
     if !title.trim().is_empty() {
         entry.title = title.trim().to_string();
@@ -192,8 +235,14 @@ pub fn record_launch(root: &Path, executable: &str, title: &str) -> Result<Sessi
         entry.first_played = now;
     }
     entry.last_played = now;
-    entry.last_host = host;
+    entry.last_host = host.clone();
 
+    stats.open_session = Some(OpenSession {
+        key: key.clone(),
+        started: now,
+        heartbeat: now,
+        host,
+    });
     write(root, &stats)?;
 
     Ok(Session {
@@ -201,6 +250,63 @@ pub fn record_launch(root: &Path, executable: &str, title: &str) -> Result<Sessi
         key,
         started_unix: now,
     })
+}
+
+/// Re-stamp the open session, so a crash after this point keeps the hours up to
+/// it.
+///
+/// Called every [`HEARTBEAT_SECONDS`] while a game is running. Cheap, and
+/// deliberately not fussy: a cartridge that has gone, or whose record no longer
+/// names this session, is not an error worth surfacing — the session is simply
+/// no longer being counted.
+pub fn touch_session(session: &Session) -> Result<(), String> {
+    let mut stats = read(&session.root);
+    let Some(open) = stats.open_session.as_mut() else {
+        return Ok(());
+    };
+    if open.key != session.key || open.started != session.started_unix {
+        // Something else opened a session over this one. Leave it alone.
+        return Ok(());
+    }
+    open.heartbeat = now_unix();
+    write(&session.root, &stats)
+}
+
+/// Turn a session left behind by a run that died into the hours it managed.
+///
+/// Call this when a cartridge turns up — the launcher does, on insert. A session
+/// that ended properly left nothing here; one that did not left a start and a
+/// last heartbeat, and the difference is what the machine got through before it
+/// went. Returns the seconds credited, and `None` when there was nothing to
+/// settle, which is the ordinary case.
+///
+/// Up to [`HEARTBEAT_SECONDS`] of real play is still lost, because the last
+/// heartbeat is the last thing known to be true. That is the trade the whole
+/// mechanism makes.
+pub fn recover(root: &Path) -> Option<u64> {
+    let mut stats = read(root);
+    let credited = settle(&mut stats)?;
+    // Written even when `credited` is zero: the stale record has to go, or
+    // every later read keeps finding it.
+    write(root, &stats).ok()?;
+    Some(credited)
+}
+
+/// Fold an abandoned session into the totals and clear it.
+///
+/// Shared by [`recover`] and [`record_launch`] so a launch cannot quietly
+/// discard the previous run's session by overwriting the record.
+fn settle(stats: &mut Stats) -> Option<u64> {
+    let open = stats.open_session.take()?;
+    let played = open
+        .heartbeat
+        .saturating_sub(open.started)
+        .min(MAX_SESSION_SECONDS);
+    if played > 0 {
+        let entry = stats.games.entry(open.key).or_default();
+        entry.seconds = entry.seconds.saturating_add(played);
+    }
+    Some(played)
 }
 
 /// Add a finished session's duration to the total.
@@ -219,6 +325,25 @@ pub fn record_session_end(session: &Session) -> Result<u64, String> {
     }
 
     let mut stats = read(&session.root);
+    // This session is being closed properly, so its own open record is spent
+    // rather than something to recover. Clearing it before adding the seconds
+    // is what stops the duration being counted twice.
+    //
+    // Matched on the game alone, not on the start time as well. Two sessions
+    // for one game cannot overlap — starting a game settles the previous
+    // session first — and a stricter match would leave the record behind
+    // whenever the two disagreed, which then gets recovered as a second helping
+    // of the same hours. If this does clear a record that was not strictly
+    // ours, the cost is a session that would have to be recovered losing its
+    // crash insurance; the cost the other way is counting time twice, and
+    // inventing hours is the one thing this file must not do.
+    if stats
+        .open_session
+        .as_ref()
+        .is_some_and(|open| open.key == session.key)
+    {
+        stats.open_session = None;
+    }
     let entry = stats.games.entry(session.key.clone()).or_default();
     entry.seconds = entry.seconds.saturating_add(played);
     write(&session.root, &stats)?;
@@ -364,14 +489,150 @@ mod tests {
     }
 
     #[test]
-    fn a_session_that_is_never_closed_keeps_its_launch() {
+    fn a_session_that_dies_before_its_first_heartbeat_keeps_its_launch() {
         let scratch = Scratch::new("stats-crash");
         let session = record_launch(scratch.path(), "Games/Foo/Foo.exe", "Foo").expect("record");
-        drop(session); // the machine lost power here
+        drop(session); // the machine lost power here, inside the first minute
 
         let entry = for_game(scratch.path(), "Games/Foo/Foo.exe");
         assert_eq!(entry.launches, 1);
-        assert_eq!(entry.seconds, 0);
+        assert_eq!(entry.seconds, 0, "nothing was known to be true yet");
+        // And the record it left behind settles to nothing rather than lingering.
+        assert_eq!(recover(scratch.path()), Some(0));
+        assert!(read(scratch.path()).open_session.is_none());
+    }
+
+    /// Move an open session's start back, so it reads as having run that long.
+    ///
+    /// The alternative is a test that sleeps for an hour.
+    fn ran_for(root: &Path, seconds: u64) {
+        let mut stats = read(root);
+        let open = stats.open_session.as_mut().expect("a session is open");
+        open.started -= seconds;
+        write(root, &stats).expect("write");
+    }
+
+    #[test]
+    fn a_heartbeat_lets_a_crashed_session_keep_its_hours() {
+        // The whole point of the mechanism: the launcher never gets to close
+        // this session, and the hours survive anyway.
+        let scratch = Scratch::new("stats-heartbeat");
+        let session =
+            record_launch(scratch.path(), "steam://rungameid/620", "Portal 2").expect("record");
+        touch_session(&session).expect("heartbeat");
+        ran_for(scratch.path(), 7200);
+        drop(session); // power cut, two hours in
+
+        assert_eq!(recover(scratch.path()), Some(7200));
+        assert_eq!(
+            for_game(scratch.path(), "steam://rungameid/620").seconds,
+            7200
+        );
+    }
+
+    #[test]
+    fn a_recovered_session_is_only_credited_once() {
+        let scratch = Scratch::new("stats-recover-once");
+        let session = record_launch(scratch.path(), "steam://rungameid/1", "X").expect("record");
+        touch_session(&session).expect("heartbeat");
+        ran_for(scratch.path(), 600);
+        drop(session);
+
+        assert_eq!(recover(scratch.path()), Some(600));
+        assert_eq!(recover(scratch.path()), None, "nothing left to settle");
+        assert_eq!(for_game(scratch.path(), "steam://rungameid/1").seconds, 600);
+    }
+
+    #[test]
+    fn a_session_closed_properly_leaves_nothing_to_recover() {
+        let scratch = Scratch::new("stats-clean-close");
+        let mut session =
+            record_launch(scratch.path(), "steam://rungameid/1", "X").expect("record");
+        touch_session(&session).expect("heartbeat");
+        session.started_unix -= 1800;
+
+        assert_eq!(record_session_end(&session).expect("close"), 1800);
+        assert_eq!(recover(scratch.path()), None, "the record was spent");
+        // And the duration was counted once, not once here and once on recovery.
+        assert_eq!(
+            for_game(scratch.path(), "steam://rungameid/1").seconds,
+            1800
+        );
+    }
+
+    #[test]
+    fn starting_a_second_game_settles_the_first_rather_than_discarding_it() {
+        // A new launch overwrites the open record. Without settling first, the
+        // previous run's hours would go with it.
+        let scratch = Scratch::new("stats-settle-on-launch");
+        let first = record_launch(scratch.path(), "steam://rungameid/1", "One").expect("record");
+        touch_session(&first).expect("heartbeat");
+        ran_for(scratch.path(), 900);
+
+        record_launch(scratch.path(), "steam://rungameid/2", "Two").expect("record");
+        assert_eq!(for_game(scratch.path(), "steam://rungameid/1").seconds, 900);
+        assert_eq!(
+            read(scratch.path()).open_session.unwrap().key,
+            "steam://rungameid/2"
+        );
+    }
+
+    #[test]
+    fn a_heartbeat_for_a_session_that_has_been_replaced_changes_nothing() {
+        let scratch = Scratch::new("stats-stale-heartbeat");
+        let stale = record_launch(scratch.path(), "steam://rungameid/1", "One").expect("record");
+        let current = record_launch(scratch.path(), "steam://rungameid/2", "Two").expect("record");
+
+        touch_session(&stale).expect("stale heartbeat");
+        let open = read(scratch.path()).open_session.expect("still open");
+        assert_eq!(
+            open.key,
+            current.key(),
+            "the stale one must not steal the record"
+        );
+    }
+
+    #[test]
+    fn a_recovered_session_is_capped_like_any_other() {
+        let scratch = Scratch::new("stats-recover-cap");
+        let session = record_launch(scratch.path(), "steam://rungameid/1", "X").expect("record");
+        touch_session(&session).expect("heartbeat");
+        ran_for(scratch.path(), 7 * 24 * 60 * 60);
+        drop(session);
+
+        assert_eq!(recover(scratch.path()), Some(MAX_SESSION_SECONDS));
+    }
+
+    #[test]
+    fn a_cartridge_with_nothing_running_says_so_rather_than_writing() {
+        let scratch = Scratch::new("stats-no-session");
+        record_launch(scratch.path(), "steam://rungameid/1", "X").expect("record");
+        recover(scratch.path()); // clears the one just opened
+                                 // A stats file with no session in it does not carry an empty record.
+        let text = std::fs::read_to_string(stats_path(scratch.path())).expect("read");
+        assert!(!text.contains("openSession"), "{text}");
+    }
+
+    #[test]
+    fn a_session_left_by_another_machine_is_settled_here() {
+        // The cartridge was pulled out of one PC mid-game and plugged into
+        // another. The hours the first one managed are the cartridge's.
+        let scratch = Scratch::new("stats-other-host");
+        let mut stats = Stats::default();
+        let now = now_unix();
+        stats.open_session = Some(OpenSession {
+            key: "steam://rungameid/620".to_string(),
+            started: now - 3600,
+            heartbeat: now - 60,
+            host: "workshop".to_string(),
+        });
+        write(scratch.path(), &stats).expect("seed");
+
+        assert_eq!(recover(scratch.path()), Some(3540));
+        assert_eq!(
+            for_game(scratch.path(), "steam://rungameid/620").seconds,
+            3540
+        );
     }
 
     #[test]

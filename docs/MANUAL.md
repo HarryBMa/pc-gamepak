@@ -122,9 +122,17 @@ A cartridge counts its own launches. `.gamepak/stats.json` on the drive holds
 how many times each game has been started, how long for, and when it was last
 played and on which machine — so the count follows the cartridge rather than
 staying on the PC that happened to play it. The launcher shows it under the ⓘ.
-The launch is written before the game starts, so a crash costs the hours and
-keeps the count; a cartridge that cannot be written to simply does not get one,
-and nothing about Play changes.
+The launch is written before the game starts, so it survives a crash; a
+cartridge that cannot be written to simply does not get one, and nothing about
+Play changes.
+
+While a game is running the open session re-stamps itself on the drive once a
+minute, and the next time that cartridge turns up anything left behind is added
+to the total. So a crash, a power cut or a drive pulled out of the port costs
+**up to a minute** of the session rather than all of it — and it works across
+machines: a cartridge yanked out of one PC mid-game has those hours settled by
+whichever machine sees it next. Borrowed from Kazeta, which does the same thing
+with the same sixty seconds.
 
 The save is the harder half, and the one that makes a second machine feel like
 starting over. Steam Cloud covers the games that are in it and nothing covers a
@@ -455,14 +463,47 @@ free next to a USB write — then reads the cartridge back and compares. It name
 what is wrong rather than just failing: a missing file, a half-written one with
 both byte counts, or one that arrived with different contents.
 
-It is opt-in because it costs one extra pass over the drive, so it roughly adds
-the time the copy itself took. The file list is left on the cartridge at
-`.gamepak/manifest.json`, so the same check can be run later on a machine that no
-longer has the original.
+It is **on by default**, and costs one extra pass over the drive — so it roughly
+adds the time the copy itself took. It earns that: the first cartridge this
+project ever checked on real hardware came back with two corrupt 2 GB archives.
+The file list is left on the cartridge at `.gamepak/manifest.json`, so the same
+check can be run later on a machine that no longer has the original.
 
 This is an integrity check, not a signature: CRC-32 is the right tool for *did
 this survive the cable*, the job it does in zip and gzip, and the wrong tool for
 *did somebody change this on purpose*.
+
+### Which cartridge is this?
+
+Verifying answers "did these bytes survive". It cannot answer the other
+question — **did you and I build the same cartridge?** — because each of us
+checks against our own manifest.
+
+So `build-cart` and `verify-cart` both print a **digest**: one SHA-256 over
+every copied file's path, length and checksum, sorted, so the order things were
+copied in does not change it.
+
+```
+$ verify-cart /run/media/you/TOMB_RAIDER
+107 files, 107.43 GB, from /run/media/you/TOMB_RAIDER
+digest: 66d057355b062fb181e34f45b85a74e0b45bc367c7b06dd1fc846945342fc2c2
+```
+
+Put that value into a `build-cart` request as `expectDigest` and every later
+build of that request is checked against it:
+
+```json
+{ "expectDigest": "66d057355b06…", "title": "Tunic", "…": "…" }
+```
+
+A cartridge can be perfectly intact and still not be the cartridge somebody
+else built — different game version, a patch applied, a file missed — and until
+now nothing would have said so. The artwork, `cartridge.conf` and `.gamepak/`
+are deliberately outside it: two people who chose different cover art but copied
+the same game should agree, because the game is what a recipe pins.
+
+The idea is [Kazeta's cartridge creator's](https://github.com/kazetaos/kazeta-creator),
+where a recipe declares the hash its finished cart must have.
 
 ### What it can put on the cartridge
 

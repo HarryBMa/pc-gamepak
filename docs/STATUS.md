@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 275 tests
+### `core/` — `gamepak-core`, 292 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -23,12 +23,12 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `settings` | What the user has switched on, stored beside the artwork cache. Everything defaults to off. |
 | `saves` | Saves that travel with the cartridge. Reads `save=` lines whose paths are written as a `{token}` the host resolves — the three platforms disagree about where saves go — and reconciles the two copies against what *this machine* last saw of each, kept per host on the drive. Only the side that changed is copied; both changing is a conflict that writes nothing; whatever is about to be replaced is moved aside and kept. Symlink mode for people who want one copy rather than two. |
 | `sgdb` | SteamGridDB artwork search, download and cache. Refuses every request until the user opts in and supplies a key. |
-| `stats` | Launches, hours and last-played in `.gamepak/stats.json` on the drive, so the count follows the cartridge rather than the PC. The launch is written before the game starts, so a crash costs the hours and keeps the count. No write here can fail a launch. |
+| `stats` | Launches, hours and last-played in `.gamepak/stats.json` on the drive, so the count follows the cartridge rather than the PC. The launch is written before the game starts and the open session re-stamps itself every sixty seconds, so a crash costs a minute rather than the session — and the machine that sees the cartridge next settles whatever the last one left open. No write here can fail a launch. |
 | `steam` | Steam's own manifests: `libraryfolders.vdf`, `appmanifest_*.acf`, the library cache for covers. Hand-written KeyValues parser. |
 | `steamlib` | Copies a Steam game onto a cartridge and registers the drive as a Steam library, so Steam plays from the cartridge. Also unregisters one, and asks a running Steam to shut down so those edits survive its exit. |
 | `trim` | Tells the drive which blocks it no longer has to keep. Treats "this enclosure will not" as a fact, not a failure. |
 | `tuning` | The Windows settings worth changing per cartridge, the commands they run, and their exact opposites. |
-| `verify` | CRC-32, taken as each file is copied and checked by reading the cartridge back. **On by default** since it caught real corruption on the first cartridge ever checked on hardware. Leaves a manifest so the same check can be run later without the original; `verify-cart` is the command that does it. |
+| `verify` | CRC-32, taken as each file is copied and checked by reading the cartridge back. Also a SHA-256 **cartridge digest** over the manifest — one value answering "is this the same cartridge somebody else built", which verifying against your own manifest cannot. Hand-written hash, checked against the published vectors and an independent implementation. **On by default** since it caught real corruption on the first cartridge ever checked on hardware. Leaves a manifest so the same check can be run later without the original; `verify-cart` is the command that does it. |
 | `autorun` | Writes `autorun.inf` so Explorer shows the game's name and icon; builds a PNG-in-ICO when the cover allows it. |
 
 ### `tauri-ui/` — one binary, two windows
@@ -241,12 +241,22 @@ building anything clever about shader caches or per-game Proton pinning.
 `contentdb.yaml` holds recipes, not games: where to get the files, how to
 unpack, what to run, which runtime, and the xxh3 hash the finished cart must
 match. The community shares recipes, everyone builds a byte-identical cart, and
-the same file is a compatibility list as a side effect. `build-cart` already
-takes a JSON `CartridgeRequest`, which is the same shape one step short of the
-idea — it has no declared output hash, so two people running it do not find out
-whether they got the same cartridge. Cheap to add, and it would make
-`verify-cart` mean something across machines rather than only against the
-manifest a single write produced.
+the same file is a compatibility list as a side effect.
+
+**Half of this is now taken.** `build-cart` and `verify-cart` print a SHA-256
+digest over the manifest, and a request can declare `expectDigest` and fail the
+build when it does not match — so `verify-cart` now answers across machines, not
+only against the manifest one write produced. What is *not* taken is the part
+that makes Kazeta's version work: a shared file of recipes anybody can build
+from. That is a community, not a feature, and this project has no claim on
+having one.
+
+**4. The playtime heartbeat, also taken.** Kazeta re-stamps `playtime_end` every
+sixty seconds while a game runs, so a crash costs a minute. `stats` did not, and
+"the launch survives, the hours do not" was written down here as honest
+undercounting — which it was, and a minute is more honest for one small write a
+minute. An open session now lives in `stats.json`, and whichever machine sees
+the cartridge next settles whatever the last one abandoned.
 
 **What none of this changes.** Kazeta replaces the operating system, so it cannot
 be the thing you plug a cartridge into on a work laptop, a Windows gaming PC, or
