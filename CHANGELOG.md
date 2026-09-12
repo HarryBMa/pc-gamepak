@@ -148,7 +148,10 @@ launch a cartridge, use Zaparoo.
   what somebody typing is shown.
 - Flathub's actual requirements are documented and the manifest meets them.
 - `tools/check-versions.mjs` checks that every one of the fourteen places the
-  version is written agrees, and can move them all at once.
+  version is written agrees, and can move them all at once. It also checks that
+  this file has a section for the version being released and that its date
+  matches the one appstream publishes — two dates for one release, and nothing
+  compared them.
 - **The Linux release tarball installs.** It shipped without the icon file
   `install.sh` listed as required, so unpacking a release and running the
   installer stopped on its first check — and `install.sh` looked for the

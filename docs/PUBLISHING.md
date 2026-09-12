@@ -194,7 +194,10 @@ checksum names an artefact, so it cannot be written until the artefact exists.
 3. Fill in the metainfo `<description>`, which appstream shows in software
    centres. `--set` leaves a `TODO` there rather than inheriting the last
    release's notes under a new number.
-4. Change the changelog heading from `unreleased` to the date.
+4. Change the changelog heading from `unreleased` to the date — the same date
+   the metainfo's newest `<release>` carries. `check-versions.mjs` compares the
+   two and refuses a release while the heading still says `unreleased`, because
+   both dates are published and nothing used to check they agreed.
 5. Run the `release` workflow by hand — Actions → release → Run workflow — and
    give it the version. It builds and packages both platforms and stops before
    publishing anything, which is the cheap way to find out that a file the
@@ -219,8 +222,9 @@ checksum names an artefact, so it cannot be written until the artefact exists.
 8. Put the real checksums where `SHA256-PENDING-RELEASE` is. They are in the
    `.sha256` files the workflow uploads beside each artefact — the AUR one is of
    the source tarball GitHub generates for the tag, not of the release archive.
-9. `node tools/check-versions.mjs --release`. Same check, and it also fails on any
-   remaining placeholder. Run it before submitting a manifest anywhere.
+9. `node tools/check-versions.mjs --release`. Same check, and it also fails on
+   any remaining placeholder and on a changelog section that is missing or still
+   undated. Run it before submitting a manifest anywhere.
 10. **Scoop** needs nothing: `checkver` and `autoupdate` in
    [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket) read the
    `.sha256` themselves.
