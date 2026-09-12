@@ -696,6 +696,29 @@ The third is worth doing by hand, once per cartridge:
 
 ### If a cartridge will not eject
 
+**Eject looks first.** Before it touches the volume it asks the system who is
+using it, and names them: *"TombRaider.exe (4812) is running from the
+cartridge"*, *"Steam (1190) has a file open on the cartridge"*. That is a better
+starting point than "the device is busy", which is all the operating system will
+usually tell you.
+
+When something is in the way you get two choices. **Force quit and eject** asks
+each one to quit, waits five seconds, and only kills what has not gone — the
+wait is the point, because a game asked to quit writes its save to the cartridge
+first, and killing it outright loses exactly the thing ejecting was meant to
+preserve. **Keep it mounted** leaves the drive alone. If something survives even
+being killed, the cartridge stays mounted and says so: ejecting on top of a
+process that will not die is the thing the check exists to prevent.
+
+On Linux this sees the current user's processes — open files, memory-mapped
+files, working directories, and programs running from the drive. It cannot see
+another user's, and says how many it could not check rather than implying the
+drive is idle. On Windows it sees programs running from the volume; Windows
+refuses a busy dismount by itself anyway, so there the guard is the part that
+can tell you *what* to close.
+
+After all that, on Windows:
+
 Eject asks the PnP manager to stop the device, the same way Safely Remove
 Hardware does. When that is refused it elevates and takes the volume by force,
 locking and unmounting the filesystem — because Windows calls an NVMe stick in a

@@ -12,7 +12,12 @@
 //   drive_path()                             -> String
 //   parse_cartridge(drive_path)              -> CartridgeInfo (cover included)
 //   launch_game(executable, drive_path)      -> ()
-//   eject_drive(drive_path)                  -> ()
+//   eject_drive(drive_path)                  -> ()   (refuses while in use)
+//   cartridge_busy(drive_path)               -> Holders
+//   eject_drive_forcing(drive_path)          -> String (closes what is in the
+//                                               way first, then ejects)
+//   eject_with_guard(drive_path)             -> { ejected, message }  (the one
+//                                               the button calls; asks first)
 //   focus_window()                           -> ()
 //   cartridge_health(drive_path)             -> Health
 //   read_cartridge_for_edit(drive_path)      -> Editable
@@ -60,7 +65,9 @@
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
-use gamepak_core::{create, drives, edit, format, health, saves, settings, sgdb, stats, tuning};
+use gamepak_core::{
+    busy, create, drives, edit, format, health, saves, settings, sgdb, stats, tuning,
+};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -511,10 +518,162 @@ fn can_eject(drive_path: String) -> bool {
     drives::is_ejectable(std::path::Path::new(&drive_path))
 }
 
+/// Who is still using the cartridge, so the interface can say so by name.
+///
+/// Read-only, and answered before the confirm dialog rather than after it: "are
+/// you sure" is a different question from "Tomb Raider is running from this
+/// drive", and only the second one is worth interrupting somebody for.
+#[tauri::command]
+fn cartridge_busy(drive_path: String) -> busy::Holders {
+    // Never this process. By the time Eject is pressed the launcher has read
+    // the cartridge's artwork and closed it, and a program that refused to
+    // eject a drive on account of its own finished reads would be unusable.
+    busy::holders(Path::new(&drive_path)).excluding(&[std::process::id()])
+}
+
 /// Safely eject the cartridge drive.
+///
+/// Refuses while anything is using the volume. That check is here and not only
+/// in the window because a command is reachable whatever the interface chose to
+/// show — the same reasoning `can_eject` is built on — and because the cost of
+/// getting this wrong went up when saves started travelling on the cartridge:
+/// unmounting mid-write now loses a save as well as a session.
 #[tauri::command]
 fn eject_drive(drive_path: String) -> Result<(), String> {
-    if !drives::is_ejectable(std::path::Path::new(&drive_path)) {
+    let holders = cartridge_busy(drive_path.clone());
+    if !holders.is_empty() {
+        return Err(format!(
+            "Still in use: {}. Close it and try again, or choose Force quit and eject.",
+            holders.summary(3)
+        ));
+    }
+    unmount(&drive_path)
+}
+
+/// What came of pressing Eject.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EjectOutcome {
+    /// False when the user chose to leave the cartridge where it was, which is
+    /// not an error and must not animate the cartridge out of the slot.
+    ejected: bool,
+    message: String,
+}
+
+/// Eject, asking what to do about anything still using the drive.
+///
+/// The one the button calls. `eject_drive` and `eject_drive_forcing` stay as
+/// they are underneath — plain, scriptable, and each doing exactly one thing —
+/// with the choice between them put to the person holding the cartridge.
+///
+/// A native dialog rather than something drawn in the window: this interrupts
+/// an action already in progress, it needs to be the thing in front, and the
+/// launcher has no modal of its own to borrow. It also has to work when the
+/// window is a 420-pixel slot with a cartridge sliding out of it.
+#[tauri::command]
+async fn eject_with_guard(
+    window: tauri::WebviewWindow,
+    drive_path: String,
+) -> Result<EjectOutcome, String> {
+    let holders = cartridge_busy(drive_path.clone());
+    if holders.is_empty() {
+        unmount(&drive_path)?;
+        return Ok(EjectOutcome {
+            ejected: true,
+            message: "Safe to remove".to_string(),
+        });
+    }
+
+    let mut body = format!("{}.
+
+", holders.summary(4));
+    if holders.unchecked > 0 {
+        // Said out loud rather than swallowed: on Linux an unprivileged process
+        // can only look at its owner's processes, so "nothing else is using it"
+        // is a claim this cannot always make.
+        body.push_str(&format!(
+            "({} other processes could not be checked.)
+
+",
+            holders.unchecked
+        ));
+    }
+    body.push_str(
+        "Closing them first lets a game write its save to the cartridge.          Forcing it may lose whatever was part-way through being written.",
+    );
+
+    let force = window
+        .dialog()
+        .message(body)
+        .title("The cartridge is still in use")
+        .kind(tauri_plugin_dialog::MessageDialogKind::Warning)
+        .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
+            "Force quit and eject".to_string(),
+            "Keep it mounted".to_string(),
+        ))
+        .blocking_show();
+
+    if !force {
+        return Ok(EjectOutcome {
+            ejected: false,
+            message: "Left mounted.".to_string(),
+        });
+    }
+
+    let message = eject_drive_forcing(drive_path)?;
+    Ok(EjectOutcome {
+        ejected: true,
+        message,
+    })
+}
+
+/// Eject, closing whatever is in the way first.
+///
+/// The other half of the dialog. Asks every process holding the volume to quit
+/// and waits for it — which is what gives a game the chance to write its save
+/// to the cartridge — then kills what is left, and only then unmounts. If
+/// something survives all of that the drive stays mounted: ejecting on top of a
+/// process that would not die is the exact outcome this guard exists to prevent.
+#[tauri::command]
+fn eject_drive_forcing(drive_path: String) -> Result<String, String> {
+    if !drives::is_ejectable(Path::new(&drive_path)) {
+        return Err(
+            "This cartridge is not on a removable drive, so there is nothing to eject.".to_string(),
+        );
+    }
+
+    let stopped = busy::stop_all(Path::new(&drive_path));
+    for note in &stopped.notes {
+        debug_log(format!("eject: {note}"));
+    }
+    if !stopped.survived.is_empty() {
+        return Err(format!(
+            "{} could not be closed, so the cartridge was left mounted. \
+             Log out or restart, rather than pulling the drive.",
+            stopped
+                .survived
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    unmount(&drive_path)?;
+    Ok(match (stopped.asked.len(), stopped.killed.len()) {
+        (0, 0) => "Ejected.".to_string(),
+        (asked, 0) => format!("Closed {asked} and ejected."),
+        (_, killed) => format!("Ejected; {killed} had to be forced."),
+    })
+}
+
+/// Settle the cartridge's own files, then take the volume away.
+///
+/// Shared by both eject paths so neither can forget the save. Ordering is the
+/// whole of it: nothing is using the volume by the time this runs, so the save
+/// written here is a save nothing else is part-way through.
+fn unmount(drive_path: &str) -> Result<(), String> {
+    if !drives::is_ejectable(Path::new(drive_path)) {
         return Err(
             "This cartridge is not on a removable drive, so there is nothing to eject.".to_string(),
         );
@@ -526,16 +685,16 @@ fn eject_drive(drive_path: String) -> Result<(), String> {
     // afternoon. Errors are logged rather than raised: a save that could not
     // be written is not a reason to leave a drive mounted that the user has
     // asked to remove, and holding the cartridge hostage over it is worse.
-    let _ = push_saves(drive_path.clone());
+    let _ = push_saves(drive_path.to_string());
     end_every_session();
 
     #[cfg(target_os = "windows")]
     {
-        eject_windows(&drive_path)
+        eject_windows(drive_path)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        eject_linux(&drive_path)
+        eject_linux(drive_path)
     }
 }
 
@@ -1655,6 +1814,9 @@ fn main() {
             debug_logging,
             debug_log,
             can_eject,
+            cartridge_busy,
+            eject_drive_forcing,
+            eject_with_guard,
             cartridge_stats,
             save_slots,
             sync_saves,

@@ -7,7 +7,8 @@
  * Backend contract (src-tauri/src/main.rs):
  *   parse_cartridge({ drivePath })            -> { title, cover, cover_path, background, logo, executable, drive_path }
  *   launch_game({ executable, drivePath, title }) -> ()
- *   eject_drive({ drivePath })                -> ()
+ *   eject_with_guard({ drivePath })           -> { ejected, message }
+ *   cartridge_busy({ drivePath })             -> { holders[], unchecked }
  *   focus_window()                            -> ()
  *   debug_logging() / debug_log(line)         -> diagnostics, off by default
  *   get_settings() / set_settings(settings)   -> Settings
@@ -1384,13 +1385,18 @@ el.play.addEventListener("click", doPlay);
 /**
  * Eject, on the first press.
  *
- * There used to be a confirmation step when the game lived on the cartridge,
- * on the reasoning that pulling a disc out from under a running game is bad.
- * It is — but Windows already refuses it: a volume with an open handle on it
- * will not lock, so a game that is actually running makes the eject fail on
- * its own, with a message naming what to close. The confirmation was warning
- * about something that cannot happen, and charging every safe eject two presses
- * and a paragraph to do it.
+ * There has never been a blanket confirmation step, and there still is not: a
+ * safe eject should cost one press and no paragraph. What the backend does now
+ * is look first, and only interrupt when there is something to interrupt about
+ * — a game running from the drive, or a file open on it — naming it, and
+ * offering to close it. Windows refuses such an eject by itself, with a message
+ * naming nothing in particular; this says what to close, and on Linux it is the
+ * difference between an eject and a "device is busy" with no culprit in sight.
+ *
+ * The dialog is native and lives in the backend, so this call simply takes
+ * longer while somebody decides. `ejected: false` is the answer when they chose
+ * to keep the cartridge where it was, which is not an error and must not slide
+ * the cartridge out of the slot.
  */
 async function doEject() {
   if (!cartridge || el.eject.disabled) return;
@@ -1398,11 +1404,16 @@ async function doEject() {
   setBusy(true);
   toast("Ejecting…");
   try {
-    await invoke("eject_drive", { drivePath: cartridge.drive_path });
+    const outcome = await invoke("eject_with_guard", { drivePath: cartridge.drive_path });
+    if (!outcome?.ejected) {
+      toast(outcome?.message || "Left mounted.");
+      setBusy(false);
+      return;
+    }
     // The face leaves the slot, and what is left is the thing to take out —
     // which is the whole message, so the toast stops repeating it.
     dismissToast();
-    showSlot("Safe to remove", null);
+    showSlot(outcome.message || "Safe to remove", null);
     setTimeout(closeWindow, SEAT_MS + 800);
   } catch (error) {
     toast(String(error), true);
@@ -1659,6 +1670,10 @@ async function demoInvoke(command, args) {
           },
         },
       };
+    case "eject_with_guard":
+      return { ejected: true, message: "Safe to remove" };
+    case "cartridge_busy":
+      return { holders: [], unchecked: 0 };
     case "sync_saves":
       return [];
     case "save_slots":

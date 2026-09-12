@@ -13,6 +13,7 @@
 mod testutil;
 
 pub mod autorun;
+pub mod busy;
 pub mod cartridge;
 pub mod create;
 pub mod drives;

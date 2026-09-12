@@ -5,13 +5,14 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 292 tests
+### `core/` — `gamepak-core`, 306 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
 
 | Module | What it does |
 |---|---|
+| `busy` | Who is still using the volume, before anything unmounts it. `/proc` on Linux — open files, memory-mapped files, working directories and executables, with the processes it was not allowed to read counted rather than hidden; Toolhelp plus `QueryFullProcessImageNameW` on Windows, which sees programs running from the drive. Also the stop sequence: ask, wait, then kill, because a game asked to quit writes its save to the cartridge first. |
 | `cartridge` | Reads a cartridge: `cartridge.conf` (single game, or `[collection]` + `[game]` sections) and legacy `autorun.inf` for label and icon only. Inline INI parser, path confinement, cover inlined as a `data:` URI under an 8 MB cap. |
 | `create` | The build pipeline: close Steam and drop its stale entry → format → copy → check the launch target → cover art → `cartridge.conf` → `autorun.inf` → trim and report. Game lists from Playnite and Steam, collection naming, per-game covers. |
 | `edit` | Rewrites a cartridge's metadata — name, artwork, which games are listed and in what order — without copying or deleting anything. |
@@ -35,7 +36,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 
 `pc-gamepak --drive <path>` is the popup; `pc-gamepak --create` is the wizard.
 Exactly one window is ever built, so neither mode costs anything for the other.
-44 commands, no command that takes a path to read.
+47 commands, no command that takes a path to read.
 
 The launcher counts what it starts and, if asked to, carries the saves. Both
 are off the same principle: the cartridge is the thing that travels, so the
@@ -161,36 +162,43 @@ Ranked by how much it matters.
    Linux only, so the failure surfaced in the launcher job and looked like a
    launcher problem. Core is checked on both operating systems now.
 3. **Version numbers.** Three crates all saying `0.1.0`, moved by hand.
-4. **Adding a game to an existing cartridge** still means writing it again.
+4. **The unmount guard has never met a real running game.** It is tested
+   against child processes this repository spawns — one holding an open file,
+   one ignoring the polite signal and needing to be killed — and against this
+   process finding its own mapped binary. What it has not seen is Steam holding
+   a cartridge, which is the case the manual already describes as sometimes not
+   letting go until the drive is replugged. Windows sees executables only; open
+   handles there need the Restart Manager, which is not written.
+5. **Adding a game to an existing cartridge** still means writing it again.
    Editing covers everything that does not move files; adding one does.
-5. **Programming a tag from the wizard.** A virtual cartridge is a directory
+6. **Programming a tag from the wizard.** A virtual cartridge is a directory
    made by hand; the wizard has no step for it, and nothing writes NDEF onto the
    tag so that it would work on another PC.
-6. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
+7. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
    reads `.gamepak/manifest.json`, re-reads every file it names and reports what
    does not match; it is read-only and exits non-zero when a cartridge is bad.
    That is the command. It still needs a button: nothing in the launcher or the
    wizard offers to check a cartridge that is sitting in front of you, which is
    where someone would actually look for it.
-7. **Windows code signing.** Unsigned means SmartScreen on every download.
-8. **macOS** is not supported at all — no watcher, no installer, no icons. The
+8. **Windows code signing.** Unsigned means SmartScreen on every download.
+9. **macOS** is not supported at all — no watcher, no installer, no icons. The
    save-path tokens resolve for it (`~/Library/Application Support`,
    `~/Library/Preferences`), which is the only part of the platform that has
    been written.
-9. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
+10. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
    pointed at both as the way to install, and neither has ever been in the
    repository — `linux/install.sh`, `linux/install-user.sh` and
    `windows/install.ps1` are the real entry points and the docs now say so. CI's
    `shell scripts` job still globs `./*.sh` expecting them, which is why that
    job is red on `main`: either write the wrappers, or narrow the glob to
    `linux/*.sh`.
-10. **Saves and hours have never met a second machine.** The round trip is
+11. **Saves and hours have never met a second machine.** The round trip is
    tested — play on A, carry to B, play, carry back — but in one process with
    two scratch directories standing in for two PCs, which is not the same as a
    Deck and a desktop disagreeing about a clock. The conflict path is the one
    to watch: it is meant to refuse, and a refusal nobody notices is a feature
    that quietly does nothing.
-11. **The settings the design asks for that no command answers.** Per-source
+12. **The settings the design asks for that no command answers.** Per-source
    toggles with game counts, the artwork cache's size and an Empty button, a
    copy-speed default, and the launcher-on-the-cartridge options are all drawn
    in the design and absent here. The dialog is grouped the way the design asks
