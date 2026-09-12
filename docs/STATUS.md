@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 324 tests
+### `core/` — `gamepak-core`, 335 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -18,6 +18,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `edit` | Rewrites a cartridge's metadata — name, artwork, which games are listed and in what order — without copying or deleting anything. |
 | `drives` | Which volumes may be written to — an allowlist of automount locations, never a denylist. Parses `/proc/mounts`; Win32 volume APIs on Windows. |
 | `format` | exFAT and btrfs, behind four gates: removable allowlist re-derived here, not the system drive, the current label typed back exactly, and explicitly asked for. |
+| `home` | A carried game's whole home directory, on the cartridge. `portable_home=yes` and the launcher starts the game with `HOME` (and the XDG, or Windows, equivalents) pointed at `.gamepak/home/`, so every save it writes lands on the drive with nothing declared and nothing copied. The cache stays on the host. Kazeta's mechanism, minus the overlay it does not need. |
 | `insert` | What plugging a cartridge in should do — a window, the game, a notification, or nothing — and the rule that auto-launch will only ever start a URI the host already has a handler for, never a program carried on the drive. Lives in core so all three things that open a launcher get the same answer. |
 | `health` | Negotiated link speed, UASP vs BOT, how full the drive is, and the volume's own name and filesystem. sysfs on Linux; the transport only, lazily, on Windows. |
 | `playnite` | Reads a Playnite JSON library export: one list covering Steam, GOG, Epic, Xbox, itch, emulators. Finds Playnite on Windows and through Proton prefixes on Linux. |
@@ -37,7 +38,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 
 `pc-gamepak --drive <path>` is the popup; `pc-gamepak --create` is the wizard.
 Exactly one window is ever built, so neither mode costs anything for the other.
-47 commands, no command that takes a path to read.
+48 commands, no command that takes a path to read.
 
 The launcher counts what it starts and, if asked to, carries the saves. Both
 are off the same principle: the cartridge is the thing that travels, so the
@@ -163,56 +164,62 @@ Ranked by how much it matters.
    Linux only, so the failure surfaced in the launcher job and looked like a
    launcher problem. Core is checked on both operating systems now.
 3. **Version numbers.** Three crates all saying `0.1.0`, moved by hand.
-4. **`auto_launch_game` counts launches but not hours.** The launcher starts
+4. **`portable_home` has never met a real game.** The mechanism is proven —
+   a script writing to `$XDG_DATA_HOME` lands its save on the cartridge — and no
+   actual game has been run under it. Two things to expect: a game that keeps
+   per-machine settings will start at its defaults the first time on each host,
+   and on exFAT any game that creates a symlink inside its config directory will
+   fail to, the filesystem having none.
+5. **`auto_launch_game` counts launches but not hours.** The launcher starts
    the game and exits, so there is no process left to re-stamp the heartbeat —
    measuring a session needs a launcher that stays up, which is what the window
    is. The session is closed at once rather than abandoned, so the cartridge is
    not left carrying a record that never advances. Fixing it properly means
    watching the game's process, which is what `busy` now knows how to do.
-5. **`notify_only` does nothing on Windows**, and falls back to opening the
+6. **`notify_only` does nothing on Windows**, and falls back to opening the
    window. A toast there needs a resident application with a registered
    identity; the launcher is a process that exists for ten seconds. The watcher
    *is* resident and already owns a tray icon that can post a balloon, so the
    fix is a channel between the two — which is more machinery than the feature
    has earned so far. The settings dialog says so rather than offering a choice
    that quietly does something else.
-6. **The unmount guard has never met a real running game.** It is tested
+7. **The unmount guard has never met a real running game.** It is tested
    against child processes this repository spawns — one holding an open file,
    one ignoring the polite signal and needing to be killed — and against this
    process finding its own mapped binary. What it has not seen is Steam holding
    a cartridge, which is the case the manual already describes as sometimes not
    letting go until the drive is replugged. Windows sees executables only; open
    handles there need the Restart Manager, which is not written.
-7. **Adding a game to an existing cartridge** still means writing it again.
+8. **Adding a game to an existing cartridge** still means writing it again.
    Editing covers everything that does not move files; adding one does.
-8. **Programming a tag from the wizard.** A virtual cartridge is a directory
+9. **Programming a tag from the wizard.** A virtual cartridge is a directory
    made by hand; the wizard has no step for it, and nothing writes NDEF onto the
    tag so that it would work on another PC.
-9. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
+10. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
    reads `.gamepak/manifest.json`, re-reads every file it names and reports what
    does not match; it is read-only and exits non-zero when a cartridge is bad.
    That is the command. It still needs a button: nothing in the launcher or the
    wizard offers to check a cartridge that is sitting in front of you, which is
    where someone would actually look for it.
-10. **Windows code signing.** Unsigned means SmartScreen on every download.
-11. **macOS** is not supported at all — no watcher, no installer, no icons. The
+11. **Windows code signing.** Unsigned means SmartScreen on every download.
+12. **macOS** is not supported at all — no watcher, no installer, no icons. The
    save-path tokens resolve for it (`~/Library/Application Support`,
    `~/Library/Preferences`), which is the only part of the platform that has
    been written.
-12. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
+13. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
    pointed at both as the way to install, and neither has ever been in the
    repository — `linux/install.sh`, `linux/install-user.sh` and
    `windows/install.ps1` are the real entry points and the docs now say so. CI's
    `shell scripts` job still globs `./*.sh` expecting them, which is why that
    job is red on `main`: either write the wrappers, or narrow the glob to
    `linux/*.sh`.
-13. **Saves and hours have never met a second machine.** The round trip is
+14. **Saves and hours have never met a second machine.** The round trip is
    tested — play on A, carry to B, play, carry back — but in one process with
    two scratch directories standing in for two PCs, which is not the same as a
    Deck and a desktop disagreeing about a clock. The conflict path is the one
    to watch: it is meant to refuse, and a refusal nobody notices is a feature
    that quietly does nothing.
-14. **The settings the design asks for that no command answers.** Per-source
+15. **The settings the design asks for that no command answers.** Per-source
    toggles with game counts, the artwork cache's size and an Empty button, a
    copy-speed default, and the launcher-on-the-cartridge options are all drawn
    in the design and absent here. The dialog is grouped the way the design asks
@@ -242,16 +249,28 @@ and the honest reading of each is different.
 | Runtimes | Proton as a `.kzr` image mounted *under* the game | Steam's own Proton, on the host |
 | Reach | One OS, which you install instead of yours | Windows and Linux you already run |
 
-**1. The overlay is better than declared save paths, where it is available.**
-It cannot miss a path, needs no per-game knowledge, and captures a game that
-writes somewhere nobody documented. `saves` is the weaker mechanism and it is
-the weaker mechanism *on purpose*: a launcher that starts a game inside the
-user's own desktop session cannot overlay that game's home directory, and on
-Windows cannot do it at all. So the token vocabulary stays. What it does suggest
-is a Linux-only path worth considering later — for games the cartridge carries
-and this project launches itself, a bind or overlay mount would make the
-declaration unnecessary. Not a commitment; a note that the ceiling here is lower
-than it looked.
+**1. The overlay is better than declared save paths, where it is available —
+and now half of it is taken.** It cannot miss a path, needs no per-game
+knowledge, and captures a game that writes somewhere nobody documented.
+
+Reading Kazeta closely is what made that adoptable, because the overlayfs is not
+where its save capture comes from. The overlay is there so a *read-only* cart can
+be written to at all; the capture is one line, `export HOME=…`, pointing the game
+at the writable layer. A PC GamePak cartridge is already writable, so the same
+result needs no mount, no root, no user namespace and no dependency — just the
+environment the launcher hands the child process.
+
+That is `home`, and for a carried game it is strictly better than a `save=` line:
+nothing to research, nothing to declare, nothing copied, and no conflict possible
+because there is only ever one copy. Demonstrated with a game that knows nothing
+about any of this — a shell script writing to `$XDG_DATA_HOME/Tunic` — landing its
+save on the cartridge with no `save=` line anywhere.
+
+What stays out of reach is the other half: a game the cartridge only *points at*.
+A `steam://` cartridge is started by Steam, in Steam's environment, and nothing
+here can set it. Kazeta does not have that problem because it starts everything
+itself, being the operating system. So the token vocabulary stays, for exactly
+the cartridges that need it.
 
 **2. Proton as a mounted image is the answer to the exFAT symlink problem.**
 This project's own finding — Steam unpacking Proton onto a cartridge dies on the

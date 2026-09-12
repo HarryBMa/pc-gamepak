@@ -17,6 +17,7 @@
  *   cartridge_stats({ drivePath })            -> { games: { key: { launches, seconds, lastPlayed, … } } }
  *   sync_saves({ drivePath })                 -> SyncOutcome[]  (empty when off)
  *   save_slots({ drivePath })                 -> SlotStatus[]
+ *   carried_home({ drivePath })               -> string | null
  *
  * `cover` arrives as a data URI already. There is no command that takes a path
  * to read, so the webview cannot ask the backend for arbitrary files.
@@ -1196,12 +1197,24 @@ function keyFor(executable) {
  */
 async function syncSaves(drivePath) {
   let slots = [];
+  let carriedHome = null;
   try {
     await invoke("sync_saves", { drivePath });
     slots = (await invoke("save_slots", { drivePath })) ?? [];
+    carriedHome = await invoke("carried_home", { drivePath });
   } catch (error) {
     debugLog(`saves: ${error}`);
     return;
+  }
+
+  // A cartridge that carries the game's whole home has no declared slots and is
+  // still carrying every save there is. Saying nothing would read as "this
+  // cartridge does not do saves", which is the opposite of true.
+  if (carriedHome) {
+    debugLog(`portable home: ${carriedHome}`);
+    saveNote = "the game's own home directory";
+    renderSpecs(cartridge);
+    if (!slots.length) return;
   }
   if (!slots.length) return;
 
@@ -1676,6 +1689,8 @@ async function demoInvoke(command, args) {
       return { holders: [], unchecked: 0 };
     case "sync_saves":
       return [];
+    case "carried_home":
+      return null;
     case "save_slots":
       return [
         {

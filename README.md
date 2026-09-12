@@ -73,7 +73,9 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   can say where its saves live — as `{appdata}/Foo/Saves`, resolved by whichever
   platform reads it — and insert and eject carry whichever copy changed. If both
   changed, neither is touched and the launcher says so; anything replaced is
-  kept beside it.
+  kept beside it. A game the cartridge *carries* needs none of that: one line
+  gives it its whole home directory on the drive, and every save it writes goes
+  there whether or not anyone knew where it would put them.
 - **Not an NFC project.** If you want to tap a card, a toy or a QR code to
   launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
   platforms and this does not do it at all.

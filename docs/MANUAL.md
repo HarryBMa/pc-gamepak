@@ -182,6 +182,42 @@ save=Stardew Valley|{appdata}/StardewValley/Saves
 a cartridge names a *role* and the host resolves it. The full list of tokens is
 in `cartridge.conf.example`.
 
+#### A carried game needs no save line at all
+
+Declaring a path means somebody had to find out where the game keeps its saves
+and be right. For a game the cartridge **carries** — one stored on the drive and
+started by the launcher itself — that work is unnecessary:
+
+```ini
+executable=Games/Tunic/start.sh
+title=Tunic
+portable_home=yes
+```
+
+The game is started with its home directory pointed at `.gamepak/home/` on the
+cartridge, so **every** save it writes lands there, whether or not anyone knew
+where it would put them. Nothing is copied, nothing is declared, and there is no
+conflict to resolve because there is only ever one copy.
+
+On Linux that is `HOME` and the `XDG_*_HOME` directories; on macOS `HOME`, which
+`~/Library` follows; on Windows `USERPROFILE`, `APPDATA` and `LOCALAPPDATA`. The
+cache is deliberately left on the host — it is rebuildable, it is the largest
+thing a game writes, and a shader cache on removable flash costs write cycles to
+preserve something nobody wants preserved.
+
+It is off unless a cartridge asks, because changing where a game thinks home is
+can stop it working, and only the person making the cartridge knows whether
+theirs minds. It does not apply to a game the cartridge merely points at: a
+`steam://` cartridge is started by Steam, in Steam's environment, which nothing
+here can set — `save=` lines are still the answer there.
+
+This is [Kazeta's](https://github.com/kazetaos/kazeta) mechanism, and reading it
+closely is what produced it. Kazeta's overlayfs looks like the clever part and
+is not; the overlay exists so a *read-only* cart can be written to. The save
+capture is one line — `export HOME=…` — pointing the game at the writable layer.
+A PC GamePak cartridge is already writable, so it gets the same result with no
+mount, no root and no dependency.
+
 **It is off until you turn it on** — Settings → *Sync cartridge saves*.
 Everything else the launcher does on insert reads the cartridge; this writes to
 a directory in your home that a file on the drive named, which is a thing to

@@ -25,6 +25,7 @@
 //   cartridge_stats(drive_path)              -> Stats  (launches and hours,
 //                                               read from the cartridge)
 //   save_slots(drive_path)                   -> Vec<SlotStatus>
+//   carried_home(drive_path)                 -> String | null
 //   sync_saves(drive_path)                   -> Vec<SyncOutcome>  (on insert)
 //   push_saves(drive_path)                   -> Vec<SyncOutcome>  (on eject)
 //   resolve_save_conflict(drive_path, slot_id, keep) -> SyncOutcome
@@ -66,7 +67,7 @@
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, drives, edit, format, health, insert, saves, settings, sgdb, stats, tuning,
+    busy, create, drives, edit, format, health, home, insert, saves, settings, sgdb, stats, tuning,
 };
 
 use std::collections::HashMap;
@@ -134,29 +135,58 @@ fn launch_game(
         .any(|s| executable.to_lowercase().starts_with(s));
 
     if is_uri {
-        open_uri(&executable)
-    } else {
-        let full_path = PathBuf::from(&drive_path).join(&executable);
-        if !full_path.exists() {
-            return Err(format!("Executable not found: {}", full_path.display()));
-        }
-        #[cfg(target_os = "windows")]
-        {
-            Command::new(&full_path)
-                .current_dir(full_path.parent().unwrap_or(Path::new(".")))
-                .spawn()
-                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            Command::new("bash")
-                .arg(&full_path)
-                .current_dir(full_path.parent().unwrap_or(Path::new(".")))
-                .spawn()
-                .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
-        }
-        Ok(())
+        // Started by somebody else's launcher, in somebody else's environment.
+        // Nothing here can decide where that game keeps its saves, which is
+        // what `save=` lines are for.
+        return open_uri(&executable);
     }
+
+    let full_path = PathBuf::from(&drive_path).join(&executable);
+    if !full_path.exists() {
+        return Err(format!("Executable not found: {}", full_path.display()));
+    }
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new(&full_path);
+        command.current_dir(full_path.parent().unwrap_or(Path::new(".")));
+        command
+    };
+    // Through bash on purpose, not as a fallback: exFAT cannot store an
+    // executable bit, so nothing on an exFAT cartridge is executable and a
+    // carried Linux game is a shell script by necessity.
+    #[cfg(not(target_os = "windows"))]
+    let mut command = {
+        let mut command = Command::new("bash");
+        command
+            .arg(&full_path)
+            .current_dir(full_path.parent().unwrap_or(Path::new(".")));
+        command
+    };
+
+    // This is a game the cartridge carries and that this launcher is starting
+    // itself, which is the only case where its environment is ours to set — so
+    // it is the only case where the cartridge can be handed the game's whole
+    // home directory and catch every save without anyone having declared one.
+    if home::wanted(Path::new(&drive_path)) {
+        match home::prepare(Path::new(&drive_path)) {
+            Ok(portable) => {
+                for (name, value) in &portable.vars {
+                    command.env(name, value);
+                }
+                debug_log(format!("portable home: {}", portable.root));
+            }
+            // A cartridge asking for something the drive will not give it. The
+            // game still starts, in the ordinary environment, because refusing
+            // to launch would be a worse answer than saving to the host.
+            Err(why) => debug_log(format!("portable home unavailable: {why}")),
+        }
+    }
+
+    command
+        .spawn()
+        .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
+    Ok(())
 }
 
 fn open_uri(uri: &str) -> Result<(), String> {
@@ -312,6 +342,21 @@ fn end_every_session() {
 #[tauri::command]
 fn save_slots(drive_path: String) -> Vec<saves::SlotStatus> {
     saves::status(Path::new(&drive_path))
+}
+
+/// The home directory this cartridge carries, if it carries one.
+///
+/// Read-only and cheap, so the details sheet can say "this cartridge keeps the
+/// game's whole home" — which is otherwise invisible, there being no `save=`
+/// line to show for it.
+#[tauri::command]
+fn carried_home(drive_path: String) -> Option<String> {
+    let root = Path::new(&drive_path);
+    if !home::wanted(root) {
+        return None;
+    }
+    let home = root.join(create::ASSET_DIR).join(home::HOME_DIR);
+    Some(home.display().to_string())
 }
 
 /// Reconcile the cartridge's saves with this machine's, on insert.
@@ -1911,6 +1956,7 @@ fn main() {
             eject_with_guard,
             cartridge_stats,
             save_slots,
+            carried_home,
             sync_saves,
             push_saves,
             resolve_save_conflict,

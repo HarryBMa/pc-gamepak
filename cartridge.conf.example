@@ -70,6 +70,32 @@
 #   that changed is copied, both changing is a conflict that writes nothing,
 #   and whatever is about to be replaced is moved aside and kept first.
 #
+# portable_home  (optional, cartridge-wide)
+#   yes to give a game the cartridge *carries* its own home directory, at
+#   .gamepak/home/ on the drive. Every save it writes lands there, and no
+#   save= line is needed for it at all.
+#
+#   This is the better mechanism where it applies, because nothing has to be
+#   researched or declared and it cannot miss a path the game uses. It applies
+#   only to a game stored on the cartridge and started by the launcher itself:
+#   a game the cartridge points at with a steam:// URI is started by Steam, in
+#   Steam's environment, which nothing here can set.
+#
+#   Off unless asked for. Changing where a game thinks home is can stop it
+#   working — a game that expects its own settings will find none and start at
+#   its defaults — and only the person making the cartridge knows whether
+#   theirs minds.
+#
+#   Set on Linux: HOME and the XDG_*_HOME directories. On macOS: HOME, which
+#   ~/Library follows. On Windows: USERPROFILE, APPDATA and LOCALAPPDATA.
+#   The cache is deliberately left on the host: it is rebuildable, it is the
+#   largest thing a game writes, and a shader cache on removable flash costs
+#   write cycles for nothing.
+#
+#   One caveat, and it is the filesystem's: exFAT cannot hold a symlink, so a
+#   game that makes one inside its config directory will fail to. btrfs and
+#   NTFS cartridges have no such problem.
+#
 # savemode  (optional, cartridge-wide)
 #   copy (the default) or link. `link` replaces the host's save directory with
 #   a symlink onto the cartridge, so there is only ever one copy. It is faster
@@ -84,6 +110,12 @@ executable=steam://rungameid/1091500
 title=Cyberpunk 2077
 cover=cover.jpg
 save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
+
+# ----- A carried game, which needs no save line at all -----
+#
+# executable=Games/Tunic/start.sh
+# title=Tunic
+# portable_home=yes
 
 # ----- More examples -----
 #
