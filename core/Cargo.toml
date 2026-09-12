@@ -36,4 +36,11 @@ windows-sys = { version = "0.52", features = [
     # SHChangeNotify, to tell Explorer the drive's icon has changed. Without it
     # a rewritten cartridge keeps the icon Explorer cached the first time.
     "Win32_UI_Shell",
+    # Asking which programs are running before a volume is taken away:
+    # CreateToolhelp32Snapshot walks the process list, and OpenProcess plus
+    # QueryFullProcessImageNameW turn a pid into the path of its executable.
+    # Both were used without being enabled, which compiles on Linux, where the
+    # whole module is behind a cfg, and fails on Windows only.
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
 ] }
