@@ -506,7 +506,7 @@ mod linux {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::*;
-    use windows_sys::Win32::Foundation::{CloseHandle, MAX_PATH};
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE, MAX_PATH};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
     };
@@ -520,8 +520,12 @@ mod windows {
         // path out. Every struct passed in is zeroed and has its dwSize set,
         // which is what the API checks before writing to it.
         unsafe {
+            // A `HANDLE` here is an `isize`, not a pointer, so there is no
+            // `is_null` to call — and the two calls below fail differently:
+            // a snapshot reports INVALID_HANDLE_VALUE and OpenProcess returns a
+            // null handle, which is zero.
             let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if snapshot.is_null() {
+            if snapshot == INVALID_HANDLE_VALUE {
                 return Holders {
                     holders: Vec::new(),
                     unchecked: u32::MAX,
@@ -557,7 +561,7 @@ mod windows {
         // The limited variant is the one an unprivileged process is allowed to
         // ask for, and it answers exactly this question.
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle.is_null() {
+        if handle == 0 {
             return None;
         }
         let mut buffer = [0u16; MAX_PATH as usize];
@@ -581,6 +585,11 @@ mod windows {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only the tests that spawn a process or open a file need a scratch
+    // directory, and all of those are Linux-only — `/proc` is what they read.
+    // Imported unconditionally, this is an unused import on Windows, which
+    // `-D warnings` turns into a failed build.
+    #[cfg(target_os = "linux")]
     use crate::testutil::Scratch;
 
     #[test]
