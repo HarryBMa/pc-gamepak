@@ -159,7 +159,7 @@ is plugged in** decides what it does about it:
 |---|---|
 | **Open the launcher** | The cartridge's window appears and takes the front. The default, and what this has always done. |
 | **Start the game** | No window; the game starts. See the limit below. |
-| **Just tell me** | A desktop notification. Linux only so far. |
+| **Just tell me** | A desktop notification. On Windows it comes from the PC GamePak tray icon, so the watcher has to be running; if it is not, the launcher opens instead. |
 | **Nothing** | No reaction at all. The tray icon and the desktop entry still open it. |
 
 **Start the game only ever starts a game your PC already has** — a cartridge

@@ -2735,7 +2735,8 @@ function describeOnInsert() {
       "on its own.",
     notify_only:
       platform === "windows"
-        ? "Not available on Windows yet, so the launcher opens instead."
+        ? "A notification from the PC GamePak tray icon, and nothing else. If the " +
+          "tray icon is not running, the launcher opens instead."
         : "A desktop notification, and nothing else.",
     none: "Nothing happens. The tray and the desktop entry still open it.",
   };

@@ -1929,10 +1929,15 @@ fn copy_steam_game(
     let game = steamlib::locate(&steam_root, app_id)
         .ok_or_else(|| steamlib::LibraryError::GameNotFound(request.title.clone()).to_string())?;
 
-    let total = if game.size_on_disk > 0 {
-        game.size_on_disk
+    // Measured, not taken from the manifest. `SizeOnDisk` is what Steam last
+    // recorded, and it drifts from what is really there: FTL's says 286,586,003
+    // bytes and the folder holds 287,269,333, so progress ran to 100.2%. The walk
+    // is metadata only, and nothing next to a copy of the same tree.
+    let measured = steamlib::tree_size(&game.install_path);
+    let total = if measured > 0 {
+        measured
     } else {
-        steamlib::tree_size(&game.install_path)
+        game.size_on_disk
     };
 
     // Check space before starting a copy that could run for many minutes.

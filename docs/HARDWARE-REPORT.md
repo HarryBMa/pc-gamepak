@@ -1187,3 +1187,87 @@ superseded by what merged; that file is not.
 | 5 — insert detection, Play, Eject | **PARTIAL** — insert **PASS**; Play and Eject need a hand click |
 | 6 — rewrite with Steam running | refuses without `closeSteam`; with it, closes Steam and registers. Not yet a *rewrite* of an existing cartridge |
 | 7–9 | Not started |
+
+---
+
+## 2026-09-12, later — the bugs from this morning, fixed
+
+Every bug the entry above recorded, fixed and, where the hardware allowed it,
+checked on it.
+
+### The Windows health readout now measures the link
+
+`health::probe` walks the device tree from the drive letter (PowerShell, once,
+when the details are opened), takes the transport from the USB node's service,
+and asks the hub the drive is plugged into for the negotiated speed with
+`IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX_V2` and `_EX`. A USB 2.0 host
+controller caps the answer at 480 Mbps when the hub will not say. A USB 3
+controller does not: the port can still have fallen back.
+
+`build-cart health D:\`, new, prints what the launcher would:
+
+```json
+{ "link": "10 Gbps", "linkMbps": 10000, "transport": "UASP",
+  "label": "FTL (D:)", "filesystem": "NTFS", "warnings": [] }
+```
+
+About 2 s, nearly all of it PowerShell starting. C: and F: report `NVMe` and no
+link, as they should.
+
+To be sure the hub query reads speeds rather than printing one number, it was
+pointed at every occupied port on the same root hub:
+
+| Port | Device | Negotiated |
+|---|---|---|
+| 1 | Realtek RTL9210B-CG enclosure | **10 Gbps** |
+| 5 | VIA hub, USB 3 half | 5 Gbps |
+| 10 | VIA hub, USB 2.0 half | **480 Mbps** |
+| 11 | Realtek Bluetooth | **12 Mbps** |
+
+Four ports, four different answers, and the two that can only be one thing —
+the USB 2.0 half of a hub, and a Bluetooth radio — are exactly that. Compare the
+device property that looked like a speed this morning and read 3 on all of them.
+
+SuperSpeedPlus is reported as 10 Gbps whether it is 10 or 20, because the hub
+does not distinguish them. SuperSpeed of an unknown kind is reported as unknown,
+not 5 Gbps, so a 10 Gbps link is never warned about as half speed.
+
+### `notify_only` works on Windows
+
+The launcher sends the notification text to the watcher's window with
+`WM_COPYDATA`; the watcher posts it as a balloon from its tray icon and answers
+whether it could. If it could not — no watcher, or no icon — the launcher opens
+its window, which is what the settings dialog always said would happen, and not
+what the code did.
+
+| Check | Result |
+|---|---|
+| `onCartridgeInsert: notify_only`, 1.1.0 watcher running, `pc-gamepak --drive D:\` | watcher log `posted an insert notification`; launcher exited 0 with no window |
+| Same, watcher stopped | window `PC GamePak` opened |
+
+The settings file and the installed watcher were restored afterwards.
+
+A simulated replug to drive the watcher end to end failed this time —
+`Disable-PnpDevice` returned *Generic failure*, which is what it does while
+something holds the volume — so the notification was triggered by starting the
+launcher the way the watcher does. The watcher's own log shows the drive was
+replugged by hand twice around then, so it may simply have been busy.
+
+### The rest
+
+| Bug | Fix | Checked |
+|---|---|---|
+| Copy progress reached 100.2% | Total is the measured tree, not `SizeOnDisk` (FTL: 286,586,003 in the manifest, 287,269,333 on disk). `build-cart` also caps at 100%, like the wizard | by the numbers; not re-copied |
+| Tray icon missing all session after a logon start | `TaskbarCreated` is listened for from the start, not only after a first success, plus a 3 s retry for up to two minutes | compiles and starts cleanly; the logon race itself was not reproduced |
+| Watcher log times were UTC without saying so | `2026-09-12T18:46:56Z`, the launcher log's format | yes, in the log |
+| Placeholder read **FFT** for *FTL: Faster Than Light* | Initials come from the name before a subtitle, and a name that is already an abbreviation is kept | against real titles: FTL, GOW, HI, LHP, H2 |
+| `core/Cargo.toml` said the toolchain is 1.87 | Says 1.88.0, and why the `image` pin is still exact | — |
+
+Not a bug, after looking: `H:\SteamLibrary` staying in `libraryfolders.vdf`.
+Libraries are only unregistered by an explicit action, on purpose, so a
+cartridge that is simply unplugged is still a library when it comes back.
+
+Tests: core **346**, watcher **7**; clippy clean on core, watcher and the Tauri
+backend; fmt clean.
+
+Still not done: Play and Eject by a person's hand.

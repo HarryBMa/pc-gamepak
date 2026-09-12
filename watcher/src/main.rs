@@ -56,9 +56,10 @@ mod windows_watcher {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, EnumWindows,
         GetClassNameW, GetMessageW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
-        IsWindowVisible, PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW,
-        SetForegroundWindow, ShowWindow, MSG, SW_RESTORE, WM_CLOSE, WM_DESTROY, WM_DEVICECHANGE,
-        WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
+        IsWindowVisible, KillTimer, PostMessageW, PostQuitMessage, RegisterClassW,
+        RegisterWindowMessageW, SetForegroundWindow, SetTimer, ShowWindow, MSG, SW_RESTORE,
+        WM_CLOSE, WM_COPYDATA, WM_DESTROY, WM_DEVICECHANGE, WM_LBUTTONUP, WM_RBUTTONUP, WM_TIMER,
+        WNDCLASSW, WS_OVERLAPPED,
     };
 
     /// A volume has been inserted and is available.
@@ -99,8 +100,33 @@ mod windows_watcher {
     }
 
     /// Explorer's "I have restarted, add your icon again" broadcast, whose id
-    /// is only known at runtime. 0 until the icon has been added once.
+    /// is only known at runtime.
     static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
+
+    /// Timer that keeps trying to add the tray icon until the shell takes it.
+    const TRAY_RETRY_TIMER: usize = 1;
+    /// How often to try. The logon task can start before Explorer has a
+    /// notification area; it usually has one within a few seconds.
+    const TRAY_RETRY_MS: u32 = 3_000;
+    /// Give up after this many tries (about two minutes), and say so once.
+    const TRAY_RETRY_LIMIT: u32 = 40;
+    static TRAY_RETRIES: AtomicU32 = AtomicU32::new(0);
+
+    /// Tags a `WM_COPYDATA` as the launcher asking for a notification. Must
+    /// match `NOTIFY_COPYDATA` in `tauri-ui/src-tauri/src/main.rs`: "GPNT".
+    const NOTIFY_COPYDATA: usize = 0x4750_4E54;
+    /// A title and a body the balloon can hold, with room over. Anything much
+    /// longer is not from the launcher.
+    const NOTIFY_MAX_BYTES: u32 = 4 * 1024;
+
+    /// `COPYDATASTRUCT`, declared here for the same reason as the broadcast
+    /// structs above.
+    #[repr(C)]
+    struct CopyDataStruct {
+        dw_data: usize,
+        cb_data: u32,
+        lp_data: *const std::ffi::c_void,
+    }
 
     /// The launcher this tray opened, and the cartridge it was opened on.
     ///
@@ -182,15 +208,21 @@ mod windows_watcher {
             return;
         }
 
-        if crate::tray::add(hwnd) {
-            // Registered after the first successful add: there is nothing to
-            // restore before then, and the id is the same for the session.
-            TASKBAR_CREATED.store(
-                unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
-                Ordering::Relaxed,
-            );
-        } else {
-            crate::log::line("could not add the tray icon; carrying on without it");
+        // Registered before the first add, not after it. The scheduled task
+        // starts at logon, sometimes before Explorer has built the taskbar, and
+        // then the add fails; `TaskbarCreated` is how Explorer says it is ready,
+        // so the watcher has to be listening for it from the start. Waiting
+        // for a successful add first is how the icon went missing for the
+        // whole session on 2026-09-10 and 2026-09-11.
+        TASKBAR_CREATED.store(
+            unsafe { RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()) },
+            Ordering::Relaxed,
+        );
+        if !crate::tray::add(hwnd) {
+            // And a timer as well, because a shell that is up but still busy
+            // refuses the add without ever broadcasting anything afterwards.
+            crate::log::line("could not add the tray icon yet; retrying");
+            unsafe { SetTimer(hwnd, TRAY_RETRY_TIMER, TRAY_RETRY_MS, None) };
         }
 
         crate::log::line("listening for volume arrivals");
@@ -241,6 +273,39 @@ mod windows_watcher {
                 }
                 0
             }
+            WM_COPYDATA => {
+                let data = lparam as *const CopyDataStruct;
+                if data.is_null() || (*data).dw_data != NOTIFY_COPYDATA {
+                    return 0;
+                }
+                let bytes = (*data).cb_data;
+                if bytes > NOTIFY_MAX_BYTES || (*data).lp_data.is_null() {
+                    return 0;
+                }
+                let raw = std::slice::from_raw_parts((*data).lp_data.cast::<u8>(), bytes as usize);
+                let (title, body) = split_notification(raw);
+                let shown = crate::tray::balloon(hwnd, &title, &body);
+                crate::log::line(if shown {
+                    "posted an insert notification"
+                } else {
+                    "could not post an insert notification; the launcher will open"
+                });
+                shown as LRESULT
+            }
+            WM_TIMER if wparam == TRAY_RETRY_TIMER => {
+                let tries = TRAY_RETRIES.fetch_add(1, Ordering::Relaxed) + 1;
+                if crate::tray::add(hwnd) {
+                    KillTimer(hwnd, TRAY_RETRY_TIMER);
+                    crate::log::line(&format!("added the tray icon after {tries} retries"));
+                } else if tries >= TRAY_RETRY_LIMIT {
+                    KillTimer(hwnd, TRAY_RETRY_TIMER);
+                    crate::log::line(
+                        "could not add the tray icon; carrying on without it \
+                         until Explorer restarts",
+                    );
+                }
+                0
+            }
             WM_DESTROY => {
                 crate::tray::remove(hwnd);
                 PostQuitMessage(0);
@@ -253,7 +318,11 @@ mod windows_watcher {
                 // exactly like a watcher that has died.
                 let taskbar = TASKBAR_CREATED.load(Ordering::Relaxed);
                 if taskbar != 0 && other == taskbar {
-                    crate::tray::add(hwnd);
+                    // If this add fails too, the retry timer (when running)
+                    // keeps going; it is only stopped once the icon is there.
+                    if crate::tray::add(hwnd) {
+                        KillTimer(hwnd, TRAY_RETRY_TIMER);
+                    }
                     return 0;
                 }
                 DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -362,6 +431,25 @@ mod windows_watcher {
             return 0; // stop; the first one is the launcher's only window
         }
         1
+    }
+
+    /// A notification payload: UTF-16LE title, a NUL, UTF-16LE body.
+    ///
+    /// Read from bytes rather than cast to `&[u16]`, because nothing promises
+    /// the sender's buffer is aligned for one. An odd trailing byte is dropped,
+    /// and a payload with no NUL is all title.
+    fn split_notification(raw: &[u8]) -> (String, String) {
+        let units: Vec<u16> = raw
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        match units.iter().position(|unit| *unit == 0) {
+            Some(nul) => (
+                String::from_utf16_lossy(&units[..nul]),
+                String::from_utf16_lossy(&units[nul + 1..]),
+            ),
+            None => (String::from_utf16_lossy(&units), String::new()),
+        }
     }
 
     /// Expand a `dbcv_unitmask` bitfield into drive letters.
@@ -505,6 +593,31 @@ mod windows_watcher {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn a_notification_payload_splits_at_its_nul() {
+            let bytes = |text: &str| -> Vec<u8> {
+                text.encode_utf16().flat_map(u16::to_le_bytes).collect()
+            };
+            let mut raw = bytes("FTL: Faster Than Light");
+            raw.extend([0, 0]);
+            raw.extend(bytes("Open PC GamePak to play — ✓"));
+            assert_eq!(
+                split_notification(&raw),
+                (
+                    "FTL: Faster Than Light".to_string(),
+                    "Open PC GamePak to play — ✓".to_string()
+                )
+            );
+
+            // No NUL: all title. An odd byte on the end is not half a letter.
+            let mut raw = bytes("Cartridge inserted");
+            raw.push(0x41);
+            assert_eq!(
+                split_notification(&raw),
+                ("Cartridge inserted".to_string(), String::new())
+            );
+        }
 
         #[test]
         fn expands_a_unit_mask_into_drive_letters() {

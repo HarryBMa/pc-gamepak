@@ -545,10 +545,13 @@ fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
 ///
 /// Only ever called with `Quit`, `Launch` or `Notify`: `ShowWindow` is returned
 /// to `main` as `None` so the ordinary path runs untouched.
-fn act_on_insert(reaction: insert::Reaction) {
+///
+/// False when the reaction could not be carried out and the window should open
+/// after all — which is what a notification nobody could post falls back to.
+fn act_on_insert(reaction: insert::Reaction) -> bool {
     match reaction {
-        insert::Reaction::ShowWindow => {}
-        insert::Reaction::Quit => {}
+        insert::Reaction::ShowWindow => false,
+        insert::Reaction::Quit => true,
         insert::Reaction::Launch { executable, title } => {
             let drive = cartridge::drive_from_args(std::env::args().skip(1));
             // The same call the Play button makes, counting included, so an
@@ -563,33 +566,91 @@ fn act_on_insert(reaction: insert::Reaction) {
             // left carrying an open record that never advances and gets settled
             // as zero on some later insert.
             end_every_session();
+            true
         }
         insert::Reaction::Notify { title, body } => notify(&title, &body),
     }
 }
 
-/// Say a cartridge is there, without a window.
+/// Say a cartridge is there, without a window. False if nothing was shown.
 ///
 /// `notify-send` on Linux, which is the desktop's own notification and is what
-/// every distribution ships. Nothing on Windows: a toast there needs a resident
-/// application with a registered identity, the launcher is neither, and the
-/// watcher — which is resident and already owns a tray icon that can post a
-/// balloon — is a separate process this has no channel to. So on Windows the
-/// setting falls back to opening the window, which is the behaviour it was
-/// chosen instead of, and `docs/STATUS.md` records it as unfinished rather than
-/// the settings dialog pretending otherwise.
-fn notify(title: &str, body: &str) {
+/// every distribution ships. On Windows a toast needs a resident application
+/// with a registered identity, which the launcher is not — but the watcher is
+/// resident and owns a tray icon, and a tray icon can post a balloon. So the
+/// launcher hands the text to the watcher's window, and if no watcher answers
+/// the window opens instead, as the settings dialog says it will.
+fn notify(title: &str, body: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        let _ = (title, body);
-        eprintln!("notify_only is not implemented on Windows; showing nothing");
+        let shown = notify_through_watcher(title, body);
+        if !shown {
+            eprintln!("no watcher tray icon to post the notification; opening the window");
+        }
+        shown
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = gamepak_core::proc::command("notify-send")
+        gamepak_core::proc::command("notify-send")
             .args(["--app-name=PC GamePak", "--icon=pc-gamepak", title, body])
-            .status();
+            .status()
+            .is_ok_and(|status| status.success())
     }
+}
+
+/// Ask the watcher to show `title` and `body` as a balloon from its tray icon.
+///
+/// `WM_COPYDATA` to the watcher's hidden window, found by class name. The
+/// payload is UTF-16 `title`, a NUL, then `body`, tagged with
+/// [`NOTIFY_COPYDATA`] so nothing else sent to that window is mistaken for one.
+/// The watcher answers 1 only when the balloon was actually posted, so a
+/// watcher without a tray icon is a failure here, not a silent success.
+#[cfg(target_os = "windows")]
+fn notify_through_watcher(title: &str, body: &str) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_COPYDATA,
+    };
+
+    /// Must match `NOTIFY_COPYDATA` in `watcher/src/main.rs`: "GPNT".
+    const NOTIFY_COPYDATA: usize = 0x4750_4E54;
+
+    #[repr(C)]
+    struct CopyDataStruct {
+        dw_data: usize,
+        cb_data: u32,
+        lp_data: *const std::ffi::c_void,
+    }
+
+    let class: Vec<u16> = "PcCartridgeWatcher\0".encode_utf16().collect();
+    let watcher = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
+    if watcher == 0 {
+        return false;
+    }
+
+    let payload: Vec<u16> = title
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .chain(body.encode_utf16())
+        .collect();
+    let data = CopyDataStruct {
+        dw_data: NOTIFY_COPYDATA,
+        cb_data: (payload.len() * 2) as u32,
+        lp_data: payload.as_ptr().cast(),
+    };
+
+    let mut answer: usize = 0;
+    let sent = unsafe {
+        SendMessageTimeoutW(
+            watcher,
+            WM_COPYDATA,
+            0,
+            std::ptr::addr_of!(data) as isize,
+            SMTO_ABORTIFHUNG,
+            2_000,
+            &mut answer,
+        )
+    };
+    sent != 0 && answer == 1
 }
 
 /// Take the keyboard, not just the front of the screen.
@@ -804,9 +865,12 @@ async fn eject_with_guard(
         });
     }
 
-    let mut body = format!("{}.
+    let mut body = format!(
+        "{}.
 
-", holders.summary(4));
+",
+        holders.summary(4)
+    );
     if holders.unchecked > 0 {
         // Said out loud rather than swallowed: on Linux an unprivileged process
         // can only look at its owner's processes, so "nothing else is using it"
@@ -2044,8 +2108,9 @@ fn main() {
     // would be worse than no setting.
     if !wizard {
         if let Some(reaction) = reaction_on_insert(&args) {
-            act_on_insert(reaction);
-            return;
+            if act_on_insert(reaction) {
+                return;
+            }
         }
     }
 

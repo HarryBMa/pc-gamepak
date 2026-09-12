@@ -11,8 +11,10 @@ license = "MIT"
 [dependencies]
 # Only to turn chosen artwork into the .ico Explorer needs for a drive icon.
 # png+jpeg decode is the whole of it: no GIF, no WebP, no default formats. The
-# pin is exact because 0.25.10 wants rustc 1.88 while rust-toolchain.toml holds
-# this repo at 1.87 — a caret range lets `cargo update` break the build.
+# pin is exact because 0.25.10 wants rustc 1.88, and it was set while
+# rust-toolchain.toml held this repo at 1.87. The toolchain is 1.88.0 now, so the
+# pin could be relaxed; until someone does that on purpose, it stays exact so
+# `cargo update` cannot move it past whatever the next toolchain floor is.
 image = { version = "=0.25.5", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -40,4 +42,9 @@ windows-sys = { version = "0.52", features = [
     # the snapshot comes from ToolHelp, the image path from Threading.
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Threading",
+    # health.rs asks the hub a cartridge is plugged into what speed it
+    # negotiated: the hub's interface path from cfgmgr32, the answer from a USB
+    # IOCTL.
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Usb",
 ] }
