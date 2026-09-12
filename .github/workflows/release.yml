@@ -115,13 +115,36 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      # For the changelog. The artefacts came from the build jobs, so this is
+      # the only thing the publish step needs the tree for.
+      - uses: actions/checkout@v4
+        with:
+          path: source
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes=()
+          # The section for this version out of CHANGELOG.md — prose somebody
+          # wrote, rather than a list of commit subjects. Falls back to generated
+          # notes when there is no section, so a tag never fails to publish over
+          # a missing heading.
+          if awk -v v="$version" '
+                $0 ~ "^## " v "( |$)" { found = 1; next }
+                found && /^## / { exit }
+                found { print }
+              ' source/CHANGELOG.md | sed '/./,$!d' > notes.md && [ -s notes.md ]; then
+            notes=(--notes-file notes.md)
+            echo "release notes: CHANGELOG.md section for $version"
+          else
+            notes=(--generate-notes)
+            echo "release notes: generated — no CHANGELOG.md section for $version"
+          fi
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes \
+            "${notes[@]}" \
             --draft \
             artifacts/*/*

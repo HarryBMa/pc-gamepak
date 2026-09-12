@@ -1,6 +1,6 @@
 pkgbase = pc-gamepak
 	pkgdesc = Turn removable storage into physical game cartridges
-	pkgver = 1.0.0
+	pkgver = 1.1.0
 	pkgrel = 1
 	url = https://github.com/HarryBMa/pc-gamepak
 	install = pc-gamepak.install
@@ -19,7 +19,7 @@ pkgbase = pc-gamepak
 	optdepends = btrfs-progs: format cartridges to btrfs instead of exFAT
 	optdepends = udiskie: automount cartridges on desktops that do not do it themselves
 	options = !lto
-	source = pc-gamepak-1.0.0.tar.gz::https://github.com/HarryBMa/pc-gamepak/archive/refs/tags/v1.0.0.tar.gz
-	sha256sums = 3b11d4872ca9f024c008dbdaa97246c4cb6f114e2e22dd1bee45e9b19af13f58
+	source = pc-gamepak-1.1.0.tar.gz::https://github.com/HarryBMa/pc-gamepak/archive/refs/tags/v1.1.0.tar.gz
+	sha256sums = SHA256-PENDING-RELEASE
 
 pkgname = pc-gamepak

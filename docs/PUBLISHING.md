@@ -29,7 +29,7 @@ switch.
 
 | Channel | Why it fits | Effort |
 |---|---|---|
-| **GitHub Releases** | The source of truth every other channel points at. Tag `v0.1.0`, CI builds Linux and Windows artefacts with checksums. | Done — `.github/workflows/release.yml` |
+| **GitHub Releases** | The source of truth every other channel points at. A `v*` tag builds Linux and Windows artefacts with checksums, and drafts the release with notes from `CHANGELOG.md`. | Done — three released |
 | **AUR** (`pc-gamepak`) | Arch, CachyOS, Manjaro — and the Steam Deck crowd, who are the audience. Ships the rootless watcher as a systemd *user* service, because a package cannot bake a username into a system unit. | Low. `packaging/aur/pc-gamepak/` is written |
 | **Flatpak** (built from source) | Built, installed and run against a real cartridge — the whole product works sandboxed. The way onto a Steam Deck, which ships Flatpak and no AUR. Not submitted to any store; see below. | Done — `packaging/flatpak/`, cargo sources vendored, builds offline |
 | **WinGet** | Built into Windows 11. The installer script does the logon task; the manifest just delivers the files. | Low, once a release exists |
@@ -171,34 +171,61 @@ policy, and the reviewer asked that it not be resubmitted. The manifest stays
 because it builds a working Flatpak from this repository — see
 [INSTALL.md](INSTALL.md) — but there is no store listing and none is planned.
 
-## Order of work
+## Cutting a release
 
-1. **Tag `v1.0.0`.** Nothing below can start without artefacts to point at.
-   `cargo build --release` is confirmed on Linux (above) and on Windows — CI
-   covers `check`, not `build`.
-2. **AUR `pc-gamepak`**, built from the release tarball with a real checksum.
-   One package, under the plain name: the `-git` suffix is what the AUR
-   reserves for a package that tracks a branch, and this one does not.
-3. **Scoop**, in a personal bucket (`HarryBMa/scoop-bucket`). One JSON file, and
-   `checkver`/`autoupdate` keep it current on their own.
-4. **WinGet**, via `wingetcreate` for the first submission and the
-   `winget-releaser` action thereafter.
-5. **`.deb`** attached to releases via `cargo-deb`.
-6. **Flatpak**, built from this repository rather than from a store. Snap is
-   not planned.
+Three exist — v0.1.0, v1.0.0 and v1.0.1 — so this is a checklist rather than a
+plan. The order matters in one place, and it is the place that went wrong: a
+checksum names an artefact, so it cannot be written until the artefact exists.
 
-## Before the first tag
+**Before the tag**
 
-- **Version numbers.** All three crates say `0.1.0`. Decide whether they move
-  together (simplest, and what the packaging assumes) and set them from the tag.
+1. `node tools/check-versions.mjs --set <version>`. It moves all fourteen places
+   the version is written — three `Cargo.toml`s and their lockfiles,
+   `package.json` and its lockfile, `tauri.conf.json`, the AUR `PKGBUILD` and
+   `.SRCINFO`, the Flatpak manifest's tag, the metainfo's newest `<release>`, and
+   the WinGet directory and the three manifests inside it. It also blanks the
+   checksums to `SHA256-PENDING-RELEASE`, because they belong to the *previous*
+   release and a stale checksum is worse than a missing one: it looks like an
+   answer.
+2. Write the `CHANGELOG.md` section, in consequences rather than commit
+   subjects. The release workflow uses it for the release notes, so this is the
+   text people read — it falls back to `--generate-notes` if there is no section
+   for the version, which is not a good outcome, only a non-fatal one.
+3. Fill in the metainfo `<description>`, which appstream shows in software
+   centres. `--set` leaves a `TODO` there rather than inheriting the last
+   release's notes under a new number.
+4. Change the changelog heading from `unreleased` to the date.
+5. Merge to `main`. Tags belong on `main`, not on a branch.
+
+**The tag**
+
+6. `git tag v<version> && git push origin v<version>`. The workflow builds both
+   platforms, computes the checksums, and creates the release **as a draft**.
+   Look at it before publishing: a tag is cheap to delete before anyone has
+   downloaded it and expensive afterwards.
+
+**After the artefacts exist**
+
+7. Put the real checksums where `SHA256-PENDING-RELEASE` is. They are in the
+   `.sha256` files the workflow uploads beside each artefact — the AUR one is of
+   the source tarball GitHub generates for the tag, not of the release archive.
+8. `node tools/check-versions.mjs --release`. Same check, and it also fails on any
+   remaining placeholder. Run it before submitting a manifest anywhere.
+9. **Scoop** needs nothing: `checkver` and `autoupdate` in
+   [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket) read the
+   `.sha256` themselves.
+10. **WinGet** via `wingetcreate` for a first submission, the `winget-releaser`
+    action thereafter. **AUR** from the tarball with the real checksum — the
+    plain name, since the `-git` suffix is what the AUR reserves for a package
+    tracking a branch.
+
+## Still outstanding
+
 - **Code signing on Windows.** Unsigned binaries mean a SmartScreen warning on
   every download, and it does not go away until the certificate builds
   reputation. Azure Trusted Signing is the cheap path; self-signing achieves
-  nothing here. Not a blocker, but decide before the first release rather than
-  re-issuing artefacts later.
-- **A `LICENSE` in every artefact.** The release workflow copies it; the AUR
-  package installs it.
-- **A changelog.** `--generate-notes` produces one from commits for the first
-  release; a hand-written `CHANGELOG.md` earns its keep from the second.
-- **The release is created as a draft.** Look at it, then publish — a tag is
-  cheap to delete before anyone has downloaded it, and expensive afterwards.
+  nothing here. Costs money rather than work, which is why it has survived three
+  releases.
+- **`.deb`** attached to releases via `cargo-deb`. Not written.
+- **Flatpak**, built from this repository rather than from a store. Snap is not
+  planned.

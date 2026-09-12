@@ -109,8 +109,23 @@ that builds both platforms from a tag, AUR and Scoop packaging, and
 
 Ranked by how much it matters.
 
-1. **A tagged release.** Everything downstream — AUR, WinGet, Scoop — points at
-   artefacts that do not exist yet. Nothing else on this list unblocks as much.
+1. **Cutting 1.1.0, and the two channels that are behind.** Three releases exist
+   — v0.1.0, v1.0.0 and v1.0.1, all published with artefacts — so this entry used
+   to be wrong in the most misleading direction available: it claimed nothing
+   downstream had anything to point at, for three releases.
+
+   What is true is narrower and was worse. AUR and WinGet were pinned at
+   **1.0.0** while the code was at 1.0.1, `package-lock.json` said **0.1.0**, and
+   nothing checked — so two of the three channels people install from offered a
+   release older than the code. `tools/check-versions.mjs` now reads all fourteen
+   places the version is written, fails CI when they disagree, and moves them
+   together on `--set`.
+
+   Everything for 1.1.0 is staged: versions, a `CHANGELOG.md`, the metainfo
+   entry, and release notes taken from the changelog rather than from commit
+   subjects. What remains cannot be done from a branch — merge, tag `v1.1.0`,
+   then put the real checksums where `SHA256-PENDING-RELEASE` is and re-run the
+   checker with `--release`. `docs/PUBLISHING.md` has the order.
 2. **Real hardware: answered, and the history is worth keeping.** The project
    owner reports repeated end-to-end runs since, with the **God of War
    Ragnarök** and **Tomb Raider** cartridges both working — so the open question
@@ -174,7 +189,8 @@ Ranked by how much it matters.
    volume API, and two more crates were missing feature flags. CI ran core on
    Linux only, so the failure surfaced in the launcher job and looked like a
    launcher problem. Core is checked on both operating systems now.
-3. **Version numbers.** Three crates all saying `0.1.0`, moved by hand.
+3. **Windows code signing.** Unsigned means SmartScreen on every download. Costs
+   money rather than work, which is why it sits here rather than in a commit.
 4. **`portable_home` has never met a real game.** The mechanism is proven —
    a script writing to `$XDG_DATA_HOME` lands its save on the cartridge — and no
    actual game has been run under it. Two things to expect: a game that keeps
@@ -203,34 +219,30 @@ Ranked by how much it matters.
    handles there need the Restart Manager, which is not written.
 8. **Adding a game to an existing cartridge** still means writing it again.
    Editing covers everything that does not move files; adding one does.
-9. **Programming a tag from the wizard.** A virtual cartridge is a directory
-   made by hand; the wizard has no step for it, and nothing writes NDEF onto the
-   tag so that it would work on another PC.
-10. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
+9. **Verifying a cartridge you already have — half done.** `verify-cart <root>`
    reads `.gamepak/manifest.json`, re-reads every file it names and reports what
    does not match; it is read-only and exits non-zero when a cartridge is bad.
    That is the command. It still needs a button: nothing in the launcher or the
    wizard offers to check a cartridge that is sitting in front of you, which is
    where someone would actually look for it.
-11. **Windows code signing.** Unsigned means SmartScreen on every download.
-12. **macOS** is not supported at all — no watcher, no installer, no icons. The
+10. **macOS** is not supported at all — no watcher, no installer, no icons. The
    save-path tokens resolve for it (`~/Library/Application Support`,
    `~/Library/Preferences`), which is the only part of the platform that has
    been written.
-13. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
+11. **The `gamepak-linux.sh` / `gamepak-windows.ps1` menu wrappers.** The README
    pointed at both as the way to install, and neither has ever been in the
    repository — `linux/install.sh`, `linux/install-user.sh` and
    `windows/install.ps1` are the real entry points and the docs now say so. CI's
    `shell scripts` job still globs `./*.sh` expecting them, which is why that
    job is red on `main`: either write the wrappers, or narrow the glob to
    `linux/*.sh`.
-14. **Saves and hours have never met a second machine.** The round trip is
+12. **Saves and hours have never met a second machine.** The round trip is
    tested — play on A, carry to B, play, carry back — but in one process with
    two scratch directories standing in for two PCs, which is not the same as a
    Deck and a desktop disagreeing about a clock. The conflict path is the one
    to watch: it is meant to refuse, and a refusal nobody notices is a feature
    that quietly does nothing.
-15. **The settings the design asks for that no command answers.** Per-source
+13. **The settings the design asks for that no command answers.** Per-source
    toggles with game counts, the artwork cache's size and an Empty button, a
    copy-speed default, and the launcher-on-the-cartridge options are all drawn
    in the design and absent here. The dialog is grouped the way the design asks
