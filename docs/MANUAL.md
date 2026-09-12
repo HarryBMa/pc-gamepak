@@ -116,6 +116,200 @@ what it just launched. A cartridge with one game on it has no rail at all.
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
 
+### Where a cartridge opens
+
+The launcher is one answer, not the only one. It ships with the project and is on
+by default, because a cartridge that does nothing when you plug it in is broken
+and because it is the only front-end that needs no second install. Everything else
+is a **plugin**, and **Settings → Where a cartridge opens** is the list:
+
+| | |
+|---|---|
+| **PC GamePak launcher** | The cartridge's own window. Built in, on by default. |
+| **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-decky). |
+| **Playnite library** | Cartridge games in Playnite's library while the drive is in. Not built yet, and listed so the shape is visible. |
+
+A plugin has to be installed before its switch does anything, and the dialog says
+so rather than offering a dead control. More than one may be on: a desktop that
+also runs Playnite may reasonably want both its window and a library entry. A Deck
+almost certainly wants only the row — switch the launcher off there and no window
+appears over the top of it.
+
+All of them off is allowed, and the dialog says what it means: nothing happens on
+insert, and the tray icon or desktop entry is how you open a cartridge.
+
+The whole contract between the launcher and a plugin is one boolean in
+`settings.json`:
+
+```json
+{ "frontends": { "launcher": false, "decky": true } }
+```
+
+No socket, no daemon, nothing to keep in step. A plugin reads that file, finds
+whether it is the designated front-end, and behaves accordingly — which is what
+lets one be written in Python inside Steam's process tree and another in C# inside
+Playnite's.
+
+### What the launcher does when you plug one in
+
+If the launcher is one of the front-ends that is on, **Settings → When a cartridge
+is plugged in** decides what it does about it:
+
+| | |
+|---|---|
+| **Open the launcher** | The cartridge's window appears and takes the front. The default, and what this has always done. |
+| **Start the game** | No window; the game starts. See the limit below. |
+| **Just tell me** | A desktop notification. Linux only so far. |
+| **Nothing** | No reaction at all. The tray icon and the desktop entry still open it. |
+
+**Start the game only ever starts a game your PC already has** — a cartridge
+whose `executable=` is a `steam://`, `heroic://`, `gog://`, `epic://`,
+`playnite://`, `lutris://` or `itch://` URI. A game *stored on the cartridge*
+still gets a window and still waits for a click, and so does a collection,
+because there is no way to know which of its games you meant.
+
+That is not an oversight. The oldest promise this project makes is that nothing
+on a cartridge runs without a click — it is why `autorun.inf`'s `open=` key is
+ignored, that key being the original removable-media malware vector. A URI is
+handled by a launcher already installed on your machine, opening a game you
+already own, through an association the operating system made. An executable on
+the drive is a stranger's binary, and a setting left switched on is not consent
+to run it.
+
+Switching the launcher off in the list above is not the same as *Nothing* here.
+*Nothing* is the launcher being the front-end and choosing to stay out of the
+way; off is another front-end having the job. Either way no window appears, and
+only the first keeps the tray as the way in.
+
+The decision is made by the launcher rather than by whatever opened it, because
+three different things do — the resident watcher, the udev helper on a system
+install, and the tray menu — and a setting obeyed by one of them and not the
+others would be worse than no setting. The tray menu is the exception, and
+deliberately: picking a cartridge there is asking for the window in so many
+words, so it opens whatever this is set to.
+
+### Hours, and saves that travel
+
+A cartridge counts its own launches. `.gamepak/stats.json` on the drive holds
+how many times each game has been started, how long for, and when it was last
+played and on which machine — so the count follows the cartridge rather than
+staying on the PC that happened to play it. The launcher shows it under the ⓘ.
+The launch is written before the game starts, so it survives a crash; a
+cartridge that cannot be written to simply does not get one, and nothing about
+Play changes.
+
+While a game is running the open session re-stamps itself on the drive once a
+minute, and the next time that cartridge turns up anything left behind is added
+to the total. So a crash, a power cut or a drive pulled out of the port costs
+**up to a minute** of the session rather than all of it — and it works across
+machines: a cartridge yanked out of one PC mid-game has those hours settled by
+whichever machine sees it next. Borrowed from Kazeta, which does the same thing
+with the same sixty seconds.
+
+The save is the harder half, and the one that makes a second machine feel like
+starting over. Steam Cloud covers the games that are in it and nothing covers a
+GOG game, an emulator, or a folder copied onto a drive by hand. A cartridge can
+say where its saves live:
+
+```ini
+executable=steam://rungameid/413150
+title=Stardew Valley
+save=Stardew Valley|{appdata}/StardewValley/Saves
+```
+
+`{appdata}` is the point: the three platforms disagree about where saves go, so
+a cartridge names a *role* and the host resolves it. The full list of tokens is
+in `cartridge.conf.example`.
+
+#### A carried game needs no save line at all
+
+Declaring a path means somebody had to find out where the game keeps its saves
+and be right. For a game the cartridge **carries** — one stored on the drive and
+started by the launcher itself — that work is unnecessary:
+
+```ini
+executable=Games/Tunic/start.sh
+title=Tunic
+portable_home=yes
+```
+
+The game is started with its home directory pointed at `.gamepak/home/` on the
+cartridge, so **every** save it writes lands there, whether or not anyone knew
+where it would put them. Nothing is copied, nothing is declared, and there is no
+conflict to resolve because there is only ever one copy.
+
+On Linux that is `HOME` and the `XDG_*_HOME` directories; on macOS `HOME`, which
+`~/Library` follows; on Windows `USERPROFILE`, `APPDATA` and `LOCALAPPDATA`. The
+cache is deliberately left on the host — it is rebuildable and it is the largest
+thing a game writes. The compiled shaders inside it are the exception, and are
+carried separately: see below.
+
+It is off unless a cartridge asks, because changing where a game thinks home is
+can stop it working, and only the person making the cartridge knows whether
+theirs minds. It does not apply to a game the cartridge merely points at: a
+`steam://` cartridge is started by Steam, in Steam's environment, which nothing
+here can set — `save=` lines are still the answer there.
+
+This is [Kazeta's](https://github.com/kazetaos/kazeta) mechanism, and reading it
+closely is what produced it. Kazeta's overlayfs looks like the clever part and
+is not; the overlay exists so a *read-only* cart can be written to. The save
+capture is one line — `export HOME=…` — pointing the game at the writable layer.
+A PC GamePak cartridge is already writable, so it gets the same result with no
+mount, no root and no dependency.
+
+**It is off until you turn it on** — Settings → *Sync cartridge saves*.
+Everything else the launcher does on insert reads the cartridge; this writes to
+a directory in your home that a file on the drive named, which is a thing to
+opt into.
+
+When it is on, insert and eject each reconcile the two copies:
+
+| | |
+|---|---|
+| Only the host's copy changed | it goes to the cartridge |
+| Only the cartridge's changed | it comes to the host |
+| This machine has no copy at all | the cartridge's arrives |
+| **Both changed** | **nothing is written**, and the launcher says so |
+
+"Changed" is measured against what *this machine* last saw of each side, kept
+per host on the drive — so it means the same thing on a PC that synced an hour
+ago and a Deck that synced in March. Anything about to be replaced is moved
+aside first and kept, three deep, as `<name>.gamepak-backup-<time>` beside it.
+
+A conflict is refused rather than resolved. Picking a winner silently is how a
+save-sync tool eats an eighty-hour run.
+
+### Carrying the compiled shaders
+
+A game's first hour on a new machine is its worst. Every pipeline it draws with
+has to be compiled before it can be used, and the stutter that causes is what
+people blame on the drive. The cartridge has just carried 60 GB of that game
+across the room — carrying the compiled shaders too costs a few hundred megabytes
+and removes the problem.
+
+```ini
+executable=steam://rungameid/2322010
+title=God of War Ragnarök
+shader_cache=drive
+```
+
+Insert brings the cartridge's cache over if it is the newer one; eject takes this
+machine's back. There is no conflict to resolve, because it is a cache: either
+side is correct and the newer is only better, and losing it costs compile time
+rather than data. Nothing is backed up and nothing is refused.
+
+**It is per cartridge, and that is the point.** On a fast NVMe cartridge a warm
+cache is free. On a cheap USB stick, a few hundred megabytes copied at insert and
+again at eject is a wait you did not ask for, to avoid a stutter you might not
+notice. Only you know which drive it is, so the cartridge says rather than the
+settings dialog.
+
+Two limits worth knowing. Only **Steam** games are covered — the cache is
+Steam's own `steamapps/shadercache/<appid>`, found through the appid in the
+`steam://` launch target. And Mesa's cache (`~/.cache/mesa_shader_cache`) and
+NVIDIA's (`~/.nv/GLCache`) are shared by every program on the machine rather than
+kept per game, so no cartridge can carry its share of one.
+
 ### Skins
 
 A cartridge carries its own look, or it wears the stock one. Put a stylesheet at
@@ -408,14 +602,47 @@ free next to a USB write — then reads the cartridge back and compares. It name
 what is wrong rather than just failing: a missing file, a half-written one with
 both byte counts, or one that arrived with different contents.
 
-It is opt-in because it costs one extra pass over the drive, so it roughly adds
-the time the copy itself took. The file list is left on the cartridge at
-`.gamepak/manifest.json`, so the same check can be run later on a machine that no
-longer has the original.
+It is **on by default**, and costs one extra pass over the drive — so it roughly
+adds the time the copy itself took. It earns that: the first cartridge this
+project ever checked on real hardware came back with two corrupt 2 GB archives.
+The file list is left on the cartridge at `.gamepak/manifest.json`, so the same
+check can be run later on a machine that no longer has the original.
 
 This is an integrity check, not a signature: CRC-32 is the right tool for *did
 this survive the cable*, the job it does in zip and gzip, and the wrong tool for
 *did somebody change this on purpose*.
+
+### Which cartridge is this?
+
+Verifying answers "did these bytes survive". It cannot answer the other
+question — **did you and I build the same cartridge?** — because each of us
+checks against our own manifest.
+
+So `build-cart` and `verify-cart` both print a **digest**: one SHA-256 over
+every copied file's path, length and checksum, sorted, so the order things were
+copied in does not change it.
+
+```
+$ verify-cart /run/media/you/TOMB_RAIDER
+107 files, 107.43 GB, from /run/media/you/TOMB_RAIDER
+digest: 66d057355b062fb181e34f45b85a74e0b45bc367c7b06dd1fc846945342fc2c2
+```
+
+Put that value into a `build-cart` request as `expectDigest` and every later
+build of that request is checked against it:
+
+```json
+{ "expectDigest": "66d057355b06…", "title": "Tunic", "…": "…" }
+```
+
+A cartridge can be perfectly intact and still not be the cartridge somebody
+else built — different game version, a patch applied, a file missed — and until
+now nothing would have said so. The artwork, `cartridge.conf` and `.gamepak/`
+are deliberately outside it: two people who chose different cover art but copied
+the same game should agree, because the game is what a recipe pins.
+
+The idea is [Kazeta's cartridge creator's](https://github.com/kazetaos/kazeta-creator),
+where a recipe declares the hash its finished cart must have.
 
 ### What it can put on the cartridge
 
@@ -488,9 +715,42 @@ anything runs.
 
 ### Which filesystem
 
-**exFAT is the default, and it is the right answer for a cartridge you hand to
-someone.** Windows, Linux and macOS all read it with nothing to install, which
-is the entire point of a thing you carry between machines.
+**NTFS is the default, and it took hardware to work out why.** exFAT was the
+obvious answer and held that place for a long time — Windows, Linux and macOS all
+read it with nothing to install, which is the entire point of a thing you carry
+between machines. It is also the one filesystem here that cannot hold what a
+cartridge needs to carry.
+
+| | NTFS | exFAT | btrfs |
+|---|---|---|---|
+| Windows | read/write | read/write | driver needed |
+| Linux | read/write (`ntfs3`) | read/write | read/write |
+| macOS | **read only** | read/write | no |
+| Symlinks | yes | **no** | yes |
+| Executable bit | yes | **no** | yes |
+| `chmod` survives a replug | yes | **no** | yes |
+| Steam can install Proton onto it | yes | **no** | yes |
+| Volume name | 32 characters | **11** | 255 |
+
+The three "no"s in the exFAT column are one problem with three faces:
+
+- **Proton.** Steam installs a compatibility tool into the library the game
+  lives in, so launching a Windows game from an exFAT cartridge makes Steam try
+  to unpack Proton *onto the cartridge*. Proton contains 1,892 symlinks, and the
+  first one ends it — `AppError_11`, "Disk write error", which tells you nothing
+  about why. On NTFS, Steam installs Proton onto the cartridge like any other
+  drive and no per-game setting is needed.
+- **Carried Linux games.** Nothing on an exFAT volume is executable, which is
+  why the launcher starts a carried game through `bash` and why
+  `cartridge.conf.example` shows a `start.sh` rather than a binary.
+- **Saves.** `portable_home` gives a carried game its whole home directory on
+  the drive; a game that creates a symlink inside its own config directory will
+  fail to on exFAT.
+
+**The cost of the new default, stated plainly: macOS reads NTFS and does not
+write it.** A cartridge handed to a Mac can be played from and copied off, and
+cannot take a save or a playtime count back. If that matters more to you than
+Proton does, pick exFAT — it is one dropdown away and always will be.
 
 **btrfs is there for enthusiasts**, and it is a real choice with real costs:
 
@@ -506,10 +766,11 @@ is the entire point of a thing you carry between machines.
   once and read for years, which is the workload flash wear cares least about.
 
 Pick btrfs if your cartridges live on Linux machines you control and you want
-the filesystem's other properties. Otherwise exFAT.
+the filesystem's other properties. Otherwise NTFS, unless a Mac has to write to
+the drive.
 
-The drive name follows the filesystem: exFAT allows 11 characters, btrfs has
-room for the whole title. On Linux the relevant mount options are set by the
+The drive name follows the filesystem: exFAT allows 11 characters, NTFS 32, and
+btrfs has room for the whole title. On Linux the relevant mount options are set by the
 desktop environment or `/etc/fstab`.
 
 </details>
@@ -533,6 +794,9 @@ PC, or updating your driver, throws it away and the first hour stutters again.
 
 - NVIDIA Control Panel → Manage 3D settings → **Shader Cache Size → 10 GB** or
   Unlimited. The default is small enough that a big game evicts its own cache.
+- Put the compiled shaders on the cartridge with `shader_cache=drive`, so a
+  second machine starts with the cache the first one built rather than compiling
+  it again — see [Carrying the compiled shaders](#the-launcher).
 - On Steam, leave **Shader Pre-Caching** on. On Linux it is doing most of the
   work for you.
 
@@ -607,6 +871,29 @@ The third is worth doing by hand, once per cartridge:
   and this tool does not guess at those.
 
 ### If a cartridge will not eject
+
+**Eject looks first.** Before it touches the volume it asks the system who is
+using it, and names them: *"TombRaider.exe (4812) is running from the
+cartridge"*, *"Steam (1190) has a file open on the cartridge"*. That is a better
+starting point than "the device is busy", which is all the operating system will
+usually tell you.
+
+When something is in the way you get two choices. **Force quit and eject** asks
+each one to quit, waits five seconds, and only kills what has not gone — the
+wait is the point, because a game asked to quit writes its save to the cartridge
+first, and killing it outright loses exactly the thing ejecting was meant to
+preserve. **Keep it mounted** leaves the drive alone. If something survives even
+being killed, the cartridge stays mounted and says so: ejecting on top of a
+process that will not die is the thing the check exists to prevent.
+
+On Linux this sees the current user's processes — open files, memory-mapped
+files, working directories, and programs running from the drive. It cannot see
+another user's, and says how many it could not check rather than implying the
+drive is idle. On Windows it sees programs running from the volume; Windows
+refuses a busy dismount by itself anyway, so there the guard is the part that
+can tell you *what* to close.
+
+After all that, on Windows:
 
 Eject asks the PnP manager to stop the device, the same way Safely Remove
 Hardware does. When that is refused it elevates and takes the volume by force,
@@ -687,6 +974,36 @@ install that would never fit on a 2230.
 
 This used to ship a PC/SC reader for that — about 1,200 lines handling ACR122U
 and friends. It has been removed, because
+**[StreamLight](https://github.com/FoggyBytes/StreamLight)** and
+**[ArtMoon](https://github.com/onaiaku/ArtMoon)** (both GPL-3.0) are
+gamepad-first forks of [Moonlight](https://github.com/moonlight-stream/moonlight-qt),
+each paired with a host-side companion — StreamTweak and ArtLight. They stream a
+PC to a television rather than carrying it on a drive, so they are not the same
+idea; what they are is the most careful work anywhere on the question this
+project's launcher also has to answer, which is *what a game menu should feel
+like from a sofa*.
+
+Three things they get right. **Every action is reachable from the pad** — host
+tabs, library, settings tabs and dialogs, with the dialogs navigable by
+construction rather than one at a time. **A prompt bar along the bottom** says
+what each button does on the screen you are on, and is clickable. And **the
+prompts follow the device in your hands**: touch the keyboard and each glyph
+becomes the key to press; pick the pad back up and they return to controller
+icons, with the brand detected.
+
+That last one is now this launcher's behaviour too, and it was a real fault
+before: `is-gamepad` went on when a pad *connected*, so a PC with a controller
+attached showed pad icons to whoever was typing. It follows the button presses
+now.
+
+The other two are not taken, and the reason is the shape of the thing. This
+launcher has exactly four actions, so they sit on the four face buttons and the
+prompt is drawn on each button rather than in a bar — there is nothing to
+navigate *to*. Where their model would earn its keep here is the wizard, which
+has tabs, lists, dialogs and text fields and no pad support at all. Note both
+are GPL-3.0 against this project's MIT, so no code can move between them; these
+are ideas, read and reimplemented.
+
 **[Zaparoo](https://zaparoo.org/)** does the same job properly: NFC cards, QR
 codes, barcodes, discs, Amiibo and Skylanders, USB sticks and SD cards, across
 Windows, Linux, SteamOS, Bazzite, ChimeraOS, Batocera, MiSTer and more. There
@@ -789,6 +1106,11 @@ CARTRIDGE/
 ├── cartridge.conf
 ├── cover.jpg
 ├── autorun.inf          drive name and icon in Explorer
+├── .gamepak/
+│   ├── stats.json       launches and hours, written by the launcher
+│   └── saves/           the saves, if the cartridge declares any
+│       ├── index.json   what each machine last saw
+│       └── stardew/
 ├── Games/               a copied non-Steam game
 │   └── Tunic/
 │       └── TUNIC.exe
@@ -796,6 +1118,10 @@ CARTRIDGE/
     ├── appmanifest_367520.acf
     └── common/Hollow Knight/
 ```
+
+Everything under `.gamepak/` is written by the launcher, not by you — apart
+from `skin.css`, which is a cartridge's own. Deleting the directory loses the
+history and the carried saves and breaks nothing else.
 
 `executable=` takes any URI the OS can handle — `steam://`, `heroic://`, `gog://`,
 `epic://`, `playnite://`, `lutris://`, `http://`, `https://` — or a path to a file
@@ -1072,6 +1398,54 @@ launcher and a create-cartridge wizard instead of per-game shell scripts, and a
 click-to-play model in place of the auto-execute-plus-allowlist one.
 
 ### Others working on the same idea
+
+**[Kazeta](https://github.com/kazetaos/kazeta)** (MIT) is the most complete
+answer to this idea that anyone has built, and it answers a different question:
+it is not a program you install, it is **the whole operating system**. An
+Arch-based image boots greetd straight into a gamescope session with no desktop
+behind it, looks for a `*.kzi` file within two levels of `/media` or
+`/run/media`, and if there is not one, shows a BIOS screen. There is nothing to
+escape from because there is nothing else there.
+
+Its cartridge is a few `Key=value` lines — `Name`, `Id`, `Exec`, `Icon`,
+`Runtime`, `GamescopeOptions` — which is the same idea as `cartridge.conf` and
+about the same size. Two things around it are not the same idea at all:
+
+- **A cart can be one file.** `.kzp` is an erofs image that gets mounted, so a
+  whole game is a single immutable blob with a hash. (In the in-development
+  2026.0 release, not the current stable one.) `.kzr` is the same trick for a
+  runtime: Proton arrives as an image mounted *under* the game rather than
+  unpacked onto the drive — which, read next to what this project learned about
+  Proton's 1892 symlinks and exFAT, is the tidier fix by a distance.
+- **Saves need no save paths.** The cart is an overlayfs lowerdir, a host
+  directory is the upperdir, and the result is mounted as the game's `$HOME`.
+  Everything the game writes is captured without anyone knowing where the game
+  puts it. Saves live on the host and move to external "memory cards" as
+  `<cart-id>.tar` on purpose, which is the opposite of the choice here.
+  Playtime is a log of ISO-8601 start/end pairs inside the save, re-stamped
+  every sixty seconds so a crash costs a minute.
+
+**[kazeta-creator](https://github.com/kazetaos/kazeta-creator)** (MIT) is the
+wizard's counterpart and the best idea in either repository: a Python CLI over a
+`contentdb.yaml` of **recipes**, not games. Each entry names where to get the
+files, how to unpack them, what to run, which runtime, and the xxh3 hash the
+finished cart must have. So the community shares the recipe, everyone builds a
+byte-identical cart, and the file that makes that possible is also a
+compatibility list. It refuses to build a game nobody has written a recipe for,
+which is a feature.
+
+Where PC GamePak differs, and it is one difference with many consequences: this
+runs on the operating system you already have. Kazeta owns the session, so it
+can overlay a game's whole home directory and hand it a read-only cart; a
+launcher on somebody's Windows desktop cannot do either, which is why saves here
+are declared per game and why a cartridge here can be a *key* that points at an
+installed copy rather than carrying the game at all. A cartridge here can also
+hold a collection, and there is a wizard that makes one. If you want a console —
+one that boots, has no desktop, and never shows you a window — Kazeta is the
+project, and it is further along at being that than this is at anything.
+
+Both are MIT, which the three below are not: code could move between these two
+projects if it ever should.
 
 **[Zaparoo](https://zaparoo.org/)**
 ([zaparoo-core](https://github.com/ZaparooProject/zaparoo-core), GPL-3.0) turns

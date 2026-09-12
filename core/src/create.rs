@@ -121,6 +121,21 @@ pub struct BundleGameRequest {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CartridgeRequest {
+    /// The digest this cartridge is expected to come out with, if the person
+    /// asking already knows it.
+    ///
+    /// Borrowed from Kazeta's cartridge creator, where a recipe declares the
+    /// hash its finished cart must have: everybody who follows the recipe gets
+    /// byte-identical carts, and finds out immediately when they do not. A
+    /// `CartridgeRequest` is already a recipe in that sense; it just had no way
+    /// to say what the answer should be.
+    ///
+    /// Checked after the copy is verified, never instead of it. A mismatch is a
+    /// warning on the result rather than an error, because by then the
+    /// cartridge exists and refusing to describe it would be unhelpful —
+    /// `build-cart` turns that warning into a non-zero exit.
+    #[serde(default)]
+    pub expect_digest: Option<String>,
     /// Target drive root. Re-checked here against the allowed list.
     pub drive_path: String,
     pub title: String,
@@ -290,6 +305,11 @@ pub struct CartridgeResult {
     /// to match on the wording. Anything acting on the outcome rather than
     /// showing it to a person needs a field it can branch on.
     pub verified_ok: Option<bool>,
+    /// The cartridge's contents as one value, when there is a manifest to
+    /// derive it from. See [`verify::cartridge_digest`].
+    pub digest: Option<String>,
+    /// Set when `expect_digest` was given and did not match.
+    pub digest_matched: Option<bool>,
     /// True when Steam was closed to get at its library list.
     pub steam_closed: bool,
     /// True when a stale entry for this drive was taken out of that list.
@@ -802,6 +822,8 @@ pub fn create_cartridge(
         trim: None,
         verified: None,
         verified_ok: None,
+        digest: None,
+        digest_matched: None,
         steam_closed: false,
         steam_entry_removed: false,
         warnings: Vec::new(),
@@ -1475,6 +1497,29 @@ fn finish(
                 warnings.push(format!("The file list was not brought up to date: {e}"));
             }
         }
+    }
+
+    // ---- the cartridge's name for itself ----------------------------------
+    //
+    // Read back from the drive rather than taken from the manifest that was
+    // just assembled in memory, so this describes what a later `verify-cart`
+    // on another machine will actually find. A cartridge written without the
+    // verify option has no manifest and so has no digest; that is the honest
+    // answer rather than a hash of nothing.
+    if let Some(manifest) = verify::read_manifest(root) {
+        let digest = verify::cartridge_digest(&manifest);
+        let expected = request.expect_digest.as_deref().unwrap_or_default();
+        result.digest_matched = verify::digest_matches(expected, &digest);
+        if result.digest_matched == Some(false) {
+            warnings.push(format!(
+                "This cartridge came out as {} and the request expected {}. Same request, \
+                 different bytes: check that the game files are the version the request was \
+                 written against.",
+                verify::short_digest(&digest),
+                verify::short_digest(expected.trim()),
+            ));
+        }
+        result.digest = Some(digest);
     }
 
     if request.trim_after_write {
@@ -3061,13 +3106,25 @@ mod tests {
     fn derives_a_label_the_chosen_filesystem_will_accept() {
         use format::Filesystem;
 
-        // exFAT is the default, and its 11-character limit is the tight one.
-        assert_eq!(default_label("Hollow Knight"), "Hollow Knig");
-        assert_eq!(default_label("Cinder & Salt"), "Cinder Salt");
+        // NTFS is the default now and has room for 32 characters, so the
+        // cartridge gets the game's actual name rather than a truncation.
+        assert_eq!(default_label("Hollow Knight"), "Hollow Knight");
+        assert_eq!(default_label("God of War Ragnarok"), "God of War Ragnarok");
         assert_eq!(default_label("!!!"), "Cartridge");
         assert_eq!(default_label(""), "Cartridge");
 
-        // btrfs has room for the whole name.
+        // exFAT's eleven characters are the tight case, and the reason the
+        // limit is per filesystem rather than one number.
+        assert_eq!(
+            default_label_for(Filesystem::Exfat, "Hollow Knight"),
+            "Hollow Knig"
+        );
+        assert_eq!(
+            default_label_for(Filesystem::Exfat, "Cinder & Salt"),
+            "Cinder Salt"
+        );
+
+        // btrfs has room for the whole name, however long.
         assert_eq!(
             default_label_for(Filesystem::Btrfs, "Hollow Knight"),
             "Hollow Knight"
@@ -3075,7 +3132,7 @@ mod tests {
 
         // Whatever it produces must pass the formatter's own check, for the
         // filesystem it was derived for.
-        for filesystem in [Filesystem::Exfat, Filesystem::Btrfs] {
+        for filesystem in [Filesystem::Ntfs, Filesystem::Exfat, Filesystem::Btrfs] {
             for title in [
                 "Hollow Knight",
                 "Cinder & Salt",

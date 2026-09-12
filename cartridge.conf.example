@@ -30,11 +30,123 @@
 #   If omitted, the launcher looks for cover.png, cover.jpg, poster.png or box.png
 #   at the root.
 #
+# save  (optional, repeatable)
+#   Where this game keeps its saves on the host, so they can travel with the
+#   cartridge. Written as
+#
+#     save=Label|{token}/rest/of/the/path
+#
+#   The label is optional; without one the last part of the path names it.
+#   Repeat the key for a game that keeps saves in more than one place.
+#
+#   The {token} is required and is the point: a save path cannot be written
+#   down literally, because the three platforms disagree about where it goes.
+#   Each token resolves on the host that reads it:
+#
+#     {home}          the user's home directory
+#     {documents}     Documents (the localised name, on Linux)
+#     {savedgames}    Saved Games
+#     {appdata}       Windows %APPDATA%    · macOS ~/Library/Application Support
+#                     · Linux $XDG_CONFIG_HOME (~/.config)
+#     {localappdata}  Windows %LOCALAPPDATA% · macOS ~/Library/Application Support
+#                     · Linux $XDG_DATA_HOME (~/.local/share)
+#     {appsupport}    as {localappdata}, named for the macOS case
+#     {prefs}         macOS ~/Library/Preferences · %APPDATA% · ~/.config
+#
+#   A path that resolves to a whole home, Documents or AppData directory is
+#   refused: a save declaration has to name one game's saves inside one of
+#   them, not the directory itself.
+#
+#   Where one platform genuinely differs — a Windows game whose saves are
+#   inside a Proton prefix, say — write a platform line as well. Where both
+#   exist, the platform one wins on that platform and the plain one covers the
+#   rest:
+#
+#     save=Saves|{appdata}/Foo/Saves
+#     save.linux=Saves|{home}/.steam/steam/steamapps/compatdata/1/pfx/Foo
+#
+#   Syncing is off until the user turns it on. When it is on, the two copies
+#   are compared against what this machine last saw of each; only the side
+#   that changed is copied, both changing is a conflict that writes nothing,
+#   and whatever is about to be replaced is moved aside and kept first.
+#
+# portable_home  (optional, cartridge-wide)
+#   yes to give a game the cartridge *carries* its own home directory, at
+#   .gamepak/home/ on the drive. Every save it writes lands there, and no
+#   save= line is needed for it at all.
+#
+#   This is the better mechanism where it applies, because nothing has to be
+#   researched or declared and it cannot miss a path the game uses. It applies
+#   only to a game stored on the cartridge and started by the launcher itself:
+#   a game the cartridge points at with a steam:// URI is started by Steam, in
+#   Steam's environment, which nothing here can set.
+#
+#   Off unless asked for. Changing where a game thinks home is can stop it
+#   working — a game that expects its own settings will find none and start at
+#   its defaults — and only the person making the cartridge knows whether
+#   theirs minds.
+#
+#   Set on Linux: HOME and the XDG_*_HOME directories. On macOS: HOME, which
+#   ~/Library follows. On Windows: USERPROFILE, APPDATA and LOCALAPPDATA.
+#   The cache is deliberately left on the host: it is rebuildable, it is the
+#   largest thing a game writes, and a shader cache on removable flash costs
+#   write cycles for nothing.
+#
+#   One caveat, and it is the filesystem's: exFAT cannot hold a symlink, so a
+#   game that makes one inside its config directory will fail to. btrfs and
+#   NTFS cartridges have no such problem.
+#
+# shader_cache  (optional, cartridge-wide)
+#   drive to carry this game's compiled shaders on the cartridge, host (the
+#   default) to leave them where they are.
+#
+#   A game's first hour on a new machine is its worst: every pipeline it uses
+#   has to be compiled before it can be drawn, and that is the stutter people
+#   blame on the drive. The cartridge has just carried 60 GB of the game across
+#   the room; carrying the compiled shaders too costs a few hundred megabytes
+#   and removes the problem.
+#
+#   It is per cartridge because it is a trade against the drive's speed. On a
+#   fast NVMe cartridge, carrying a warm cache is free. On a cheap USB stick, a
+#   few hundred megabytes copied at insert and again at eject is a wait nobody
+#   asked for, to avoid a stutter they might not notice. Only the person making
+#   the cartridge knows which drive it is.
+#
+#   Only Steam games are covered — the cache is Steam's own
+#   steamapps/shadercache/<appid>, found through the appid in the steam://
+#   launch target. Mesa's and NVIDIA's own caches are shared by every program
+#   on the machine rather than per game, so no cartridge can carry its share.
+#
+#   Insert copies the cartridge's cache over only if it is the newer one, and
+#   eject copies this machine's back. There is no conflict to resolve: it is a
+#   cache, so either side is correct and the newer is only better.
+#
+# savemode  (optional, cartridge-wide)
+#   copy (the default) or link. `link` replaces the host's save directory with
+#   a symlink onto the cartridge, so there is only ever one copy. It is faster
+#   and exact, and it costs two things: Windows refuses symlinks to an
+#   unprivileged process unless Developer Mode is on, and a drive pulled
+#   without ejecting leaves the game's save directory dangling. Use copy
+#   unless you have a reason.
+#
 # ----- Example -----
 
 executable=steam://rungameid/1091500
 title=Cyberpunk 2077
 cover=cover.jpg
+save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
+
+# ----- A carried game, which needs no save line at all -----
+#
+# executable=Games/Tunic/start.sh
+# title=Tunic
+# portable_home=yes
+#
+# ----- A Steam game on a fast drive, carrying its shaders -----
+#
+# executable=steam://rungameid/2322010
+# title=God of War Ragnarök
+# shader_cache=drive
 
 # ----- More examples -----
 #
@@ -61,6 +173,9 @@ cover=cover.jpg
 #   title       - Game name shown in the game list (required)
 #   executable  - What Play should start for this game (required)
 #   cover       - Per-game thumbnail, relative to this file (optional)
+#   save        - Where that game keeps its saves (optional, repeatable).
+#                 Same form as above; a save line inside a [game] section
+#                 belongs to that game.
 #
 # ----- Bundle example -----
 #
@@ -77,6 +192,7 @@ cover=cover.jpg
 # title=God of War Ragnarök
 # executable=steam://rungameid/2322010
 # cover=cover_1.jpg
+# save=Ragnarök|{savedgames}/God of War Ragnarok
 #
 # Steam games are stored under steamapps/ as usual.
 # GOG / other games are stored under Games/<Title>/ for organisation.

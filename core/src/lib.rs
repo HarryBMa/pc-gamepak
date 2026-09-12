@@ -13,18 +13,25 @@
 mod testutil;
 
 pub mod autorun;
+pub mod busy;
 pub mod cartridge;
 pub mod create;
 pub mod drives;
 pub mod edit;
 pub mod folders;
 pub mod format;
+pub mod frontend;
 pub mod health;
+pub mod home;
+pub mod insert;
 pub mod playnite;
 pub mod portable;
 pub mod proc;
+pub mod saves;
 pub mod settings;
 pub mod sgdb;
+pub mod shaders;
+pub mod stats;
 pub mod steam;
 pub mod steamlib;
 pub mod throttle;

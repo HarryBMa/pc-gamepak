@@ -97,7 +97,7 @@ modules:
         # v1.0.0 predates packaging/flatpak/, so a build from it fails on the
         # first `install` line below. The tag has to be one that contains
         # this directory.
-        tag: v1.0.1
+        tag: v1.1.0
 
       # The build runs with no network, so every crate has to be here as a
       # source. Regenerate with flatpak-cargo-generator.py against each of the

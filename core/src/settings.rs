@@ -36,7 +36,11 @@ pub struct Settings {
     // declare, and serde dropped them on the floor, so every one of them reset
     // on the next run. They live here now because Create stopped asking: it
     // reads them and gets on with it.
-    /// `exfat` or `btrfs`.
+    /// `ntfs`, `exfat` or `btrfs`.
+    ///
+    /// NTFS by default: it is the only one of the three that holds a symlink,
+    /// and Steam unpacking Proton onto a cartridge needs 1,892 of them. See
+    /// [`crate::format`] for what each one costs.
     pub default_filesystem: String,
     /// Read the cartridge back and check it against what was written.
     ///
@@ -75,6 +79,42 @@ pub struct Settings {
     /// label to be sent back before it will touch a filesystem — this decides
     /// whether Create *offers* to format, never whether the gate applies.
     pub default_format: bool,
+
+    // ---- What the cartridge remembers ------------------------------------
+    /// Reconcile the save directories a cartridge declares, on insert and on
+    /// eject.
+    ///
+    /// **Off**, and the only one of the two that is. Everything else this
+    /// project does on insert reads the cartridge; this writes to a directory
+    /// in the user's home that they did not name, on the say-so of a file on a
+    /// drive. That is a thing to opt into, however carefully `saves` goes
+    /// about it.
+    pub save_sync: bool,
+    /// Which front-ends handle a cartridge. See [`crate::frontend`].
+    ///
+    /// The launcher is on and every plugin is off until somebody says otherwise.
+    /// A plugin — the Decky row, a Playnite extension — reads this same file to
+    /// find out whether it is the designated front-end, which is the whole of
+    /// the contract between them.
+    pub frontends: crate::frontend::Frontends,
+    /// What happens when a cartridge is plugged in, *if* the launcher is one of
+    /// the front-ends that is on.
+    ///
+    /// `focus_ui` — a window, which is what this has always done and what it
+    /// still does unless told otherwise. `none`, `notify_only` and
+    /// `auto_launch_game` are the other three; see [`crate::insert`], which
+    /// also explains why auto-launch will not run a program that lives on the
+    /// cartridge however emphatically it is switched on.
+    pub on_cartridge_insert: crate::insert::InsertAction,
+    /// Keep launches, hours and last-played in `.gamepak/stats.json` on the
+    /// cartridge.
+    ///
+    /// **On.** It writes one small file, it writes it only to the drive the
+    /// user just pressed Play on, and a cartridge that cannot be written to
+    /// simply does not get one. The point of the feature is that the count
+    /// survives being carried to another machine, which a default of off would
+    /// quietly undo for everybody who never found the switch.
+    pub track_playtime: bool,
 }
 
 impl Default for Settings {
@@ -83,7 +123,7 @@ impl Default for Settings {
             steamgriddb_enabled: false,
             steamgriddb_api_key: String::new(),
             game_folder_roots: Vec::new(),
-            default_filesystem: "exfat".to_string(),
+            default_filesystem: "ntfs".to_string(),
             // Costs a read pass over the drive and is worth it: the alternative
             // is finding out from a crash months later.
             default_verify: true,
@@ -100,6 +140,10 @@ impl Default for Settings {
             // should not be slowed for a problem it does not have.
             default_copy_rate_mb_s: 0,
             default_format: false,
+            save_sync: false,
+            track_playtime: true,
+            frontends: crate::frontend::Frontends::default(),
+            on_cartridge_insert: crate::insert::InsertAction::default(),
         }
     }
 }
@@ -222,11 +266,72 @@ mod tests {
             default_eject: false,
             default_register_steam: false,
             default_format: true,
+            save_sync: true,
+            track_playtime: false,
+            on_cartridge_insert: crate::insert::InsertAction::AutoLaunchGame,
             ..Settings::default()
         };
         save_to(&path, &chosen).unwrap();
 
         assert_eq!(load_from(&path), chosen);
+    }
+
+    #[test]
+    fn a_malformed_frontends_value_does_not_reset_every_other_setting() {
+        // `load_from` treats an unparseable file as no file, so one bad value
+        // would silently undo everything the user has configured.
+        let scratch = crate::testutil::Scratch::new("settings-frontends");
+        let path = scratch.join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"frontends":["launcher"],"steamgriddbApiKey":"kept"}"#,
+        )
+        .unwrap();
+
+        let loaded = load_from(&path);
+        assert!(loaded.frontends.is_on(crate::frontend::LAUNCHER));
+        assert_eq!(loaded.steamgriddb_api_key, "kept");
+    }
+
+    #[test]
+    fn a_fresh_install_opens_a_window_on_insert() {
+        // The behaviour every existing install already has. Anything else here
+        // would change what happens on a machine nobody reconfigured.
+        assert_eq!(
+            Settings::default().on_cartridge_insert,
+            crate::insert::InsertAction::FocusUi
+        );
+    }
+
+    #[test]
+    fn a_settings_file_with_an_unreadable_insert_action_still_loads() {
+        // serde would reject an unknown enum value and take the whole file with
+        // it, resetting every other setting. The field is deserialised through
+        // the tolerant parser for that reason.
+        let scratch = crate::testutil::Scratch::new("settings-insert");
+        let path = scratch.join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"onCartridgeInsert":"teleport","steamgriddbApiKey":"kept"}"#,
+        )
+        .unwrap();
+
+        let loaded = load_from(&path);
+        assert_eq!(
+            loaded.on_cartridge_insert,
+            crate::insert::InsertAction::FocusUi
+        );
+        assert_eq!(loaded.steamgriddb_api_key, "kept");
+    }
+
+    #[test]
+    fn a_fresh_install_counts_hours_and_leaves_the_home_directory_alone() {
+        let fresh = Settings::default();
+        // The cartridge's own file, written only because Play was pressed.
+        assert!(fresh.track_playtime);
+        // A directory in the user's home, named by a file on somebody else's
+        // drive. That one is asked for.
+        assert!(!fresh.save_sync);
     }
 
     #[test]

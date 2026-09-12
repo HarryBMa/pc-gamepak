@@ -195,6 +195,12 @@ const el = {
   setTuneRow: $("set-tune-row"),
   setTrim: $("set-trim"),
   setCopyRate: $("set-copy-rate"),
+  frontends: $("frontends"),
+  frontendsWarning: $("frontends-warning"),
+  setOnInsert: $("set-on-insert"),
+  onInsertHint: $("on-insert-hint"),
+  setPlaytime: $("set-playtime"),
+  setSaveSync: $("set-save-sync"),
   settingsSave: $("settings-save"),
   settingsStatus: $("settings-status"),
 
@@ -249,7 +255,7 @@ let manual = null;
 let settings = {
   steamgriddbEnabled: false,
   steamgriddbApiKey: "",
-  defaultFilesystem: "exfat",
+  defaultFilesystem: "ntfs",
   defaultVerify: true,
   defaultIcon: true,
   defaultEject: true,
@@ -1079,7 +1085,7 @@ async function selectDrive(drive) {
  */
 let filesystems = [];
 
-const DEFAULT_FILESYSTEM = "exfat";
+const DEFAULT_FILESYSTEM = "ntfs";
 
 function filesystemInfo(id) {
   return filesystems.find((f) => f.id === id) ?? null;
@@ -1094,7 +1100,7 @@ function filesystem() {
 }
 
 function filesystemLabel(fs) {
-  return filesystemInfo(fs)?.name ?? fs ?? "exFAT";
+  return filesystemInfo(fs)?.name ?? fs ?? "NTFS";
 }
 
 /** Fill the Settings picker, and say what each choice costs. */
@@ -2234,6 +2240,13 @@ function applySettings() {
   el.setTrim.checked = Boolean(settings.defaultTrim);
   el.setCopyRate.value = String(settings.defaultCopyRateMbS ?? 0);
   el.setFormat.checked = Boolean(settings.defaultFormat);
+  el.setOnInsert.value = settings.onCartridgeInsert || "focus_ui";
+  describeOnInsert();
+  // On unless it has been switched off: it writes to the cartridge only, and
+  // only because Play was pressed.
+  el.setPlaytime.checked = settings.trackPlaytime !== false;
+  // Off unless it has been switched on: it writes to the user's home.
+  el.setSaveSync.checked = Boolean(settings.saveSync);
   // Tuning edits Defender and Search, which exist on one platform.
   el.setTuneRow.hidden = platform !== "windows";
   el.tuneNow.hidden = platform !== "windows";
@@ -2339,6 +2352,7 @@ function openCartridgePicker() {
 
 function openSettings() {
   applySettings();
+  void renderFrontends();
   renderSources();
   el.settingsStatus.textContent = "";
   el.settingsDialog.showModal();
@@ -2387,6 +2401,9 @@ async function saveSettings() {
         defaultTrim: el.setTrim.checked,
         defaultCopyRateMbS: Number(el.setCopyRate.value) || 0,
         defaultFormat: el.setFormat.checked,
+        onCartridgeInsert: el.setOnInsert.value,
+        trackPlaytime: el.setPlaytime.checked,
+        saveSync: el.setSaveSync.checked,
         gameFolderRoots: settings.gameFolderRoots ?? [],
       },
     });
@@ -2758,6 +2775,109 @@ el.btnUnregister.addEventListener("click", async () => {
 
 el.settings.addEventListener("click", openSettings);
 el.settingsSave.addEventListener("click", saveSettings);
+/**
+ * Say what the chosen reaction actually does, including where it will not.
+ *
+ * Each of the three non-default choices has a limit worth knowing before it is
+ * picked rather than after it fails to happen, and two of them are the kind of
+ * thing that reads as a bug when it is a deliberate refusal.
+ */
+function describeOnInsert() {
+  const hints = {
+    focus_ui: "The cartridge's window opens and comes to the front.",
+    auto_launch_game:
+      "Starts the game without a window — for a cartridge that points at a game " +
+      "your PC already has. A game stored on the cartridge still waits for a " +
+      "click, because a drive someone handed you should not get to run a program " +
+      "on its own.",
+    notify_only:
+      platform === "windows"
+        ? "Not available on Windows yet, so the launcher opens instead."
+        : "A desktop notification, and nothing else.",
+    none: "Nothing happens. The tray and the desktop entry still open it.",
+  };
+  el.onInsertHint.textContent = hints[el.setOnInsert.value] ?? "";
+}
+
+/**
+ * Say what each filesystem costs, where the choice is made.
+ *
+ * The consequences are not guessable from the name and they are not small: one
+ * of the three cannot hold a symlink, which is what Steam needs 1,892 of to put
+ * Proton on a cartridge, and another cannot be read by Windows at all.
+ */
+/**
+ * Draw the front-ends, each with its own switch.
+ *
+ * Built from what the backend knows rather than hardcoded here, so a front-end
+ * added later appears without this file changing. Three states matter and are
+ * all shown: switched on, installed, and implemented at all — a switch for a
+ * plugin that is not on the machine would be a switch that does nothing, and one
+ * for a plugin nobody has written yet would be worse.
+ */
+async function renderFrontends() {
+  let list = [];
+  try {
+    list = (await invoke("frontends")) ?? [];
+  } catch (error) {
+    el.frontends.textContent = "Could not read which front-ends are set up.";
+    console.error("[pc-gamepak]", error);
+    return;
+  }
+
+  el.frontends.replaceChildren();
+  for (const front of list) {
+    const row = document.createElement("label");
+    row.className = "opt";
+
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.id = `frontend-${front.id}`;
+    box.checked = Boolean(front.on);
+    // Not installed, or not written: the switch would do nothing either way.
+    box.disabled = !front.implemented || !front.installed;
+    box.addEventListener("change", () => {
+      void invoke("set_frontend", { id: front.id, on: box.checked })
+        .then(() => renderFrontends())
+        .catch((error) => {
+          box.checked = !box.checked;
+          console.error("[pc-gamepak]", error);
+        });
+    });
+
+    const body = document.createElement("span");
+    body.className = "opt__body";
+    const label = document.createElement("span");
+    label.className = "opt__label";
+    label.textContent = front.name;
+    const hint = document.createElement("span");
+    hint.className = "opt__hint";
+    hint.textContent = frontendHint(front);
+    body.append(label, hint);
+    row.append(box, body);
+    el.frontends.append(row);
+  }
+
+  // Everything off is allowed — somebody may want a cartridge that waits to be
+  // opened — and is worth saying out loud, because it is rarely the intention.
+  const anyOn = list.some((front) => front.on);
+  el.frontendsWarning.hidden = anyOn;
+  el.frontendsWarning.textContent = anyOn
+    ? ""
+    : "Nothing will happen when a cartridge is plugged in. Open it from the tray or the desktop entry.";
+}
+
+/** What to say under a front-end's name. */
+function frontendHint(front) {
+  if (!front.implemented) return `${front.description} Not built yet.`;
+  if (!front.installed) {
+    return `${front.description} Not found${front.installPath ? ` at ${front.installPath}` : ""}.`;
+  }
+  return front.description;
+}
+
+el.setOnInsert.addEventListener("change", describeOnInsert);
+
 el.setSgdb.addEventListener("change", () => {
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
 });
@@ -2883,12 +3003,12 @@ async function demoInvoke(command, args) {
     // that runs with no backend at all. Only the fields the picker reads.
     case "list_filesystems":
       return [
-        { id: "exfat", name: "exFAT", labelLimit: 11, canCreateHere: true, runsProton: false,
-          nativeOn: ["Windows", "Linux", "macOS"], needs: "",
-          summary: "Reads everywhere with nothing installed." },
         { id: "ntfs", name: "NTFS", labelLimit: 32, canCreateHere: true, runsProton: true,
           nativeOn: ["Windows", "Linux"], needs: "",
           summary: "Reads natively on Windows and Linux, and Proton works." },
+        { id: "exfat", name: "exFAT", labelLimit: 11, canCreateHere: true, runsProton: false,
+          nativeOn: ["Windows", "Linux", "macOS"], needs: "",
+          summary: "Reads and writes everywhere, macOS included, and holds no symlinks." },
         { id: "btrfs", name: "btrfs", labelLimit: 256, canCreateHere: true, runsProton: true,
           nativeOn: ["Linux"], needs: "WinBtrfs, to read it on Windows",
           summary: "Linux at its best: checksums, compression, snapshots." },

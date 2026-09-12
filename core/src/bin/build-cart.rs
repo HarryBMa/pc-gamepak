@@ -9,6 +9,13 @@
 //!     build-cart build cart.json     do it
 //!
 //! `plan` is the default: building is opt-in because formatting is not undoable.
+//!
+//! A finished build prints its `digest` — one value naming everything that was
+//! copied. Put it back into the request as `expectDigest` and every later build
+//! of that request is checked against it, so a batch of eleven cartridges is
+//! eleven cartridges somebody else can reproduce rather than eleven that merely
+//! did not error. The idea is Kazeta's cartridge creator's, which has done this
+//! from the start; see `docs/STATUS.md`.
 
 use std::io::Write;
 
@@ -143,6 +150,30 @@ fn main() {
             if result.verified_ok == Some(false) {
                 eprintln!("verification failed: the cartridge is not trustworthy");
                 std::process::exit(1);
+            }
+
+            // The one value that says whether two people building this request
+            // got the same cartridge. Printed on its own line rather than only
+            // inside the JSON above, because the point of it is to be read,
+            // quoted, and pasted back into the request as `expectDigest`.
+            if let Some(digest) = &result.digest {
+                println!("digest: {digest}");
+                match result.digest_matched {
+                    Some(true) => println!("matches the digest this request expected."),
+                    Some(false) => {
+                        // Same reasoning as the verify failure above: the
+                        // warning is in the JSON, and a script reading exit
+                        // status alone would otherwise record a good build.
+                        eprintln!(
+                            "digest mismatch: this is not the cartridge the request describes"
+                        );
+                        std::process::exit(1);
+                    }
+                    None => println!(
+                        "add \"expectDigest\": \"{digest}\" to the request to have this \
+                         checked next time."
+                    ),
+                }
             }
         }
         Err(e) => {

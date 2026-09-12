@@ -101,6 +101,12 @@ jobs:
           done
       - name: Check every element the scripts reach for exists
         run: node tools/check-dom-ids.mjs
+      # The version lives in fourteen places across five formats. Before this
+      # ran, the crates said 1.0.1, package-lock.json said 0.1.0 and the AUR and
+      # WinGet manifests said 1.0.0 — so two of the three channels people install
+      # from pointed at a release older than the code, and nothing noticed.
+      - name: Check every version site agrees
+        run: node tools/check-versions.mjs
 
   shell:
     name: shell scripts

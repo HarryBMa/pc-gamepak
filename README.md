@@ -46,7 +46,11 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 ## Features
 
 - **Plug and it opens.** A background watcher notices the drive and shows the
-  launcher. Nothing runs until you press Play.
+  launcher. Nothing runs until you press Play — or, if you ask it to, the game
+  starts on its own, a notification appears, or nothing happens at all. Even
+  set to start the game, a program carried *on* the cartridge still waits for a
+  click: a URI hands off to a launcher you already have, and a stranger's binary
+  does not get the machine.
 - **One game or a shelf of them.** A cartridge can carry a collection, with a
   rail to pick from.
 - **Real eject.** The button parks the drive and powers it down, elevating only
@@ -62,6 +66,16 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   on a machine that has never heard of it.
 - **Steam-aware.** A cartridge registers as a Steam library so copied games run
   from the drive rather than being redownloaded.
+- **The cartridge counts its own hours.** Launches, playtime and last-played go
+  on the drive, not on the PC, so the count follows the cartridge between
+  machines.
+- **Saves that travel too**, optional and off until you turn it on. A cartridge
+  can say where its saves live — as `{appdata}/Foo/Saves`, resolved by whichever
+  platform reads it — and insert and eject carry whichever copy changed. If both
+  changed, neither is touched and the launcher says so; anything replaced is
+  kept beside it. A game the cartridge *carries* needs none of that: one line
+  gives it its whole home directory on the drive, and every save it writes goes
+  there whether or not anyone knew where it would put them.
 - **Not an NFC project.** If you want to tap a card, a toy or a QR code to
   launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
   platforms and this does not do it at all.
@@ -78,7 +92,10 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 | macOS | Not yet — the drive layer needs a rewrite |
 
 Any removable drive works: NVMe in a USB enclosure, a portable SSD, or a USB
-stick. exFAT for cross-platform cartridges, btrfs for Linux-only ones.
+stick. NTFS by default — the one format that both Windows and Linux write and
+that holds the symlinks Steam needs to install Proton onto a cartridge. exFAT
+when a Mac has to write to the drive, btrfs for Linux-only cartridges, and five
+more in the picker for a cartridge that only ever meets one kind of machine.
 
 ## Install
 
@@ -159,7 +176,8 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 
 [Installing on Linux](docs/INSTALL.md) · [The manual](docs/MANUAL.md) ·
 [Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) ·
-[Where the project is](docs/STATUS.md) · [Contributing](CONTRIBUTING.md)
+[Where the project is](docs/STATUS.md) · [What changed](CHANGELOG.md) ·
+[Contributing](CONTRIBUTING.md)
 
 ## License
 

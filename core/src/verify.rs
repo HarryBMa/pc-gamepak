@@ -257,6 +257,248 @@ impl Digests {
 }
 
 // --------------------------------------------------------------------------
+// One value for a whole cartridge
+// --------------------------------------------------------------------------
+
+/// The name of a cartridge's contents, as one string.
+///
+/// `verify` already answers "did these bytes survive the trip" against a
+/// manifest written by the machine that made the copy. It cannot answer the
+/// other question: **did you and I build the same cartridge?** Two people
+/// building from the same `CartridgeRequest` have two manifests, and comparing
+/// them by eye is not a thing anyone does.
+///
+/// Kazeta's cartridge creator does this properly — a recipe declares the hash
+/// its finished cart must have, so everybody builds byte-identical carts and
+/// the recipe file doubles as a compatibility list. This is the same idea at
+/// the scale this project works at.
+///
+/// Over the manifest rather than over the drive, deliberately:
+///
+/// * The manifest already names every copied file with its length and CRC-32,
+///   so this costs no extra reading. Re-hashing a 107 GB cartridge to produce
+///   one line would be a second verify pass.
+/// * Sorted by path first, so the order files happened to be copied in does
+///   not change the answer.
+/// * The artwork, `cartridge.conf` and `.gamepak/` are not in the manifest and
+///   so are not in this. That is the useful scope: two people who chose
+///   different cover art but copied the same game should agree, because the
+///   game is what a recipe pins.
+///
+/// The input is one line per file, `path\0bytes\0crc\n`, which is written out
+/// rather than derived from the JSON — a serialiser that changes its key order
+/// or its number formatting would otherwise change every hash ever published.
+pub fn cartridge_digest(manifest: &Manifest) -> String {
+    let mut lines: Vec<String> = manifest
+        .files
+        .iter()
+        .map(|file| format!("{}\0{}\0{}\n", file.path, file.bytes, file.crc))
+        .collect();
+    lines.sort();
+
+    let mut hash = Sha256::new();
+    for line in &lines {
+        hash.update(line.as_bytes());
+    }
+    hash.hex()
+}
+
+/// Whether a cartridge came out the way a request said it would.
+///
+/// `None` when the request declared nothing, which is the ordinary case and not
+/// a failure. Case-insensitive, and whitespace-tolerant, because the expected
+/// value arrives from a hand-edited JSON file and a pasted hash often brings a
+/// stray space or a capital letter with it. A short prefix is accepted too: a
+/// recipe that only quotes the first twelve characters is still making a
+/// checkable claim, and rejecting it for being short would push people towards
+/// declaring nothing at all.
+pub fn digest_matches(expected: &str, actual: &str) -> Option<bool> {
+    let expected = expected.trim();
+    if expected.is_empty() {
+        return None;
+    }
+    // A prefix has to be long enough to mean something. Four hex characters is
+    // one chance in 65,536 of agreeing by accident, which is not a check.
+    if expected.len() < 8 || expected.len() > actual.len() {
+        return Some(false);
+    }
+    Some(actual[..expected.len()].eq_ignore_ascii_case(expected))
+}
+
+/// The first twelve characters of a digest, for showing a person.
+///
+/// Long enough that two cartridges on one desk will not collide, short enough
+/// to read out loud or paste into a recipe. The whole value is what gets
+/// compared; this is only ever for display.
+pub fn short_digest(digest: &str) -> String {
+    digest.chars().take(12).collect()
+}
+
+// --------------------------------------------------------------------------
+// SHA-256 (FIPS 180-4)
+// --------------------------------------------------------------------------
+
+/// Hand-written, like the CRC-32 below and the KeyValues parser in `steam`.
+///
+/// A dependency would be one more crate in the tree of a program whose whole
+/// pitch is that it reads a text file off a drive, and this is sixty lines of
+/// arithmetic with published test vectors to check it against. CRC-32 would not
+/// have done: thirty-two bits is fine for catching a bus reset mid-copy, and
+/// far too few for a value people publish and compare.
+#[derive(Debug, Clone)]
+pub struct Sha256 {
+    state: [u32; 8],
+    buffer: [u8; 64],
+    buffered: usize,
+    bytes: u64,
+}
+
+const K: [u32; 64] = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+];
+
+impl Default for Sha256 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Sha256 {
+    pub fn new() -> Self {
+        Sha256 {
+            state: [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ],
+            buffer: [0; 64],
+            buffered: 0,
+            bytes: 0,
+        }
+    }
+
+    pub fn update(&mut self, mut input: &[u8]) {
+        self.bytes = self.bytes.wrapping_add(input.len() as u64);
+        // Fill the partial block first, if there is one.
+        if self.buffered > 0 {
+            let want = (64 - self.buffered).min(input.len());
+            self.buffer[self.buffered..self.buffered + want].copy_from_slice(&input[..want]);
+            self.buffered += want;
+            input = &input[want..];
+            if self.buffered < 64 {
+                // The input ran out inside the partial block. Returning here is
+                // load-bearing: the tail below writes from index 0 and sets
+                // `buffered` to what it wrote, which would throw away the
+                // bytes just buffered. Every published test vector passes in
+                // one call and so never reaches this.
+                return;
+            }
+            let block = self.buffer;
+            self.compress(&block);
+            self.buffered = 0;
+        }
+        // Then whole blocks straight out of the input.
+        while input.len() >= 64 {
+            let (block, rest) = input.split_at(64);
+            let mut owned = [0u8; 64];
+            owned.copy_from_slice(block);
+            self.compress(&owned);
+            input = rest;
+        }
+        // Whatever is left waits for the next call, or for the padding.
+        self.buffer[..input.len()].copy_from_slice(input);
+        self.buffered = input.len();
+    }
+
+    /// The digest as lowercase hex, which is the form anyone will paste.
+    pub fn hex(mut self) -> String {
+        // Padding: a 1 bit, zeroes, then the length in bits as a big-endian
+        // u64 — so the final block always has eight bytes free for it.
+        let bits = self.bytes.wrapping_mul(8);
+        self.update_raw(&[0x80]);
+        while self.buffered != 56 {
+            self.update_raw(&[0]);
+        }
+        self.update_raw(&bits.to_be_bytes());
+
+        let mut out = String::with_capacity(64);
+        for word in self.state {
+            out.push_str(&format!("{word:08x}"));
+        }
+        out
+    }
+
+    /// `update` without counting the bytes, for the padding itself.
+    fn update_raw(&mut self, input: &[u8]) {
+        for byte in input {
+            self.buffer[self.buffered] = *byte;
+            self.buffered += 1;
+            if self.buffered == 64 {
+                let block = self.buffer;
+                self.compress(&block);
+                self.buffered = 0;
+            }
+        }
+    }
+
+    fn compress(&mut self, block: &[u8; 64]) {
+        let mut w = [0u32; 64];
+        for (index, chunk) in block.chunks_exact(4).enumerate() {
+            w[index] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        }
+        for index in 16..64 {
+            let s0 = w[index - 15].rotate_right(7)
+                ^ w[index - 15].rotate_right(18)
+                ^ (w[index - 15] >> 3);
+            let s1 = w[index - 2].rotate_right(17)
+                ^ w[index - 2].rotate_right(19)
+                ^ (w[index - 2] >> 10);
+            w[index] = w[index - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[index - 7])
+                .wrapping_add(s1);
+        }
+
+        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.state;
+        for index in 0..64 {
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            let choose = (e & f) ^ ((!e) & g);
+            let t1 = h
+                .wrapping_add(s1)
+                .wrapping_add(choose)
+                .wrapping_add(K[index])
+                .wrapping_add(w[index]);
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            let majority = (a & b) ^ (a & c) ^ (b & c);
+            let t2 = s0.wrapping_add(majority);
+
+            h = g;
+            g = f;
+            f = e;
+            e = d.wrapping_add(t1);
+            d = c;
+            c = b;
+            b = a;
+            a = t1.wrapping_add(t2);
+        }
+
+        for (slot, value) in self
+            .state
+            .iter_mut()
+            .zip([a, b, c, d, e, f, g, h].into_iter())
+        {
+            *slot = slot.wrapping_add(value);
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
 // CRC-32 (IEEE 802.3), the one zip and gzip use
 // --------------------------------------------------------------------------
 
@@ -318,6 +560,15 @@ mod tests {
         let mut c = Crc32::new();
         c.update(bytes);
         c.finish()
+    }
+
+    /// A manifest entry whose numbers are made up but consistent.
+    fn digest(path: &str, bytes: u64) -> FileDigest {
+        FileDigest {
+            path: path.to_string(),
+            bytes,
+            crc: crc(path.as_bytes()),
+        }
     }
 
     #[test]
@@ -469,5 +720,152 @@ mod tests {
             }
         }
         digests.into_manifest()
+    }
+
+    // ---- SHA-256 and the cartridge digest --------------------------------
+
+    #[test]
+    fn sha256_matches_the_published_vectors() {
+        // FIPS 180-4 / NIST examples. A hand-written hash that is not checked
+        // against these is a hand-written hash that is probably wrong.
+        let cases: &[(&[u8], &str)] = &[
+            (
+                b"",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+            (
+                b"abc",
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+            (
+                b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+                "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+            ),
+        ];
+        for (input, expected) in cases {
+            let mut hash = Sha256::new();
+            hash.update(input);
+            assert_eq!(
+                hash.hex(),
+                *expected,
+                "input {:?}",
+                String::from_utf8_lossy(input)
+            );
+        }
+    }
+
+    #[test]
+    fn sha256_does_not_care_how_the_input_was_split() {
+        // The buffering is the part most likely to be wrong: a block boundary
+        // landing inside one `update` call must give the same answer.
+        let whole = {
+            let mut hash = Sha256::new();
+            hash.update(&[7u8; 200]);
+            hash.hex()
+        };
+        let piecemeal = {
+            let mut hash = Sha256::new();
+            for chunk in [1usize, 62, 1, 70, 66].iter() {
+                hash.update(&vec![7u8; *chunk]);
+            }
+            hash.hex()
+        };
+        assert_eq!(whole, piecemeal);
+    }
+
+    #[test]
+    fn sha256_matches_an_independent_implementation_over_many_blocks() {
+        // `python3 -c "import hashlib; print(hashlib.sha256(b'a'*1000).hexdigest())"`.
+        // The vectors above are all shorter than three blocks; this is the one
+        // that would catch a message-schedule mistake that only shows up later.
+        let mut hash = Sha256::new();
+        hash.update(&[b'a'; 1000]);
+        assert_eq!(
+            hash.hex(),
+            "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3"
+        );
+    }
+
+    #[test]
+    fn sha256_handles_a_length_that_lands_exactly_on_a_block() {
+        // 64 bytes in means the padding needs a whole extra block, which is
+        // the case an off-by-one in the padding loop gets wrong.
+        let mut hash = Sha256::new();
+        hash.update(&[0u8; 64]);
+        assert_eq!(
+            hash.hex(),
+            "f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b"
+        );
+    }
+
+    #[test]
+    fn the_same_files_give_the_same_cartridge_digest() {
+        let one = Manifest {
+            files: vec![digest("a/x", 1), digest("b/y", 2)],
+        };
+        // The same cartridge, copied in the other order.
+        let two = Manifest {
+            files: vec![digest("b/y", 2), digest("a/x", 1)],
+        };
+        assert_eq!(cartridge_digest(&one), cartridge_digest(&two));
+        assert_eq!(cartridge_digest(&one).len(), 64);
+    }
+
+    #[test]
+    fn one_wrong_byte_gives_a_different_cartridge_digest() {
+        let good = Manifest {
+            files: vec![digest("a/x", 10)],
+        };
+        let mut bad = good.clone();
+        bad.files[0].crc ^= 1;
+        assert_ne!(cartridge_digest(&good), cartridge_digest(&bad));
+
+        let mut shorter = good.clone();
+        shorter.files[0].bytes -= 1;
+        assert_ne!(cartridge_digest(&good), cartridge_digest(&shorter));
+
+        let mut renamed = good.clone();
+        renamed.files[0].path = "a/z".to_string();
+        assert_ne!(cartridge_digest(&good), cartridge_digest(&renamed));
+    }
+
+    #[test]
+    fn an_empty_cartridge_still_has_a_digest() {
+        // Not a special case anywhere: a cartridge that carries no files is a
+        // key pointing at an installed game, and comparing two of those should
+        // work rather than panic.
+        assert_eq!(cartridge_digest(&Manifest::default()).len(), 64);
+    }
+
+    #[test]
+    fn a_declared_digest_is_compared_forgivingly_but_not_loosely() {
+        let actual = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
+        // Nothing declared is not a failure.
+        assert_eq!(digest_matches("", actual), None);
+        assert_eq!(digest_matches("   ", actual), None);
+
+        // The whole thing, however it was pasted.
+        assert_eq!(digest_matches(actual, actual), Some(true));
+        assert_eq!(digest_matches(&actual.to_uppercase(), actual), Some(true));
+        assert_eq!(digest_matches(&format!("  {actual}  "), actual), Some(true));
+
+        // A prefix long enough to mean something.
+        assert_eq!(digest_matches("abcdef0123", actual), Some(true));
+        assert_eq!(digest_matches("abcdef0124", actual), Some(false));
+
+        // Too short to be a claim, and longer than the answer.
+        assert_eq!(digest_matches("abcd", actual), Some(false));
+        assert_eq!(digest_matches(&format!("{actual}00"), actual), Some(false));
+    }
+
+    #[test]
+    fn the_short_form_is_a_prefix_of_the_whole() {
+        let digest = cartridge_digest(&Manifest {
+            files: vec![digest("a/x", 1)],
+        });
+        let short = short_digest(&digest);
+        assert_eq!(short.len(), 12);
+        assert!(digest.starts_with(&short));
     }
 }

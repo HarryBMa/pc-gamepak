@@ -12,6 +12,10 @@
 //!
 //! Exit status is 0 when the cartridge is intact and 1 when it is not, so this
 //! can sit in a script.
+//!
+//! It also prints the cartridge's digest — the same value `build-cart` reports —
+//! which answers the question verifying cannot: not "did these bytes survive"
+//! but "is this the same cartridge somebody else built".
 
 use std::path::Path;
 use std::time::Instant;
@@ -47,6 +51,13 @@ fn main() {
         total as f64 / 1e9,
         root.display()
     );
+
+    // Printed before the read starts, because it costs nothing and answers a
+    // different question to the one below: the check that follows says whether
+    // this cartridge still matches its own manifest, and this says which
+    // cartridge it is. Two people comparing this line know whether they built
+    // the same thing, which no amount of local verifying can tell them.
+    println!("digest: {}", verify::cartridge_digest(&manifest));
 
     // Progress is reported per file, which is bursty on a cartridge holding one
     // 2 GB archive and a hundred small DLLs. Rate-limiting to once a second

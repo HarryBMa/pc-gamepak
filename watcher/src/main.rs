@@ -317,7 +317,8 @@ mod windows_watcher {
             }
         }
 
-        *guard = crate::launcher::open(root).map(|child| (root.to_path_buf(), child));
+        *guard = crate::launcher::open(root, crate::launcher::Why::Asked)
+            .map(|child| (root.to_path_buf(), child));
     }
 
     /// Bring a window belonging to `pid` to the front. False if it has none.
@@ -402,7 +403,7 @@ mod windows_watcher {
             seen.insert(letter, now);
         }
 
-        if crate::launcher::open(&root).is_some() {
+        if crate::launcher::open(&root, crate::launcher::Why::Inserted).is_some() {
             crate::log::line(&format!("{letter}: opened the launcher"));
         }
 

@@ -2409,3 +2409,17 @@ dialog form {
   aspect-ratio: 16 / 6;
   width: 100%;
 }
+
+/* --- Front-ends -----------------------------------------------------------
+   One switch per place a cartridge can open. Built at runtime from what the
+   backend knows, so this only has to lay the rows out. */
+
+.frontends {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frontends .opt input:disabled + .opt__body .opt__label {
+  opacity: 0.55;
+}
