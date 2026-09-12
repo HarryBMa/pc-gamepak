@@ -544,6 +544,20 @@
           </div>
         </div>
 
+        <p class="group">When a cartridge is plugged in</p>
+        <div class="group__body">
+          <label class="field">
+            <span class="field__label">What should happen</span>
+            <select id="set-on-insert">
+              <option value="focus_ui">Open the launcher</option>
+              <option value="auto_launch_game">Start the game</option>
+              <option value="notify_only">Just tell me</option>
+              <option value="none">Nothing</option>
+            </select>
+            <span id="on-insert-hint" class="opt__hint"></span>
+          </label>
+        </div>
+
         <p class="group">What a cartridge remembers</p>
         <div class="group__body">
           <label class="opt">

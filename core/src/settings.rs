@@ -86,6 +86,14 @@ pub struct Settings {
     /// drive. That is a thing to opt into, however carefully `saves` goes
     /// about it.
     pub save_sync: bool,
+    /// What happens when a cartridge is plugged in.
+    ///
+    /// `focus_ui` — a window, which is what this has always done and what it
+    /// still does unless told otherwise. `none`, `notify_only` and
+    /// `auto_launch_game` are the other three; see [`crate::insert`], which
+    /// also explains why auto-launch will not run a program that lives on the
+    /// cartridge however emphatically it is switched on.
+    pub on_cartridge_insert: crate::insert::InsertAction,
     /// Keep launches, hours and last-played in `.gamepak/stats.json` on the
     /// cartridge.
     ///
@@ -122,6 +130,7 @@ impl Default for Settings {
             default_format: false,
             save_sync: false,
             track_playtime: true,
+            on_cartridge_insert: crate::insert::InsertAction::default(),
         }
     }
 }
@@ -246,11 +255,43 @@ mod tests {
             default_format: true,
             save_sync: true,
             track_playtime: false,
+            on_cartridge_insert: crate::insert::InsertAction::AutoLaunchGame,
             ..Settings::default()
         };
         save_to(&path, &chosen).unwrap();
 
         assert_eq!(load_from(&path), chosen);
+    }
+
+    #[test]
+    fn a_fresh_install_opens_a_window_on_insert() {
+        // The behaviour every existing install already has. Anything else here
+        // would change what happens on a machine nobody reconfigured.
+        assert_eq!(
+            Settings::default().on_cartridge_insert,
+            crate::insert::InsertAction::FocusUi
+        );
+    }
+
+    #[test]
+    fn a_settings_file_with_an_unreadable_insert_action_still_loads() {
+        // serde would reject an unknown enum value and take the whole file with
+        // it, resetting every other setting. The field is deserialised through
+        // the tolerant parser for that reason.
+        let scratch = crate::testutil::Scratch::new("settings-insert");
+        let path = scratch.join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"onCartridgeInsert":"teleport","steamgriddbApiKey":"kept"}"#,
+        )
+        .unwrap();
+
+        let loaded = load_from(&path);
+        assert_eq!(
+            loaded.on_cartridge_insert,
+            crate::insert::InsertAction::FocusUi
+        );
+        assert_eq!(loaded.steamgriddb_api_key, "kept");
     }
 
     #[test]

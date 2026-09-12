@@ -66,7 +66,7 @@
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, drives, edit, format, health, saves, settings, sgdb, stats, tuning,
+    busy, create, drives, edit, format, health, insert, saves, settings, sgdb, stats, tuning,
 };
 
 use std::collections::HashMap;
@@ -370,6 +370,76 @@ fn collect(results: Vec<Result<saves::SyncOutcome, String>>) -> Vec<saves::SyncO
         }
     }
     done
+}
+
+/// What to do about this insert, or `None` to open the window as usual.
+///
+/// `--drive` with nothing else means the launcher was opened for a cartridge,
+/// which is the only case the setting applies to. Somebody running
+/// `pc-gamepak --drive X:` by hand gets a window whatever the setting says,
+/// because they asked for one — `--show` is how the watcher and the tray say
+/// "the user asked for this specifically".
+fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
+    if args.iter().any(|arg| arg == "--show") {
+        return None;
+    }
+    let action = settings::load().on_cartridge_insert;
+    if action == insert::InsertAction::FocusUi {
+        return None; // The common path, and no cartridge read needed to know it.
+    }
+
+    let drive = cartridge::drive_from_args(args.iter().cloned());
+    if drive.is_empty() {
+        return None;
+    }
+    // A cartridge that cannot be read is a window's problem to explain, not
+    // something to silently act on.
+    let info = cartridge::read_cartridge_info(&drive).ok()?;
+    Some(insert::decide(action, &info))
+}
+
+/// Carry out a reaction that does not need a window.
+///
+/// Only ever called with `Quit`, `Launch` or `Notify`: `ShowWindow` is returned
+/// to `main` as `None` so the ordinary path runs untouched.
+fn act_on_insert(reaction: insert::Reaction) {
+    match reaction {
+        insert::Reaction::ShowWindow => {}
+        insert::Reaction::Quit => {}
+        insert::Reaction::Launch { executable, title } => {
+            let drive = cartridge::drive_from_args(std::env::args().skip(1));
+            // The same call the Play button makes, counting included, so an
+            // auto-launched game is not missing from the cartridge's history.
+            if let Err(why) = launch_game(executable, drive, Some(title)) {
+                eprintln!("could not start the game: {why}");
+            }
+        }
+        insert::Reaction::Notify { title, body } => notify(&title, &body),
+    }
+}
+
+/// Say a cartridge is there, without a window.
+///
+/// `notify-send` on Linux, which is the desktop's own notification and is what
+/// every distribution ships. Nothing on Windows: a toast there needs a resident
+/// application with a registered identity, the launcher is neither, and the
+/// watcher — which is resident and already owns a tray icon that can post a
+/// balloon — is a separate process this has no channel to. So on Windows the
+/// setting falls back to opening the window, which is the behaviour it was
+/// chosen instead of, and `docs/STATUS.md` records it as unfinished rather than
+/// the settings dialog pretending otherwise.
+fn notify(title: &str, body: &str) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = (title, body);
+        eprintln!("notify_only is not implemented on Windows; showing nothing");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = gamepak_core::proc::command("notify-send")
+            .args(["--app-name=PC GamePak", "--icon=pc-gamepak", title, body])
+            .status();
+    }
 }
 
 /// Take the keyboard, not just the front of the screen.
@@ -1802,6 +1872,21 @@ fn main() {
     }
     let settings = args.iter().any(|arg| arg == "--settings");
     let wizard = settings || args.iter().any(|arg| arg == "--create");
+
+    // What the user asked for on insert, settled before Tauri is touched — so
+    // `none` costs a process start and nothing else, and `auto_launch_game`
+    // never initialises a webview it is not going to show.
+    //
+    // Decided here rather than in whatever started us, because three separate
+    // things do: the resident watcher, the udev helper on a system install, and
+    // the tray menu. A setting honoured by one of those and not the others
+    // would be worse than no setting.
+    if !wizard {
+        if let Some(reaction) = reaction_on_insert(&args) {
+            act_on_insert(reaction);
+            return;
+        }
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

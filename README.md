@@ -46,7 +46,11 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 ## Features
 
 - **Plug and it opens.** A background watcher notices the drive and shows the
-  launcher. Nothing runs until you press Play.
+  launcher. Nothing runs until you press Play — or, if you ask it to, the game
+  starts on its own, a notification appears, or nothing happens at all. Even
+  set to start the game, a program carried *on* the cartridge still waits for a
+  click: a URI hands off to a launcher you already have, and a stranger's binary
+  does not get the machine.
 - **One game or a shelf of them.** A cartridge can carry a collection, with a
   rail to pick from.
 - **Real eject.** The button parks the drive and powers it down, elevating only

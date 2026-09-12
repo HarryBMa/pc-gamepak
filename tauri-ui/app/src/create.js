@@ -194,6 +194,8 @@ const el = {
   setTuneRow: $("set-tune-row"),
   setTrim: $("set-trim"),
   setCopyRate: $("set-copy-rate"),
+  setOnInsert: $("set-on-insert"),
+  onInsertHint: $("on-insert-hint"),
   setPlaytime: $("set-playtime"),
   setSaveSync: $("set-save-sync"),
   settingsSave: $("settings-save"),
@@ -2177,6 +2179,8 @@ function applySettings() {
   el.setTrim.checked = Boolean(settings.defaultTrim);
   el.setCopyRate.value = String(settings.defaultCopyRateMbS ?? 0);
   el.setFormat.checked = Boolean(settings.defaultFormat);
+  el.setOnInsert.value = settings.onCartridgeInsert || "focus_ui";
+  describeOnInsert();
   // On unless it has been switched off: it writes to the cartridge only, and
   // only because Play was pressed.
   el.setPlaytime.checked = settings.trackPlaytime !== false;
@@ -2335,6 +2339,7 @@ async function saveSettings() {
         defaultTrim: el.setTrim.checked,
         defaultCopyRateMbS: Number(el.setCopyRate.value) || 0,
         defaultFormat: el.setFormat.checked,
+        onCartridgeInsert: el.setOnInsert.value,
         trackPlaytime: el.setPlaytime.checked,
         saveSync: el.setSaveSync.checked,
         gameFolderRoots: settings.gameFolderRoots ?? [],
@@ -2708,6 +2713,32 @@ el.btnUnregister.addEventListener("click", async () => {
 
 el.settings.addEventListener("click", openSettings);
 el.settingsSave.addEventListener("click", saveSettings);
+/**
+ * Say what the chosen reaction actually does, including where it will not.
+ *
+ * Each of the three non-default choices has a limit worth knowing before it is
+ * picked rather than after it fails to happen, and two of them are the kind of
+ * thing that reads as a bug when it is a deliberate refusal.
+ */
+function describeOnInsert() {
+  const hints = {
+    focus_ui: "The cartridge's window opens and comes to the front.",
+    auto_launch_game:
+      "Starts the game without a window — for a cartridge that points at a game " +
+      "your PC already has. A game stored on the cartridge still waits for a " +
+      "click, because a drive someone handed you should not get to run a program " +
+      "on its own.",
+    notify_only:
+      platform === "windows"
+        ? "Not available on Windows yet, so the launcher opens instead."
+        : "A desktop notification, and nothing else.",
+    none: "Nothing happens. The tray and the desktop entry still open it.",
+  };
+  el.onInsertHint.textContent = hints[el.setOnInsert.value] ?? "";
+}
+
+el.setOnInsert.addEventListener("change", describeOnInsert);
+
 el.setSgdb.addEventListener("change", () => {
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
 });

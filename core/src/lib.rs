@@ -21,6 +21,7 @@ pub mod edit;
 pub mod folders;
 pub mod format;
 pub mod health;
+pub mod insert;
 pub mod playnite;
 pub mod portable;
 pub mod proc;

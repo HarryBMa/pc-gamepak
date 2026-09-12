@@ -116,6 +116,39 @@ what it just launched. A cartridge with one game on it has no rail at all.
 | `I` | Details |
 | `Esc` | Close details, or dismiss |
 
+### What happens when you plug one in
+
+By default, a window. **Settings → When a cartridge is plugged in** offers four
+answers:
+
+| | |
+|---|---|
+| **Open the launcher** | The cartridge's window appears and takes the front. The default, and what this has always done. |
+| **Start the game** | No window; the game starts. See the limit below. |
+| **Just tell me** | A desktop notification. Linux only so far. |
+| **Nothing** | No reaction at all. The tray icon and the desktop entry still open it. |
+
+**Start the game only ever starts a game your PC already has** — a cartridge
+whose `executable=` is a `steam://`, `heroic://`, `gog://`, `epic://`,
+`playnite://`, `lutris://` or `itch://` URI. A game *stored on the cartridge*
+still gets a window and still waits for a click, and so does a collection,
+because there is no way to know which of its games you meant.
+
+That is not an oversight. The oldest promise this project makes is that nothing
+on a cartridge runs without a click — it is why `autorun.inf`'s `open=` key is
+ignored, that key being the original removable-media malware vector. A URI is
+handled by a launcher already installed on your machine, opening a game you
+already own, through an association the operating system made. An executable on
+the drive is a stranger's binary, and a setting left switched on is not consent
+to run it.
+
+The decision is made by the launcher rather than by whatever opened it, because
+three different things do — the resident watcher, the udev helper on a system
+install, and the tray menu — and a setting obeyed by one of them and not the
+others would be worse than no setting. The tray menu is the exception, and
+deliberately: picking a cartridge there is asking for the window in so many
+words, so it opens whatever this is set to.
+
 ### Hours, and saves that travel
 
 A cartridge counts its own launches. `.gamepak/stats.json` on the drive holds
