@@ -240,9 +240,9 @@ conflict to resolve because there is only ever one copy.
 
 On Linux that is `HOME` and the `XDG_*_HOME` directories; on macOS `HOME`, which
 `~/Library` follows; on Windows `USERPROFILE`, `APPDATA` and `LOCALAPPDATA`. The
-cache is deliberately left on the host — it is rebuildable, it is the largest
-thing a game writes, and a shader cache on removable flash costs write cycles to
-preserve something nobody wants preserved.
+cache is deliberately left on the host — it is rebuildable and it is the largest
+thing a game writes. The compiled shaders inside it are the exception, and are
+carried separately: see below.
 
 It is off unless a cartridge asks, because changing where a game thinks home is
 can stop it working, and only the person making the cartridge knows whether
@@ -278,6 +278,37 @@ aside first and kept, three deep, as `<name>.gamepak-backup-<time>` beside it.
 
 A conflict is refused rather than resolved. Picking a winner silently is how a
 save-sync tool eats an eighty-hour run.
+
+### Carrying the compiled shaders
+
+A game's first hour on a new machine is its worst. Every pipeline it draws with
+has to be compiled before it can be used, and the stutter that causes is what
+people blame on the drive. The cartridge has just carried 60 GB of that game
+across the room — carrying the compiled shaders too costs a few hundred megabytes
+and removes the problem.
+
+```ini
+executable=steam://rungameid/2322010
+title=God of War Ragnarök
+shader_cache=drive
+```
+
+Insert brings the cartridge's cache over if it is the newer one; eject takes this
+machine's back. There is no conflict to resolve, because it is a cache: either
+side is correct and the newer is only better, and losing it costs compile time
+rather than data. Nothing is backed up and nothing is refused.
+
+**It is per cartridge, and that is the point.** On a fast NVMe cartridge a warm
+cache is free. On a cheap USB stick, a few hundred megabytes copied at insert and
+again at eject is a wait you did not ask for, to avoid a stutter you might not
+notice. Only you know which drive it is, so the cartridge says rather than the
+settings dialog.
+
+Two limits worth knowing. Only **Steam** games are covered — the cache is
+Steam's own `steamapps/shadercache/<appid>`, found through the appid in the
+`steam://` launch target. And Mesa's cache (`~/.cache/mesa_shader_cache`) and
+NVIDIA's (`~/.nv/GLCache`) are shared by every program on the machine rather than
+kept per game, so no cartridge can carry its share of one.
 
 ### Skins
 
@@ -763,6 +794,9 @@ PC, or updating your driver, throws it away and the first hour stutters again.
 
 - NVIDIA Control Panel → Manage 3D settings → **Shader Cache Size → 10 GB** or
   Unlimited. The default is small enough that a big game evicts its own cache.
+- Put the compiled shaders on the cartridge with `shader_cache=drive`, so a
+  second machine starts with the cache the first one built rather than compiling
+  it again — see [Carrying the compiled shaders](#the-launcher).
 - On Steam, leave **Shader Pre-Caching** on. On Linux it is doing most of the
   work for you.
 

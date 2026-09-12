@@ -47,10 +47,16 @@
 //!   fail to create it. btrfs and NTFS cartridges have no such problem, and
 //!   `docs/MANUAL.md` already recommends against exFAT for carried games.
 //!
-//! The cache is the one directory deliberately left on the host: a shader or
-//! asset cache is rebuildable by definition, it is the largest and most
-//! rewritten thing a game produces, and putting it on removable flash costs
-//! write cycles and speed to preserve something nobody wants preserved.
+//! The cache is the one directory deliberately left on the host. It is
+//! rebuildable by definition, it is the largest and most rewritten thing a game
+//! produces, and putting it on removable flash costs write cycles and speed to
+//! preserve something nobody wants preserved.
+//!
+//! One part of it *is* worth carrying, and is carried elsewhere: the compiled
+//! shader cache, by [`crate::shaders`], because that one's loss is felt as an
+//! hour of stutter rather than a few seconds of rebuilding. It is copied at
+//! insert and eject rather than written to over USB all session, which is the
+//! difference between carrying a cache and living on one.
 
 use std::path::{Path, PathBuf};
 
@@ -172,11 +178,12 @@ pub fn prepare(root: &Path) -> Result<PortableHome, String> {
         set("XDG_STATE_HOME", &state);
     }
 
-    // The cache stays on the host, whatever the platform. It is rebuildable by
-    // definition, it is the biggest and most rewritten thing a game produces,
-    // and a shader cache on removable flash costs write cycles and speed to
-    // preserve something nobody wants preserved. Per cartridge, so two
-    // cartridges do not fight over one directory.
+    // The cache stays on the host, whatever the platform: rebuildable by
+    // definition, the biggest and most rewritten thing a game produces, and not
+    // worth the write cycles. The shaders inside it are the exception and are
+    // carried by `shaders`, which copies them twice per session instead of
+    // writing to the drive all session long. Per cartridge, so two cartridges do
+    // not fight over one directory.
     let cache = cache_dir(root);
     if std::fs::create_dir_all(&cache).is_ok() {
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]

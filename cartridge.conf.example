@@ -96,6 +96,31 @@
 #   game that makes one inside its config directory will fail to. btrfs and
 #   NTFS cartridges have no such problem.
 #
+# shader_cache  (optional, cartridge-wide)
+#   drive to carry this game's compiled shaders on the cartridge, host (the
+#   default) to leave them where they are.
+#
+#   A game's first hour on a new machine is its worst: every pipeline it uses
+#   has to be compiled before it can be drawn, and that is the stutter people
+#   blame on the drive. The cartridge has just carried 60 GB of the game across
+#   the room; carrying the compiled shaders too costs a few hundred megabytes
+#   and removes the problem.
+#
+#   It is per cartridge because it is a trade against the drive's speed. On a
+#   fast NVMe cartridge, carrying a warm cache is free. On a cheap USB stick, a
+#   few hundred megabytes copied at insert and again at eject is a wait nobody
+#   asked for, to avoid a stutter they might not notice. Only the person making
+#   the cartridge knows which drive it is.
+#
+#   Only Steam games are covered — the cache is Steam's own
+#   steamapps/shadercache/<appid>, found through the appid in the steam://
+#   launch target. Mesa's and NVIDIA's own caches are shared by every program
+#   on the machine rather than per game, so no cartridge can carry its share.
+#
+#   Insert copies the cartridge's cache over only if it is the newer one, and
+#   eject copies this machine's back. There is no conflict to resolve: it is a
+#   cache, so either side is correct and the newer is only better.
+#
 # savemode  (optional, cartridge-wide)
 #   copy (the default) or link. `link` replaces the host's save directory with
 #   a symlink onto the cartridge, so there is only ever one copy. It is faster
@@ -116,6 +141,12 @@ save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
 # executable=Games/Tunic/start.sh
 # title=Tunic
 # portable_home=yes
+#
+# ----- A Steam game on a fast drive, carrying its shaders -----
+#
+# executable=steam://rungameid/2322010
+# title=God of War Ragnarök
+# shader_cache=drive
 
 # ----- More examples -----
 #

@@ -5,7 +5,7 @@ repository rather than in a chat log so it stays honest.
 
 ## What is built
 
-### `core/` — `gamepak-core`, 348 tests
+### `core/` — `gamepak-core`, 362 tests
 
 No Tauri, no UI, no display. That is the point: every decision the launcher and
 the wizard make is testable on any machine, in CI, without a webview.
@@ -26,6 +26,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 | `portable` | Ranks the executables in a copied game folder so Play points at the game rather than its uninstaller. |
 | `settings` | What the user has switched on, stored beside the artwork cache. Everything defaults to off. |
 | `saves` | Saves that travel with the cartridge. Reads `save=` lines whose paths are written as a `{token}` the host resolves — the three platforms disagree about where saves go — and reconciles the two copies against what *this machine* last saw of each, kept per host on the drive. Only the side that changed is copied; both changing is a conflict that writes nothing; whatever is about to be replaced is moved aside and kept. Symlink mode for people who want one copy rather than two. |
+| `shaders` | The compiled shader cache, carried between machines, per cartridge (`shader_cache=drive`). Steam's own `steamapps/shadercache/<appid>`, newest side wins, and no conflict case because it is a cache — losing it costs compile time and never data. Libraries that live on the cartridge are excluded from the host side, or every sync would copy the drive onto itself. |
 | `sgdb` | SteamGridDB artwork search, download and cache. Refuses every request until the user opts in and supplies a key. |
 | `stats` | Launches, hours and last-played in `.gamepak/stats.json` on the drive, so the count follows the cartridge rather than the PC. The launch is written before the game starts and the open session re-stamps itself every sixty seconds, so a crash costs a minute rather than the session — and the machine that sees the cartridge next settles whatever the last one left open. No write here can fail a launch. |
 | `steam` | Steam's own manifests: `libraryfolders.vdf`, `appmanifest_*.acf`, the library cache for covers. Hand-written KeyValues parser. |
@@ -39,7 +40,7 @@ the wizard make is testable on any machine, in CI, without a webview.
 
 `pc-gamepak --drive <path>` is the popup; `pc-gamepak --create` is the wizard.
 Exactly one window is ever built, so neither mode costs anything for the other.
-50 commands, no command that takes a path to read.
+53 commands, no command that takes a path to read.
 
 The launcher counts what it starts and, if asked to, carries the saves. Both
 are off the same principle: the cartridge is the thing that travels, so the

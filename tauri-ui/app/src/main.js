@@ -18,6 +18,8 @@
  *   sync_saves({ drivePath })                 -> SyncOutcome[]  (empty when off)
  *   save_slots({ drivePath })                 -> SlotStatus[]
  *   carried_home({ drivePath })               -> string | null
+ *   pull_shaders({ drivePath })               -> Synced[]  (on insert)
+ *   shader_slots({ drivePath })               -> ShaderSlot[]
  *
  * `cover` arrives as a data URI already. There is no command that takes a path
  * to read, so the webview cannot ask the backend for arbitrary files.
@@ -1207,6 +1209,17 @@ async function syncSaves(drivePath) {
     return;
   }
 
+  // Shader caches, if the cartridge asked to carry them. Fired and not waited
+  // on: a warm cache is a gain on the *next* launch, and holding the window for
+  // a few hundred megabytes of copying would trade that for a wait now.
+  void invoke("pull_shaders", { drivePath })
+    .then((carried) => {
+      if (!carried?.length) return;
+      const bytes = carried.reduce((sum, one) => sum + (one.bytes ?? 0), 0);
+      debugLog(`shaders: pulled ${carried.length} caches, ${bytes} bytes`);
+    })
+    .catch((error) => debugLog(`shaders: ${error}`));
+
   // A cartridge that carries the game's whole home has no declared slots and is
   // still carrying every save there is. Saying nothing would read as "this
   // cartridge does not do saves", which is the opposite of true.
@@ -1691,6 +1704,11 @@ async function demoInvoke(command, args) {
       return [];
     case "carried_home":
       return null;
+    case "pull_shaders":
+    case "push_shaders":
+      return [];
+    case "shader_slots":
+      return [];
     case "save_slots":
       return [
         {

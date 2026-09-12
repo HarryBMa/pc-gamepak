@@ -30,6 +30,9 @@
 //                                               implemented, on }]
 //   set_frontend(id, on)                     -> the same list, updated
 //   sync_saves(drive_path)                   -> Vec<SyncOutcome>  (on insert)
+//   shader_slots(drive_path)                 -> Vec<ShaderSlot>
+//   pull_shaders(drive_path)                 -> Vec<Synced>  (on insert)
+//   push_shaders(drive_path)                 -> Vec<Synced>  (on eject)
 //   push_saves(drive_path)                   -> Vec<SyncOutcome>  (on eject)
 //   resolve_save_conflict(drive_path, slot_id, keep) -> SyncOutcome
 //   open_wizard_settings()                   -> ()  (opens/focuses the
@@ -71,7 +74,7 @@
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
     busy, create, drives, edit, format, frontend, health, home, insert, saves, settings, sgdb,
-    stats, tuning,
+    shaders, stats, tuning,
 };
 
 use std::collections::HashMap;
@@ -408,6 +411,52 @@ fn sync_saves(drive_path: String) -> Result<Vec<saves::SyncOutcome>, String> {
         return Ok(Vec::new());
     }
     Ok(collect(saves::attach_all(Path::new(&drive_path))))
+}
+
+/// What the cartridge's shader caches would do here, whether or not it asked.
+///
+/// Read-only, so the details sheet can show what a cartridge *could* carry —
+/// which is how somebody decides whether to add `shader_cache=drive` to it.
+#[tauri::command]
+fn shader_slots(drive_path: String) -> Vec<shaders::ShaderSlot> {
+    shaders::slots(Path::new(&drive_path))
+}
+
+/// Bring a warmer shader cache off the cartridge, on insert.
+///
+/// The cartridge decides, not the settings dialog: only the person who made it
+/// knows whether the drive is fast enough for this to be a gain rather than a
+/// wait. Errors are per slot and logged — a cache that could not be copied costs
+/// compile time and nothing else, which is not worth interrupting anyone for.
+#[tauri::command]
+fn pull_shaders(drive_path: String) -> Vec<shaders::Synced> {
+    let root = Path::new(&drive_path);
+    if !shaders::wanted(root) {
+        return Vec::new();
+    }
+    gather(shaders::pull_all(root))
+}
+
+/// Take this machine's warmer caches with the cartridge, on eject.
+#[tauri::command]
+fn push_shaders(drive_path: String) -> Vec<shaders::Synced> {
+    let root = Path::new(&drive_path);
+    if !shaders::wanted(root) {
+        return Vec::new();
+    }
+    gather(shaders::push_all(root))
+}
+
+/// [`collect`] for shader syncs, which have their own outcome type.
+fn gather(results: Vec<Result<shaders::Synced, String>>) -> Vec<shaders::Synced> {
+    let mut done = Vec::new();
+    for result in results {
+        match result {
+            Ok(synced) => done.push(synced),
+            Err(why) => debug_log(format!("shaders: {why}")),
+        }
+    }
+    done
 }
 
 /// The same, on the way out.
@@ -857,6 +906,17 @@ fn unmount(drive_path: &str) -> Result<(), String> {
     // be written is not a reason to leave a drive mounted that the user has
     // asked to remove, and holding the cartridge hostage over it is worse.
     let _ = push_saves(drive_path.to_string());
+    // After the saves, because a save is data and a shader cache is not: if the
+    // drive fills or the copy is slow, the thing that must already be written is
+    // the save.
+    let carried = push_shaders(drive_path.to_string());
+    if !carried.is_empty() {
+        let bytes: u64 = carried.iter().map(|synced| synced.bytes).sum();
+        debug_log(format!(
+            "shaders: carried {} caches, {bytes} bytes",
+            carried.len()
+        ));
+    }
     end_every_session();
 
     #[cfg(target_os = "windows")]
@@ -2010,6 +2070,9 @@ fn main() {
             set_frontend,
             sync_saves,
             push_saves,
+            shader_slots,
+            pull_shaders,
+            push_shaders,
             resolve_save_conflict,
             list_games,
             game_cover,
