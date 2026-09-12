@@ -445,7 +445,11 @@ mod tests {
         assert_eq!(plan(&found), Move::Pull);
         assert_eq!(
             found.host_path,
-            steam.join("shadercache/367520").display().to_string()
+            steam
+                .join("shadercache")
+                .join("367520")
+                .display()
+                .to_string()
         );
 
         let (files, bytes) = crate::saves::copy_tree(

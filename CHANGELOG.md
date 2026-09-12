@@ -27,8 +27,14 @@ carried Linux game has to be a shell script. No permissions that survive a
 replug.
 
 **Existing cartridges are unaffected**: this changes what the wizard offers to
-format a *new* drive as. exFAT is still one dropdown away, and the settings
-dialog now says what each of the three costs, at the point of choosing.
+format a *new* drive as. exFAT is still one dropdown away — and so are five more
+now: ext4, XFS, F2FS, HFS+ and APFS, for a cartridge that only ever meets one
+kind of machine. The picker says what each costs at the point of choosing: which
+desktops read it with nothing installed, whether Proton runs from it, its label
+limit, and what would have to be installed first. One list, read from the code
+that does the formatting, rather than a copy in the window that had already
+drifted. A format this machine has no `mkfs` for is shown anyway, greyed, with
+the package to install — so "why is btrfs missing?" has an answer on screen.
 
 **If a Mac has to write to the drive, pick exFAT.** macOS reads NTFS and does
 not write it, so an NTFS cartridge can be played from and copied off on a Mac

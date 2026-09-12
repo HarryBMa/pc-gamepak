@@ -1100,7 +1100,7 @@ function filesystem() {
 }
 
 function filesystemLabel(fs) {
-  return filesystemInfo(fs)?.name ?? fs ?? "exFAT";
+  return filesystemInfo(fs)?.name ?? fs ?? "NTFS";
 }
 
 /** Fill the Settings picker, and say what each choice costs. */
@@ -3003,12 +3003,12 @@ async function demoInvoke(command, args) {
     // that runs with no backend at all. Only the fields the picker reads.
     case "list_filesystems":
       return [
-        { id: "exfat", name: "exFAT", labelLimit: 11, canCreateHere: true, runsProton: false,
-          nativeOn: ["Windows", "Linux", "macOS"], needs: "",
-          summary: "Reads everywhere with nothing installed." },
         { id: "ntfs", name: "NTFS", labelLimit: 32, canCreateHere: true, runsProton: true,
           nativeOn: ["Windows", "Linux"], needs: "",
           summary: "Reads natively on Windows and Linux, and Proton works." },
+        { id: "exfat", name: "exFAT", labelLimit: 11, canCreateHere: true, runsProton: false,
+          nativeOn: ["Windows", "Linux", "macOS"], needs: "",
+          summary: "Reads and writes everywhere, macOS included, and holds no symlinks." },
         { id: "btrfs", name: "btrfs", labelLimit: 256, canCreateHere: true, runsProton: true,
           nativeOn: ["Linux"], needs: "WinBtrfs, to read it on Windows",
           summary: "Linux at its best: checksums, compression, snapshots." },

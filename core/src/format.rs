@@ -115,9 +115,11 @@ pub struct FilesystemInfo {
 }
 
 impl Filesystem {
+    /// Every filesystem, in the order the wizard shows them: the default first,
+    /// then the two other answers a cartridge is normally given, then the rest.
     pub const ALL: [Self; 8] = [
-        Self::Exfat,
         Self::Ntfs,
+        Self::Exfat,
         Self::Btrfs,
         Self::Ext4,
         Self::Xfs,
@@ -211,7 +213,7 @@ impl Filesystem {
 
     fn summary(self) -> &'static str {
         match self {
-            Self::Exfat => "Reads everywhere with nothing installed. The safe default \u{2014} but Windows games will not run from it through Proton on Linux.",
+            Self::Exfat => "Reads and writes everywhere, macOS included, and holds none of what a game needs \u{2014} no symlinks, so Proton will not unpack onto it. Pick it only when a Mac has to write to the drive.",
             Self::Ntfs => "Reads natively on Windows and Linux, and Proton works. The best choice for a cartridge used on both.",
             Self::Btrfs => "Linux at its best: checksums, compression, snapshots. Windows needs WinBtrfs installed.",
             Self::Ext4 => "The plain Linux choice. Everything works and nothing is clever.",
@@ -691,20 +693,21 @@ pub fn mkfs_command(
                 label.to_string(),
                 device.to_string(),
             ],
-            // -f is "fast": skip zeroing the volume, which on a 1 TB cartridge
-            // is the difference between a minute and an afternoon. Deliberately
-            // not -F ("force, even if mounted"): the call chain unmounts first,
-            // and if that did not take, failing loudly is the better outcome.
+            // --fast skips zeroing the volume, which on a 1 TB cartridge is the
+            // difference between a minute and an afternoon. Deliberately no
+            // --force ("do it even if mounted"): the call chain unmounts first,
+            // and if that did not take, failing loudly is the better outcome
+            // than writing a new filesystem over a mounted one.
             //
-            // No -c: NTFS keeps its own default cluster size, unlike the exFAT
-            // arm below. The 128 KB there buys fewer allocation-table lookups
-            // per gigabyte, which is a FAT-family problem — NTFS allocates in
-            // extents and does not have it, and a non-default cluster size on
-            // NTFS costs compatibility for nothing.
+            // No cluster size given: NTFS keeps its own default, unlike the
+            // exFAT arm below. The 128 KB there buys fewer allocation-table
+            // lookups per gigabyte, which is a FAT-family problem — NTFS
+            // allocates in extents and does not have it, and a non-default
+            // cluster size on NTFS costs compatibility for nothing.
             Filesystem::Ntfs => vec![
                 "mkfs.ntfs".to_string(),
-                "-f".to_string(),
-                "-L".to_string(),
+                "--fast".to_string(),
+                "--label".to_string(),
                 label.to_string(),
                 device.to_string(),
             ],
@@ -716,16 +719,6 @@ pub fn mkfs_command(
                 "-c".to_string(),
                 EXFAT_CLUSTER_BYTES.to_string(),
                 "-n".to_string(),
-                label.to_string(),
-                device.to_string(),
-            ],
-            // --fast writes the metadata and skips zeroing the volume, which on
-            // a 128 GB drive is the difference between seconds and an hour.
-            Filesystem::Ntfs => vec![
-                "mkfs.ntfs".to_string(),
-                "--force".to_string(),
-                "--fast".to_string(),
-                "--label".to_string(),
                 label.to_string(),
                 device.to_string(),
             ],
@@ -875,6 +868,40 @@ mod tests {
         let (program, args) = mkfs_command("/dev/sdb1", Filesystem::Btrfs, "Cinder");
         assert_eq!(program, "pkexec");
         assert_eq!(args, vec!["mkfs.btrfs", "-f", "-L", "Cinder", "/dev/sdb1"]);
+    }
+
+    #[test]
+    fn ntfs_mkfs_arguments_are_in_the_right_order() {
+        let (program, args) = mkfs_command("/dev/sdb1", Filesystem::Ntfs, "Cinder");
+        assert_eq!(program, "pkexec");
+        // --force is absent on purpose: a device still mounted when this runs
+        // means the unmount above it failed, and the right outcome then is an
+        // error, not a new filesystem written over a mounted one. Two arms for
+        // NTFS were merged together once, each with its own answer to that, and
+        // only the second one being unreachable gave it away.
+        assert_eq!(
+            args,
+            vec!["mkfs.ntfs", "--fast", "--label", "Cinder", "/dev/sdb1"]
+        );
+    }
+
+    #[test]
+    fn every_filesystem_asks_for_the_label_it_was_given() {
+        // Not a tautology: each arm spells the label flag differently (-L, -n,
+        // -l, -v, --label), and an arm that forgot it entirely would produce a
+        // cartridge named after nothing, which the drive watcher cannot match.
+        for filesystem in Filesystem::ALL {
+            let (_, args) = mkfs_command("/dev/sdb1", filesystem, "Cinder");
+            assert!(
+                args.contains(&"Cinder".to_string()),
+                "{filesystem:?} dropped the label: {args:?}"
+            );
+            assert_eq!(
+                args.last().map(String::as_str),
+                Some("/dev/sdb1"),
+                "{filesystem:?} must name the device last"
+            );
+        }
     }
 
     #[test]
