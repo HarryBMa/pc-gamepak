@@ -1730,6 +1730,16 @@ fn list_target_drives() -> Vec<drives::TargetDrive> {
     create::target_drives()
 }
 
+/// Every filesystem a cartridge can be made with, and what each one costs.
+///
+/// The wizard used to carry its own two-entry list, with the label limit
+/// written out a second time and already disagreeing with the one in core. This
+/// is the single place that knows.
+#[tauri::command]
+fn list_filesystems() -> Vec<format::FilesystemInfo> {
+    format::all_filesystems()
+}
+
 /// Readable volumes Windows has left without a drive letter.
 ///
 /// Listed separately from `list_target_drives` because they are not targets
@@ -2075,6 +2085,7 @@ fn main() {
             push_shaders,
             resolve_save_conflict,
             list_games,
+            list_filesystems,
             game_cover,
             get_settings,
             set_settings,

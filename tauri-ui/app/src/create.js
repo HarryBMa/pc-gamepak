@@ -185,7 +185,7 @@ const el = {
   sgdbKeyField: $("sgdb-key-field"),
   setSgdbKey: $("set-sgdb-key"),
   setFilesystem: $("set-filesystem"),
-  filesystemHint: $("filesystem-hint"),
+  setFilesystemNote: $("set-filesystem-note"),
   setCopy: $("set-copy"),
   setVerify: $("set-verify"),
   setIcon: $("set-icon"),
@@ -255,7 +255,7 @@ let manual = null;
 let settings = {
   steamgriddbEnabled: false,
   steamgriddbApiKey: "",
-  defaultFilesystem: "exfat",
+  defaultFilesystem: "ntfs",
   defaultVerify: true,
   defaultIcon: true,
   defaultEject: true,
@@ -557,9 +557,15 @@ function collectionName() {
   return el.collectionTitle.value.trim() || el.collectionTitle.placeholder || "Game Collection";
 }
 
-/** exFAT caps a drive label at 11 characters, so the name is squeezed to fit. */
-function driveLabelFor(title, filesystem = "exfat") {
-  const limit = filesystem === "btrfs" ? 64 : 11;
+/**
+ * Squeeze a title into a volume label the chosen filesystem will take.
+ *
+ * exFAT's 11 characters is the tight one; the limit comes from core rather than
+ * from a number written here, which is how the old copy ended up saying 64 for
+ * btrfs against a real limit of 256.
+ */
+function driveLabelFor(title, filesystem = DEFAULT_FILESYSTEM) {
+  const limit = filesystemInfo(filesystem)?.labelLimit ?? 11;
   const cleaned = String(title).toUpperCase().replace(/[^A-Z0-9]+/g, "");
   return cleaned.slice(0, limit) || "GAMEPAK";
 }
@@ -1070,13 +1076,64 @@ async function selectDrive(drive) {
    What gets written
    ========================================================================== */
 
+/**
+ * Every filesystem a cartridge can be made with, as core describes them.
+ *
+ * Fetched rather than written out here: the wizard used to carry its own list
+ * with the label limit repeated, and the copy had already drifted from the real
+ * one. Empty until `loadFilesystems` has run, so every reader falls back.
+ */
+let filesystems = [];
+
+const DEFAULT_FILESYSTEM = "ntfs";
+
+function filesystemInfo(id) {
+  return filesystems.find((f) => f.id === id) ?? null;
+}
+
 /** The filesystem a fresh cartridge is made with. Settings decides. */
 function filesystem() {
-  return settings.defaultFilesystem === "btrfs" ? "btrfs" : "exfat";
+  const wanted = settings.defaultFilesystem;
+  // An id from a newer build, or a hand-edited settings file, must not become
+  // a format nobody can make.
+  return filesystemInfo(wanted) ? wanted : DEFAULT_FILESYSTEM;
 }
 
 function filesystemLabel(fs) {
-  return fs === "btrfs" ? "btrfs" : "exFAT";
+  return filesystemInfo(fs)?.name ?? fs ?? "exFAT";
+}
+
+/** Fill the Settings picker, and say what each choice costs. */
+async function loadFilesystems() {
+  try {
+    filesystems = await invoke("list_filesystems");
+  } catch (error) {
+    console.error("could not list filesystems", error);
+    return;
+  }
+
+  el.setFilesystem.replaceChildren();
+  for (const fs of filesystems) {
+    const option = document.createElement("option");
+    option.value = fs.id;
+    // A format this machine cannot create is still shown, disabled, with the
+    // reason — otherwise "why is btrfs missing?" has no answer on screen.
+    option.textContent = fs.canCreateHere ? fs.name : `${fs.name} (needs ${fs.needs})`;
+    option.disabled = !fs.canCreateHere;
+    el.setFilesystem.append(option);
+  }
+  el.setFilesystem.value = filesystem();
+  describeFilesystem();
+}
+
+function describeFilesystem() {
+  const fs = filesystemInfo(el.setFilesystem.value);
+  if (!fs || !el.setFilesystemNote) return;
+  const proton = fs.runsProton
+    ? "Windows games run from it."
+    : "Windows games will not run from it on Linux.";
+  el.setFilesystemNote.textContent =
+    `${fs.summary} Reads on ${fs.nativeOn ? fs.nativeOn.join(", ") : ""}. ${proton}`;
 }
 
 /** Every game that would actually have its files copied. */
@@ -2171,7 +2228,7 @@ function applySettings() {
   el.setSgdb.checked = Boolean(settings.steamgriddbEnabled);
   el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
-  el.setFilesystem.value = settings.defaultFilesystem ?? "ntfs";
+  el.setFilesystem.value = filesystem();
   describeFilesystem();
   el.setVerify.checked = Boolean(settings.defaultVerify);
   el.setIcon.checked = settings.defaultIcon !== false;
@@ -2819,30 +2876,12 @@ function frontendHint(front) {
   return front.description;
 }
 
-function describeFilesystem() {
-  const hints = {
-    ntfs:
-      "Holds symlinks, so Steam can install Proton onto the cartridge. Windows " +
-      "writes it natively, Linux mounts it with ntfs3. macOS can read it but not " +
-      "write to it.",
-    exfat:
-      "Readable and writable on Windows, Linux and macOS alike — and cannot hold " +
-      "a symlink, so Steam cannot unpack Proton onto it and a carried Linux game " +
-      "has to be a shell script. Volume names are limited to 11 characters.",
-    btrfs:
-      "Linux only: Windows needs a third-party driver. Brings TRIM and " +
-      "compression, both of which matter less here than they sound.",
-  };
-  el.filesystemHint.textContent = hints[el.setFilesystem.value] ?? "";
-}
-
-el.setFilesystem.addEventListener("change", describeFilesystem);
-
 el.setOnInsert.addEventListener("change", describeOnInsert);
 
 el.setSgdb.addEventListener("change", () => {
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
 });
+el.setFilesystem.addEventListener("change", describeFilesystem);
 el.btnRescan.addEventListener("click", async () => {
   await refreshLibrary();
   await refreshDrives();
@@ -2939,6 +2978,9 @@ async function start() {
   } catch {
     // defaults stand
   }
+  // Before applyDefaults, because the label the wizard proposes depends on the
+  // chosen filesystem's limit, and that limit now comes from this list.
+  await loadFilesystems();
   applyDefaults();
 
   await refreshLibrary();
@@ -2957,6 +2999,20 @@ async function start() {
 
 async function demoInvoke(command, args) {
   switch (command) {
+    // Kept in step with core::format by hand, which is the price of a preview
+    // that runs with no backend at all. Only the fields the picker reads.
+    case "list_filesystems":
+      return [
+        { id: "exfat", name: "exFAT", labelLimit: 11, canCreateHere: true, runsProton: false,
+          nativeOn: ["Windows", "Linux", "macOS"], needs: "",
+          summary: "Reads everywhere with nothing installed." },
+        { id: "ntfs", name: "NTFS", labelLimit: 32, canCreateHere: true, runsProton: true,
+          nativeOn: ["Windows", "Linux"], needs: "",
+          summary: "Reads natively on Windows and Linux, and Proton works." },
+        { id: "btrfs", name: "btrfs", labelLimit: 256, canCreateHere: true, runsProton: true,
+          nativeOn: ["Linux"], needs: "WinBtrfs, to read it on Windows",
+          summary: "Linux at its best: checksums, compression, snapshots." },
+      ];
     case "list_games":
       return { problems: [], games: [
         { id: "367520", name: "Hollow Knight", library: "steam", source: "Steam",
