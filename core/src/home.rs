@@ -265,7 +265,10 @@ mod tests {
         let scratch = Scratch::new("home-prepare");
         let home = prepare(scratch.path()).expect("prepare");
 
-        let expected = scratch.join(".gamepak/home");
+        // Joined a component at a time: the code under test builds the path the
+        // same way, and on Windows that means a backslash, not the slash a
+        // single joined string would keep.
+        let expected = scratch.join(".gamepak").join("home");
         assert_eq!(home.root, expected.display().to_string());
         assert!(expected.is_dir(), "the directory should exist already");
         assert_eq!(home.get("HOME"), Some(home.root.as_str()));

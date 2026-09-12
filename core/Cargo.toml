@@ -36,4 +36,8 @@ windows-sys = { version = "0.52", features = [
     # SHChangeNotify, to tell Explorer the drive's icon has changed. Without it
     # a rewritten cartridge keeps the icon Explorer cached the first time.
     "Win32_UI_Shell",
+    # busy.rs walks the process list to find what is running from the cartridge:
+    # the snapshot comes from ToolHelp, the image path from Threading.
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
 ] }
