@@ -198,6 +198,39 @@ pub fn holders(root: &Path) -> Holders {
     }
 }
 
+/// Processes whose executable matches `wanted`, wherever it lives.
+///
+/// [`holders`] answers "what is using this drive". This answers "is this
+/// program running", for a game the cartridge started that is installed
+/// somewhere else — a Steam game with a second copy in another library, which
+/// Steam is free to run instead of the cartridge's. Executables only: it is a
+/// question about which program is running, not about who has which file open.
+pub fn running_where(wanted: &dyn Fn(&Path) -> bool) -> Vec<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return Vec::new();
+        };
+        entries
+            .flatten()
+            .filter_map(|entry| {
+                let pid = entry.file_name().to_str()?.parse::<u32>().ok()?;
+                let exe = std::fs::read_link(entry.path().join("exe")).ok()?;
+                wanted(&exe).then_some(pid)
+            })
+            .collect()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows::running_where(wanted)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        let _ = wanted;
+        Vec::new()
+    }
+}
+
 /// Whether `path` is the root itself or inside it.
 ///
 /// Component-wise, not a string prefix: `/run/media/you/CART` must not match
@@ -555,6 +588,30 @@ mod windows {
             CloseHandle(snapshot);
         }
         found.sort();
+        found
+    }
+
+    pub fn running_where(wanted: &dyn Fn(&Path) -> bool) -> Vec<u32> {
+        let mut found = Vec::new();
+        // SAFETY: as in `holders` — one snapshot, walked from First, closed.
+        unsafe {
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snapshot == INVALID_HANDLE_VALUE {
+                return found;
+            }
+            let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            let mut more = Process32FirstW(snapshot, &mut entry);
+            while more != 0 {
+                if let Some(path) = image_path(entry.th32ProcessID) {
+                    if wanted(&path) {
+                        found.push(entry.th32ProcessID);
+                    }
+                }
+                more = Process32NextW(snapshot, &mut entry);
+            }
+            CloseHandle(snapshot);
+        }
         found
     }
 

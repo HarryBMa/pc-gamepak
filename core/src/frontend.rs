@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 pub const LAUNCHER: &str = "launcher";
 /// The Decky plugin: cartridge games as a row on the Steam home screen.
 pub const DECKY: &str = "decky";
-/// A Playnite extension. Not written yet; named here so the shape is visible.
+/// The Playnite extension: a cartridge slot as the first tile of the library.
 pub const PLAYNITE: &str = "playnite";
 
 /// Whether a front-end comes with the project or has to be installed.
@@ -106,12 +106,10 @@ pub fn known() -> Vec<FrontEnd> {
             id: PLAYNITE,
             name: "Playnite library",
             kind: Kind::Plugin,
-            description: "Cartridge games added to Playnite's library while the drive is in.",
+            description: "A cartridge slot as the first tile in Playnite's library.",
             installed: playnite.as_ref().is_some_and(|path| path.is_dir()),
             install_path: playnite.map(|path| path.display().to_string()),
-            // Nothing is written. Named so the settings dialog can say "not
-            // built yet" rather than silently implying the list is complete.
-            implemented: false,
+            implemented: true,
         },
     ]
 }
@@ -137,10 +135,10 @@ fn decky_path() -> Option<PathBuf> {
     )
 }
 
-/// Where a Playnite extension would live.
+/// Where the Playnite extension lives.
 ///
 /// Playnite is Windows software, and its extensions sit under the roaming
-/// profile. Returned on other platforms too when the override is set, because
+/// profile in a folder named after the extension's `Id`, which is `PCGamePak`. Returned on other platforms too when the override is set, because
 /// Playnite runs under Proton and the tests have to reach this.
 fn playnite_path() -> Option<PathBuf> {
     if let Some(from_env) = std::env::var_os("PC_GAMEPAK_PLAYNITE_DIR") {
@@ -328,21 +326,17 @@ mod tests {
     }
 
     #[test]
-    fn the_register_names_the_launcher_first_and_marks_what_is_unbuilt() {
+    fn the_register_names_the_launcher_first_and_lists_both_plugins() {
         let all = known();
         assert_eq!(all[0].id, LAUNCHER);
         assert_eq!(all[0].kind, Kind::BuiltIn);
         assert!(all[0].installed, "the built-in one is always there");
 
-        let playnite = all.iter().find(|f| f.id == PLAYNITE).expect("listed");
-        assert!(
-            !playnite.implemented,
-            "nothing is written; the dialog must not offer a dead switch"
-        );
-
-        let decky = all.iter().find(|f| f.id == DECKY).expect("listed");
-        assert!(decky.implemented);
-        assert_eq!(decky.kind, Kind::Plugin);
+        for id in [DECKY, PLAYNITE] {
+            let plugin = all.iter().find(|f| f.id == id).expect("listed");
+            assert!(plugin.implemented, "{id}");
+            assert_eq!(plugin.kind, Kind::Plugin, "{id}");
+        }
     }
 
     #[test]
