@@ -43,4 +43,8 @@ windows-sys = { version = "0.52", features = [
     # whole module is behind a cfg, and fails on Windows only.
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Threading",
+    # Posting a cartridge-arrival balloon from a process with no window: the
+    # message-only window the notification area's icon belongs to, and the
+    # message pump that has to run while the balloon is up.
+    "Win32_UI_WindowsAndMessaging",
 ] }

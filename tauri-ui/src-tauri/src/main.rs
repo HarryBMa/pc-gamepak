@@ -190,10 +190,65 @@ fn launch_game(
         }
     }
 
-    command
+    let child = command
         .spawn()
         .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
+    settle_when_it_exits(child, drive_path, stats::key_for(&executable));
     Ok(())
+}
+
+/// Wait for a carried game to exit, then close its session and put its save
+/// back on the cartridge.
+///
+/// Both of those used to wait for an eject, and waiting is wrong for both.
+///
+/// A save copied back only on eject is a save lost by quitting the game and
+/// pulling the drive out — which is exactly what somebody who has finished
+/// playing does. This pushes as soon as the game is gone, while the cartridge is
+/// still sitting in the port and nothing is reaching for it. `push_all` rather
+/// than the eject path: it copies to the cartridge and leaves the arrangement
+/// alone, so a linked save stays linked and the user can play again.
+///
+/// And a session closed only when the window closes counts the hours the
+/// launcher sat idle afterwards as playtime. `end_every_session` says the
+/// window's lifetime is "the honest bound on what can be measured here" —
+/// true for a `steam://` game, which is Steam's child and not ours, and not
+/// true for this one. This launcher started it, so it can watch it, and the
+/// end of the process is the end of the session.
+///
+/// One thread, asleep in `wait` until then.
+fn settle_when_it_exits(mut child: std::process::Child, drive_path: String, key: String) {
+    std::thread::spawn(move || {
+        if let Err(why) = child.wait() {
+            // Nothing to settle on: without an exit there is no end to record,
+            // and the eject path is still there to catch the save.
+            debug_log(format!("could not wait for the game to exit: {why}"));
+            return;
+        }
+        end_session_for(&key);
+        if settings::load().save_sync {
+            let results = saves::push_all(Path::new(&drive_path));
+            let pushed = results.iter().filter(|result| result.is_ok()).count();
+            debug_log(format!("game exited; pushed {pushed} save slot(s)"));
+            for why in results.into_iter().filter_map(Result::err) {
+                debug_log(format!("save push after play: {why}"));
+            }
+        }
+    });
+}
+
+/// Close one open session and add its hours, leaving any other alone.
+///
+/// The per-game counterpart of [`end_every_session`], for the case where one
+/// game has stopped and the launcher is still up.
+fn end_session_for(key: &str) {
+    // The guard is dropped before the write below, which touches the drive.
+    let session = playing().lock().ok().and_then(|mut open| open.remove(key));
+    if let Some(session) = session {
+        if let Err(why) = stats::record_session_end(&session) {
+            debug_log(format!("stats: {why}"));
+        }
+    }
 }
 
 fn open_uri(uri: &str) -> Result<(), String> {
@@ -545,7 +600,11 @@ fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
 ///
 /// Only ever called with `Quit`, `Launch` or `Notify`: `ShowWindow` is returned
 /// to `main` as `None` so the ordinary path runs untouched.
-fn act_on_insert(reaction: insert::Reaction) {
+///
+/// `false` means the reaction could not be carried out and the window should
+/// open after all — which today only happens when a notification cannot be
+/// posted on this desktop.
+fn act_on_insert(reaction: insert::Reaction) -> bool {
     match reaction {
         insert::Reaction::ShowWindow => {}
         insert::Reaction::Quit => {}
@@ -564,32 +623,25 @@ fn act_on_insert(reaction: insert::Reaction) {
             // as zero on some later insert.
             end_every_session();
         }
-        insert::Reaction::Notify { title, body } => notify(&title, &body),
+        insert::Reaction::Notify { title, body } => return notify(&title, &body),
     }
+    true
 }
 
 /// Say a cartridge is there, without a window.
 ///
-/// `notify-send` on Linux, which is the desktop's own notification and is what
-/// every distribution ships. Nothing on Windows: a toast there needs a resident
-/// application with a registered identity, the launcher is neither, and the
-/// watcher — which is resident and already owns a tray icon that can post a
-/// balloon — is a separate process this has no channel to. So on Windows the
-/// setting falls back to opening the window, which is the behaviour it was
-/// chosen instead of, and `docs/STATUS.md` records it as unfinished rather than
-/// the settings dialog pretending otherwise.
-fn notify(title: &str, body: &str) {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = (title, body);
-        eprintln!("notify_only is not implemented on Windows; showing nothing");
+/// Both desktops are handled in [`gamepak_core::notify`], which explains what
+/// each one needs. The answer here is what to do when neither works: show the
+/// window. That is the behaviour `notify_only` was chosen *instead* of, so it is
+/// a poor outcome — but an insert that produces nothing at all looks like a
+/// cartridge that was not seen, and a setting that silently does nothing is
+/// indistinguishable from a bug.
+fn notify(title: &str, body: &str) -> bool {
+    if gamepak_core::notify::cartridge_arrived(title, body) {
+        return true;
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = gamepak_core::proc::command("notify-send")
-            .args(["--app-name=PC GamePak", "--icon=pc-gamepak", title, body])
-            .status();
-    }
+    eprintln!("could not post a notification for {title}; opening the window instead");
+    false
 }
 
 /// Take the keyboard, not just the front of the screen.
@@ -804,9 +856,12 @@ async fn eject_with_guard(
         });
     }
 
-    let mut body = format!("{}.
+    let mut body = format!(
+        "{}.
 
-", holders.summary(4));
+",
+        holders.summary(4)
+    );
     if holders.unchecked > 0 {
         // Said out loud rather than swallowed: on Linux an unprivileged process
         // can only look at its owner's processes, so "nothing else is using it"
@@ -2054,8 +2109,11 @@ fn main() {
     // would be worse than no setting.
     if !wizard {
         if let Some(reaction) = reaction_on_insert(&args) {
-            act_on_insert(reaction);
-            return;
+            if act_on_insert(reaction) {
+                return;
+            }
+            // Falls through to the window, which is what a reaction that could
+            // not be carried out asked for by returning false.
         }
     }
 

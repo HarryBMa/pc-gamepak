@@ -197,19 +197,27 @@ Ranked by how much it matters.
    per-machine settings will start at its defaults the first time on each host,
    and on exFAT any game that creates a symlink inside its config directory will
    fail to, the filesystem having none.
-5. **`auto_launch_game` counts launches but not hours.** The launcher starts
-   the game and exits, so there is no process left to re-stamp the heartbeat —
-   measuring a session needs a launcher that stays up, which is what the window
-   is. The session is closed at once rather than abandoned, so the cartridge is
-   not left carrying a record that never advances. Fixing it properly means
-   watching the game's process, which is what `busy` now knows how to do.
-6. **`notify_only` does nothing on Windows**, and falls back to opening the
-   window. A toast there needs a resident application with a registered
-   identity; the launcher is a process that exists for ten seconds. The watcher
-   *is* resident and already owns a tray icon that can post a balloon, so the
-   fix is a channel between the two — which is more machinery than the feature
-   has earned so far. The settings dialog says so rather than offering a choice
-   that quietly does something else.
+5. **`auto_launch_game` counts launches but not hours.** It only ever starts a
+   `steam://`-class URI, which is somebody else's launcher's child and not ours,
+   so there is nothing to wait on and no process left to re-stamp the heartbeat.
+   The session is closed at once rather than abandoned, so the cartridge is not
+   left carrying a record that never advances. Fixing it means watching a process
+   this launcher did not start, which is what `busy` now knows how to find.
+
+   A game the cartridge *carries* is a different case and is now measured
+   properly: the launcher started it, so it waits for it, and the session ends
+   when the game does rather than when the window closes.
+6. **`notify_only` on Windows has not been seen working on Windows.** It used
+   to do nothing there at all — not the notification, and not the window it was
+   documented as falling back to. It now posts a notification-area balloon from
+   a message-only window it creates for the purpose, which is the mechanism that
+   works from a process with no window and no registered identity; a real toast
+   needs an `AppUserModelID` against an installed shortcut, and this project
+   installs by unzipping into `%LOCALAPPDATA%`. The Linux path is tested against
+   a fake `notify-send`. The Windows path compiles and is unverified on
+   hardware — it is about a hundred lines of Win32 that no test here can reach.
+   A notification that cannot be posted now opens the window, which is what the
+   old comment claimed and the old code did not do.
 7. **The unmount guard has never met a real running game.** It is tested
    against child processes this repository spawns — one holding an open file,
    one ignoring the polite signal and needing to be killed — and against this

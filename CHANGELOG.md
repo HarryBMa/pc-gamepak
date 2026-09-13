@@ -59,6 +59,10 @@ the game or points at it.
   declared, nothing copied, and no conflict possible — there is only ever one
   copy.
 
+A carried game's save is pushed to the cartridge **as soon as the game exits**,
+not only on eject. Quitting the game and pulling the drive out is what somebody
+who has finished playing does, and it used to cost them the session.
+
 Off until switched on, in Settings. It is the one thing here that writes to a
 directory in your home on the say-so of a file on a drive.
 
@@ -69,6 +73,11 @@ the count follows the cartridge between machines rather than staying on the PC
 that happened to play it. The open session re-stamps itself once a minute, so a
 crash or a pulled drive costs a minute rather than the session — and whichever
 machine sees the cartridge next settles whatever the last one abandoned.
+
+For a game the cartridge carries, the launcher started the process and so waits
+for it: the session ends when the game exits, not when the window is closed
+afterwards. A `steam://` game is somebody else's launcher's child and there is
+nothing to wait on, so the window's lifetime is still the bound there.
 
 On by default: one small file, written to the drive you just pressed Play on.
 
@@ -108,7 +117,9 @@ click, and so does a collection, which has no single game to mean. Nothing on a
 cartridge runs without a click, and a setting left switched on is not consent to
 run a stranger's binary.
 
-`notify_only` is Linux-only so far and falls back to opening the window.
+`notify_only` uses the desktop's own notification on Linux and a
+notification-area balloon on Windows. If neither can be posted, the window opens
+rather than the insert passing in silence.
 
 ### Eject now says what is in the way
 
