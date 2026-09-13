@@ -33,8 +33,21 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** What a checksum reads as between a version bump and the release it names. */
 const PENDING = "SHA256-PENDING-RELEASE";
 
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
-const write = (rel, text) => fs.writeFileSync(path.join(ROOT, rel), text);
+// Line endings are normalised on the way in and restored on the way out.
+//
+// A Windows checkout with `core.autocrlf=true` — Git for Windows' default — has
+// every one of these files in CRLF. The patterns below say `\n` between lines,
+// and `.+$` would carry the `\r` into the version it captured, so on the machine
+// the release is cut from, every lockfile read as having no version at all while
+// CI, on Linux, passed. Reading as LF fixes every pattern at once; writing each
+// file back in the ending it already had keeps `--set` from turning a CRLF file
+// into a whole-file diff.
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
+const write = (rel, text) => {
+  const file = path.join(ROOT, rel);
+  const crlf = fs.existsSync(file) && fs.readFileSync(file, "utf8").includes("\r\n");
+  fs.writeFileSync(file, crlf ? text.replace(/\n/g, "\r\n") : text);
+};
 
 /**
  * One place a version is written.
