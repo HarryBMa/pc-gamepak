@@ -25,6 +25,11 @@
 //! not the notification, and not the window it was documented as falling back
 //! to — so the one setting nobody could see working was the one that promised to
 //! be quiet.
+//!
+//! Seen working on Windows 11 Pro (build 26200): the balloon appeared, the call
+//! returned `true` after the full linger, and the icon was gone afterwards. No
+//! test here can reach the Win32 half, so that run is the evidence — rerun it by
+//! hand after changing anything below.
 
 /// Post a cartridge-arrival notification, if this desktop can.
 ///
