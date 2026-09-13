@@ -128,8 +128,16 @@ is a **plugin**, and **Settings → Where a cartridge opens** is the list:
 | **PC GamePak launcher** | The cartridge's own window. Built in, on by default. |
 | **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/decky). |
 | **Playnite library** | A cartridge slot as the first tile in Playnite's library: empty with no cartridge in, the cartridge's art with one. Play starts a single game directly and opens this launcher to choose from a collection; the tile's menu ejects. Through the [Playnite extension](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/playnite). |
+| **GOG Galaxy library** | Cartridge games owned in GOG Galaxy once seen, installed while the cartridge is in; Play goes through this launcher. Through the [Galaxy integration](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/gog-galaxy). |
+| **Heroic Games Launcher** | Cartridge games as sideloaded games while the cartridge is in. |
+| **Pegasus Frontend** | A PC GamePak collection of whatever is plugged in. |
+| **ES-DE** | A PC GamePak system of whatever is plugged in. |
+| **LaunchBox** | A cartridge slot in LaunchBox and Big Box. Designed, not built yet; listed so the shape is visible. |
 
-Both plugins live in [pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins).
+Heroic, Pegasus and ES-DE read files rather than load plugins, so one program,
+[pc-gamepak-sync](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/sync),
+writes all three; each is installed when it is. Every plugin lives in
+[pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins).
 
 A plugin has to be installed before its switch does anything, and the dialog says
 so rather than offering a dead control. More than one may be on: a desktop that
