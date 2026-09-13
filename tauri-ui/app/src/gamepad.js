@@ -25,6 +25,15 @@
  * Nothing here launches anything by itself — each button calls the same
  * function the mouse and the keyboard call, so a controller cannot do more than
  * a person at the keyboard could.
+ *
+ * The prompts follow the device in your hands, not the device plugged in. A pad
+ * connected and sitting on the table used to be enough to replace every keycap
+ * with a face-button icon and leave it that way, so a PC with a controller
+ * attached — or a Steam Deck in desktop mode with a keyboard — showed the wrong
+ * prompt to whoever was actually typing. Now the icons appear when a pad button
+ * is pressed and the keycaps come back on the next keystroke. The idea is
+ * ArtMoon's and StreamLight's, both gamepad-first Moonlight forks; see
+ * `docs/STATUS.md`.
  */
 
 /** Standard-layout indices, named so the mapping below reads as English. */
@@ -59,8 +68,10 @@ export function pressed(previous, current) {
  * keyboard's own dongle does, reporting sixteen buttons that are never pressed
  * and an empty `mapping` — and if one of those sorts ahead of the real pad, the
  * launcher polls it forever and every button on the actual controller does
- * nothing. That is a silent failure: the pad raises `gamepadconnected`, the
- * prompts change to pad icons, and then nothing works.
+ * nothing. That is a silent failure: the pad raises `gamepadconnected` and then
+ * nothing works. It is quieter now than it was, since the prompts no longer
+ * change until a button is actually pressed — so the only outward sign is a
+ * controller that does nothing at all, which is what the log below is for.
  *
  * So: anything reporting the standard layout, if anything does. Only when
  * nothing does is everything considered, which keeps an unusual but real pad
@@ -144,7 +155,10 @@ export function connect(actions) {
       const state = merge(list);
 
       const down = pressed(previous, state);
-      if (down.length > 0) log(`pressed ${down}`);
+      if (down.length > 0) {
+        log(`pressed ${down}`);
+        usingPad(true);
+      }
       for (const button of down) {
         switch (button) {
           case BUTTON.SOUTH:
@@ -197,13 +211,25 @@ export function connect(actions) {
     requestAnimationFrame(frame);
   }
 
+  /**
+   * Say which device is being held, and redraw the prompts if it changed.
+   *
+   * The focus ring rides along: it is normally only drawn for keyboard users,
+   * and with a pad in hand it is the only way to see where you are.
+   */
+  function usingPad(pad) {
+    if (document.body.classList.contains("is-gamepad") === pad) return;
+    document.body.classList.toggle("is-gamepad", pad);
+    log(`prompts now ${pad ? "pad" : "keyboard"}`);
+    actions.changed?.();
+  }
+
   function start() {
     if (running) return;
     running = true;
-    // The focus ring is normally only drawn for keyboard users; with a pad in
-    // hand it is the only way to see where you are.
-    document.body.classList.add("is-gamepad");
-    actions.changed?.();
+    // Polling begins as soon as a pad is there, so the first button press is
+    // acted on — but the prompts do not change until that press happens. A
+    // controller plugged in and left alone is not the device in anyone's hands.
     requestAnimationFrame(frame);
   }
 
@@ -211,9 +237,16 @@ export function connect(actions) {
     running = false;
     previous = [];
     held = null;
-    document.body.classList.remove("is-gamepad");
-    actions.changed?.();
+    usingPad(false);
   }
+
+  // Back to keycaps the moment somebody types. Capturing, so it is seen whatever
+  // the launcher's own key handling does with the event, and passive because
+  // this only ever reads it.
+  window.addEventListener("keydown", () => usingPad(false), {
+    capture: true,
+    passive: true,
+  });
 
   window.addEventListener("gamepadconnected", (event) => {
     log(

@@ -154,7 +154,7 @@ pub fn run() -> ! {
             }
             recent.insert(arrived.clone(), now);
             log::line(&format!("cartridge detected at {}", arrived.display()));
-            if let Some(child) = launcher::open(&arrived) {
+            if let Some(child) = launcher::open(&arrived, launcher::Why::Inserted) {
                 open.insert(arrived.clone(), child);
             }
         }

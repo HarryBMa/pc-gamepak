@@ -79,6 +79,13 @@ fi
 
 echo "opening launcher for $MOUNT_POINT"
 
+# Note that "opening the launcher" is not the same as "a window appears". The
+# launcher reads `on_cartridge_insert` from the user's settings and may start the
+# game, post a notification, or exit without drawing anything. That decision is
+# deliberately inside the launcher and not here: this helper, the resident
+# watcher and the tray menu all open a launcher, and a setting honoured by one of
+# them and not the others would be worse than no setting at all.
+
 # The launcher needs the user's session to put a window on screen. The systemd
 # unit already runs as the desktop user; point it at their display.
 export DISPLAY="${DISPLAY:-:0}"

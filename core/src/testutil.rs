@@ -38,7 +38,7 @@ impl Scratch {
 
     /// Write a file, creating parent directories as needed.
     pub fn write(&self, rel: &str, contents: &[u8]) -> PathBuf {
-        let path = self.0.join(rel);
+        let path = self.join(rel);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("create parent directory");
         }
@@ -46,8 +46,19 @@ impl Scratch {
         path
     }
 
+    /// A path under the scratch directory, written with `/` between its parts.
+    ///
+    /// The separator is not cosmetic. Windows opens a file just as happily
+    /// through `a/b` as through `a\b`, so a test that only reads and writes
+    /// cannot tell them apart — but a test comparing against a path the code
+    /// built with `Path::join` gets a backslash, and `a/b != a\b` as strings.
+    /// Splitting the parts here means one spelling works on both platforms.
     pub fn join(&self, rel: &str) -> PathBuf {
-        self.0.join(rel)
+        self.0.join(
+            rel.split('/')
+                .filter(|part| !part.is_empty())
+                .fold(PathBuf::new(), |path, part| path.join(part)),
+        )
     }
 }
 
@@ -78,5 +89,13 @@ mod tests {
             s.path().to_path_buf()
         };
         assert!(!path.exists(), "scratch should be removed on drop");
+    }
+
+    #[test]
+    fn a_joined_path_uses_this_platforms_separator() {
+        // Otherwise every expectation spelled with a `/` fails on Windows only,
+        // where the code under test produced a `\`.
+        let s = Scratch::new("separators");
+        assert_eq!(s.join("a/b"), s.path().join("a").join("b"));
     }
 }

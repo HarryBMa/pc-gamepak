@@ -69,6 +69,17 @@
   </supports>
 
   <releases>
+    <release version="1.1.0" date="2026-09-12">
+      <description>
+        <p>Saves, playtime and compiled shaders now travel on the cartridge
+        itself, so a game carries its progress between machines. New cartridges
+        are formatted NTFS by default, because exFAT cannot hold the symlinks a
+        Proton install is built from; the picker now offers eight formats and
+        says what each one costs. A cartridge can open in the Steam Deck's
+        home screen instead of the launcher's own window, and eject now names
+        whatever is still using the drive before taking it away.</p>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-09-06">
       <description>
         <p>Packaging only: the Flatpak build, and autostart through the

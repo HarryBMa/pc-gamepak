@@ -9,16 +9,24 @@ fi
 
 echo "Installing PC GamePak..."
 
-# Check for important files
+# Everything below is relative to the directory holding `linux/`, found from
+# this script rather than from the working directory — so `sudo ./linux/
+# install.sh` and `sudo bash install.sh` from inside it both work, and so does
+# the release tarball, whose layout is not a source checkout's.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
+# Check for important files. The icon is not among them: it is missing from an
+# unpacked release tarball built before it was shipped, and a generic icon is a
+# cosmetic loss, not a reason to refuse to install the thing that watches for
+# cartridges.
 for FILE in \
     "linux/gamepak-launcher-helper.sh" \
     "linux/gamepak-remove-helper.sh" \
     "linux/pc-gamepak@.service" \
     "linux/pc-gamepak-remove@.service" \
     "linux/99-pc-gamepak.rules" \
-    "linux/pc-gamepak.desktop" \
-    "tauri-ui/src-tauri/icons/128x128.png"
+    "linux/pc-gamepak.desktop"
 do
     if [ ! -f "$FILE" ]; then
         echo "Missing file: $FILE"
@@ -104,9 +112,22 @@ udevadm trigger
 # Install the launcher binary if it has been built
 ########################################
 
-LAUNCHER_BUILD="tauri-ui/src-tauri/target/release/pc-gamepak"
+# Two layouts, as in install-user.sh: a source checkout builds into
+# target/release, and an unpacked release tarball puts the binary beside
+# `linux/`. Looking in only the first is how a tarball that ships the launcher
+# came to report it as "not built yet" and install nothing.
+LAUNCHER_BUILD=""
+for CANDIDATE in \
+    "tauri-ui/src-tauri/target/release/pc-gamepak" \
+    "pc-gamepak"
+do
+    if [ -x "$CANDIDATE" ]; then
+        LAUNCHER_BUILD="$CANDIDATE"
+        break
+    fi
+done
 
-if [ -f "$LAUNCHER_BUILD" ]; then
+if [ -n "$LAUNCHER_BUILD" ]; then
     echo "Installing launcher..."
     install -m 755 "$LAUNCHER_BUILD" /usr/local/bin/pc-gamepak
     LAUNCHER_STATE="installed"
@@ -129,8 +150,15 @@ fi
 echo "Installing desktop entry and icon..."
 
 install -m 644 linux/pc-gamepak.desktop /usr/share/applications/pc-gamepak.desktop
-install -m 644 tauri-ui/src-tauri/icons/128x128.png \
-    /usr/share/icons/hicolor/128x128/apps/pc-gamepak.png
+
+ICON_SOURCE="tauri-ui/src-tauri/icons/128x128.png"
+[ -f "$ICON_SOURCE" ] || ICON_SOURCE="icons/128x128.png"
+if [ -f "$ICON_SOURCE" ]; then
+    install -m 644 "$ICON_SOURCE" \
+        /usr/share/icons/hicolor/128x128/apps/pc-gamepak.png
+else
+    echo "  no icon found; the window will use the desktop's generic one."
+fi
 
 update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true

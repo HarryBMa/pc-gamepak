@@ -9,11 +9,26 @@ use std::process::{Child, Command};
 
 use crate::log;
 
+/// Why a launcher is being opened.
+///
+/// It changes what the launcher does, not what this does. `on_cartridge_insert`
+/// can be set to `none`, `notify_only` or `auto_launch_game`, and the launcher
+/// applies it — but only to an insert. Somebody picking a cartridge out of the
+/// tray menu has asked for the window in so many words, and must get it whatever
+/// the setting says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Why {
+    /// A cartridge turned up. The setting decides.
+    Inserted,
+    /// A person asked for this cartridge by name.
+    Asked,
+}
+
 /// Open the launcher on a cartridge, keeping the handle so the window can be
 /// closed again when the cartridge goes.
 ///
 /// Not waited on: the launcher outlives the wake that started it.
-pub fn open(path: &Path) -> Option<Child> {
+pub fn open(path: &Path, why: Why) -> Option<Child> {
     let Some(launcher) = installed_at() else {
         log::line("pc-gamepak is not installed anywhere I can find it");
         return None;
@@ -26,6 +41,11 @@ pub fn open(path: &Path) -> Option<Child> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
+    if why == Why::Asked {
+        // "The window, please" — spelled out, because the launcher cannot
+        // otherwise tell being asked from being triggered.
+        command.arg("--show");
+    }
 
     match command.spawn() {
         Ok(child) => {
