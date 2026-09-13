@@ -410,6 +410,16 @@
             <div id="rail-bar"></div>
           </div>
 
+          <!-- Per write, never a saved default: this one deletes games from the
+               PC, so it is asked for each time and starts unticked. -->
+          <label id="move-row" class="opt opt--grave" hidden>
+            <input id="opt-move" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Move instead of copy</span>
+              <span id="move-hint" class="opt__hint"></span>
+            </span>
+          </label>
+
           <!-- The plan: what is ticked, in the order it will happen -->
           <div id="rail-plan" hidden>
             <p class="field__label">What will happen</p>

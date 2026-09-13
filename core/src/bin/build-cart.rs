@@ -122,6 +122,13 @@ fn main() {
         }
     }
 
+    // The other thing a build can destroy, named just as plainly.
+    if request.move_game {
+        for line in create::move_plan(&request) {
+            println!("move plan: {line}");
+        }
+    }
+
     if mode != "build" {
         println!("plan only; nothing written. Re-run with `build` to write it.");
         return;

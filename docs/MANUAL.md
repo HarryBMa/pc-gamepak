@@ -612,6 +612,37 @@ This is an integrity check, not a signature: CRC-32 is the right tool for *did
 this survive the cable*, the job it does in zip and gzip, and the wrong tool for
 *did somebody change this on purpose*.
 
+### Moving a Steam game instead of copying it
+
+**A Steam game that is still installed on your PC plays from your PC, not from
+the cartridge.** Steam records each game as installed in exactly one library and
+ignores a second copy of the same game anywhere else. The first cartridge tested
+this way — FTL, copied and verified — started `F:\Games\Steam\…\FTLGame.exe`
+every time Play was pressed.
+
+So when you pick a Steam game and copying is on, the wizard offers **Move instead
+of copy**. With it ticked, the build goes on exactly as before, and then, as its
+last step:
+
+1. only if **every file on the cartridge was read back and matched**, it deletes
+   the game's `appmanifest` from the PC's library, so Steam stops claiming it
+   there;
+2. moves the game's entry in Steam's library list to the cartridge (the file is
+   backed up first, as for every edit this makes);
+3. deletes the game's folder from the PC.
+
+A copy that did not verify deletes nothing, and the build says so. A game that is
+running is not deleted. Nothing is deleted for a folder you picked by hand — only
+Steam games, which Steam can reinstall. Workshop content and the shader cache
+stay where they are.
+
+It is never a saved default and starts unticked on every write, because it is
+the one option that removes something from your PC rather than the cartridge. It
+needs **Verify after copying** switched on, and is greyed out without it.
+
+From a script, `"moveGame": true` in a `build-cart` request does the same, and
+`build-cart plan` lists what it would delete before anything is written.
+
 ### Which cartridge is this?
 
 Verifying answers "did these bytes survive". It cannot answer the other

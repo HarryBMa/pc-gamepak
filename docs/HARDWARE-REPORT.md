@@ -1271,3 +1271,72 @@ Tests: core **346**, watcher **7**; clippy clean on core, watcher and the Tauri
 backend; fmt clean.
 
 Still not done: Play and Eject by a person's hand.
+
+---
+
+## 2026-09-12/13 — Play started the PC's copy, not the cartridge's
+
+Play and Eject worked by hand. Asked to confirm the game was really running from
+the cartridge, it was not:
+
+```
+FTLGame.exe   F:\Games\Steam\steamapps\common\FTL Faster Than Light\FTLGame.exe
+parent        steam.exe
+DLLs          steam_wrapper.dll, BASS.dll, steam_api.dll — all from F:
+```
+
+Steam lists an app as installed in exactly one library. FTL was still installed
+on F:, so `libraryfolders.vdf` had `212680` under `F:\Games\Steam` and the
+cartridge's `D:\SteamLibrary` registered with `apps {}` — present, owning
+nothing. The copy on D: was never going to be launched, however many times Play
+was pressed; the earlier Play presses at 20:38 and 20:51 had also run from F:.
+
+This is true of **every** Steam cartridge made from a game still installed on the
+PC. Stardew on 2026-09-01 only looked right because Stardew is installed nowhere
+else.
+
+### Manual proof that the cartridge copy runs once the PC stops claiming it
+
+1. Steam shut down with `-shutdown`; both `libraryfolders.vdf` backed up.
+2. `F:\…\appmanifest_212680.acf` renamed aside. Game files on F: untouched.
+3. Steam started. With no manifest on F:, it moved `212680` into
+   `D:\SteamLibrary`'s `apps` by itself.
+4. `steam://rungameid/212680`:
+
+```
+FTLGame.exe   D:\SteamLibrary\steamapps\common\FTL Faster Than Light\FTLGame.exe
+DLLs          every one from D:\SteamLibrary\…
+parent        steam.exe
+```
+
+Then put back: FTL closed, Steam shut down, the manifest renamed back. Steam was
+then restarted by an installed `pc-gamepak --drive D:\ --play 0` (10:59:14), and
+on that start it logged `Loaded 0 apps from install folder "D:\SteamLibrary\…"`
+and rewrote its list with F: owning FTL again — the original state. Both copies
+intact.
+
+### Built: move instead of copy
+
+`CartridgeRequest::move_game`, and **Move instead of copy** in the wizard rail
+(Steam games only, per write, never saved, starts unticked). After the cartridge
+has been read back and every file matched, the build deletes the PC's manifest,
+moves the app's entry in both `libraryfolders.vdf` to the cartridge's library,
+and deletes the install folder — in that order, so stopping anywhere leaves
+Steam believing the truth. Refused outright without copy and verify; skipped
+with a warning when the verify fails, Steam is running, the game is running, the
+install is not laid out as `…/steamapps/common/<dir>`, or the cartridge does not
+hold the copy.
+
+`build-cart plan` with `"moveGame": true` prints, for this host:
+
+```
+move plan: delete F:\Games\Steam\steamapps\common\FTL Faster Than Light (287 MB) once the cartridge verifies
+```
+
+The library-list edit walks the file's structure rather than searching for
+`"3"`, because in this host's real file the same quoted digits are values
+(`"totalsize" "0"`, `"update_clean_bytes_tally"`) before they are entry keys.
+
+**Not yet run for real.** It deletes a game from this PC, so it waits for a go on
+which game. Tests: core 349 on a clean checkout of this change (3 new), clippy
+and fmt clean.

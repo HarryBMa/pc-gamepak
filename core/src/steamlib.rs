@@ -248,7 +248,7 @@ fn manifest_ids(steamapps: &Path) -> Vec<String> {
 }
 
 /// The `installdir` a manifest names, which is relative to `common`.
-fn install_dir_in(text: &str) -> Option<String> {
+pub(crate) fn install_dir_in(text: &str) -> Option<String> {
     steam::parse_keyvalues(text)
         .get("AppState")?
         .get("installdir")?
@@ -460,6 +460,197 @@ pub fn remove_library_entry(text: &str, drive: &str) -> Option<String> {
         out = out.replacen(&format!("\"{old}\"\n"), &format!("\"{}\"\n", old - 1), 1);
     }
     Some(out)
+}
+
+/// The `"key" { … }` blocks directly inside `text[start..end]`.
+///
+/// Returned as `(key, open, close)`, the byte offsets of the braces. A real walk
+/// of the structure rather than a search for `"3"`: in `libraryfolders.vdf` the
+/// same quoted digits are both entry keys and values (`"totalsize" "0"`), so a
+/// search finds whichever comes first. Braces inside strings do not count.
+fn child_blocks(text: &str, start: usize, end: usize) -> Vec<(String, usize, usize)> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    // The string most recently seen at this level that has not had a value yet.
+    let mut pending_key: Option<String> = None;
+    let mut open: Option<(String, usize)> = None;
+
+    let mut i = start;
+    while i < end {
+        match bytes[i] {
+            b'"' => {
+                let from = i + 1;
+                i += 1;
+                while i < end && bytes[i] != b'"' {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                if depth == 0 {
+                    pending_key = match pending_key.take() {
+                        // That was a key and this is its value.
+                        Some(_) => None,
+                        None => Some(text[from..i.min(end)].to_string()),
+                    };
+                }
+            }
+            b'{' => {
+                if depth == 0 {
+                    open = pending_key.take().map(|key| (key, i));
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+                if depth == 0 {
+                    if let Some((key, at)) = open.take() {
+                        out.push((key, at, i));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The braces of the `apps` block inside the entry for `library`.
+fn apps_block(text: &str, library: &str) -> Option<(usize, usize)> {
+    let (_, root_open, root_close) = child_blocks(text, 0, text.len())
+        .into_iter()
+        .find(|(key, ..)| key == "libraryfolders")?;
+
+    child_blocks(text, root_open + 1, root_close)
+        .into_iter()
+        .find(|(_, open, close)| {
+            let entry = steam::parse_keyvalues(&format!("\"entry\"\n{}", &text[*open..=*close]));
+            entry
+                .get("entry")
+                .and_then(|e| e.get("path"))
+                .and_then(Kv::as_str)
+                .is_some_and(|path| paths_match(path, library))
+        })
+        .and_then(|(_, open, close)| {
+            child_blocks(text, open + 1, close)
+                .into_iter()
+                .find(|(key, ..)| key == "apps")
+                .map(|(_, open, close)| (open, close))
+        })
+}
+
+/// Say that `app_id` now lives in the library at `to`, not the one at `from`.
+///
+/// Steam keeps, per library, the ids it believes are installed there and their
+/// sizes. It rebuilds that list when it scans, but a list naming the game in the
+/// library it has just been deleted from is exactly the belief a move exists to
+/// end, so it is corrected here too rather than left for Steam to notice.
+///
+/// Line surgery, like the rest of this file. `None` when nothing changed.
+pub fn move_app_entry(text: &str, app_id: &str, from: &str, to: &str, size: u64) -> Option<String> {
+    let key = format!("\"{app_id}\"");
+    let mut out = text.to_string();
+    let mut changed = false;
+
+    if let Some((open, close)) = apps_block(&out, from) {
+        let inner = &out[open + 1..close];
+        if let Some(at) = inner
+            .match_indices(&key)
+            .map(|(at, _)| open + 1 + at)
+            .find(|at| {
+                out[..*at]
+                    .rsplit('\n')
+                    .next()
+                    .is_some_and(|before| before.trim().is_empty())
+            })
+        {
+            let start = out[..at].rfind('\n').map(|n| n + 1).unwrap_or(0);
+            let end = out[at..].find('\n').map(|n| at + n + 1).unwrap_or(close);
+            out.replace_range(start..end, "");
+            changed = true;
+        }
+    }
+
+    if let Some((open, close)) = apps_block(&out, to) {
+        let already = out[open + 1..close]
+            .lines()
+            .any(|line| line.trim_start().starts_with(&key));
+        if !already {
+            // Before the line holding the closing brace, indented one level in.
+            let line_start = out[..close].rfind('\n').map(|n| n + 1).unwrap_or(close);
+            let indent: String = out[line_start..close]
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .collect();
+            out.insert_str(line_start, &format!("{indent}\t{key}\t\t\"{size}\"\n"));
+            changed = true;
+        }
+    }
+
+    changed.then_some(out)
+}
+
+/// Apply [`move_app_entry`] to every `libraryfolders.vdf`, backing each up first.
+pub fn record_moved_app(
+    steam_root: &Path,
+    app_id: &str,
+    from: &Path,
+    to: &Path,
+    size: u64,
+) -> Result<bool, LibraryError> {
+    if steam_is_running() {
+        return Err(LibraryError::SteamRunning);
+    }
+    let (from, to) = (from.to_string_lossy(), to.to_string_lossy());
+    let mut changed = false;
+    for vdf in library_files(steam_root) {
+        let text = std::fs::read_to_string(&vdf)
+            .map_err(|e| LibraryError::Io(format!("{}: {e}", vdf.display())))?;
+        let Some(updated) = move_app_entry(&text, app_id, &from, &to, size) else {
+            continue;
+        };
+        let backup = vdf.with_extension("vdf.bak-cartridge");
+        if !backup.exists() {
+            std::fs::copy(&vdf, &backup).map_err(|e| {
+                LibraryError::Io(format!("could not back up {}: {e}", vdf.display()))
+            })?;
+        }
+        std::fs::write(&vdf, updated)
+            .map_err(|e| LibraryError::Io(format!("could not write {}: {e}", vdf.display())))?;
+        changed = true;
+    }
+    Ok(changed)
+}
+
+/// The library folder a Steam install belongs to: `…/steamapps/common/<dir>`
+/// gives `…`, and anything not shaped like that gives `None`.
+///
+/// This is the guard in front of a delete, so it is strict. The manifest has to
+/// sit in the same `steamapps`, and the install directory has to be a single
+/// component directly under `common` — a manifest whose `installdir` walked
+/// anywhere else would otherwise name something that is not a game.
+pub fn library_of_install(game: &InstalledGame) -> Option<PathBuf> {
+    let dir = game.install_path.file_name()?.to_str()?;
+    if dir.is_empty() || dir == "." || dir == ".." {
+        return None;
+    }
+    let common = game.install_path.parent()?;
+    if !common.file_name()?.eq_ignore_ascii_case("common") {
+        return None;
+    }
+    let steamapps = common.parent()?;
+    if !steamapps.file_name()?.eq_ignore_ascii_case("steamapps") {
+        return None;
+    }
+    if game.manifest_path.parent()? != steamapps {
+        return None;
+    }
+    steamapps.parent().map(Path::to_path_buf)
 }
 
 /// Whether Steam is currently running.
@@ -1127,5 +1318,114 @@ mod unregister_tests {
         assert_eq!(library_paths_in(&added).len(), 4);
         let removed = remove_library_entry(&added, "/run/media/harry/HOLLOW").unwrap();
         assert_eq!(library_paths_in(&removed), library_paths_in(TWO));
+    }
+
+    /// Apps named by id under whichever library holds them.
+    fn apps_of(text: &str, library: &str) -> Vec<String> {
+        let (open, close) = apps_block(text, library).expect("library has an apps block");
+        steam::parse_keyvalues(&format!("\"apps\"\n{}", &text[open..=close]))
+            .get("apps")
+            .map(|apps| apps.entries().iter().map(|(k, _)| k.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_moved_app_leaves_its_old_library_and_joins_the_cartridge() {
+        let out = move_app_entry(
+            TWO,
+            "367520",
+            "/home/harry/.local/share/Steam",
+            "/run/media/harry/CINDER",
+            9_106_886_656,
+        )
+        .expect("changed");
+        assert!(
+            apps_of(&out, "/home/harry/.local/share/Steam").is_empty(),
+            "{out}"
+        );
+        assert_eq!(apps_of(&out, "/run/media/harry/CINDER"), vec!["367520"]);
+        assert_eq!(apps_of(&out, "/mnt/games/SteamLibrary"), vec!["1145360"]);
+        // Still one well-formed file with three libraries in it.
+        assert_eq!(library_paths_in(&out), library_paths_in(TWO));
+        assert!(out.contains("\"367520\"\t\t\"9106886656\""), "{out}");
+    }
+
+    #[test]
+    fn digits_that_are_values_are_not_mistaken_for_entry_keys() {
+        // The shape of this host's real file: "0" and "3" appear as values
+        // before the entries that use them as keys.
+        // Backslashes escaped the way Steam writes them.
+        let text = r#"
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"F:\\Games\\Steam"
+		"totalsize"		"0"
+		"update_clean_bytes_tally"		"3"
+		"apps"
+		{
+			"212680"		"286586003"
+		}
+	}
+	"1"
+	{
+		"path"		"D:\\SteamLibrary"
+		"label"		"PC GamePak"
+		"apps"
+		{
+		}
+	}
+}
+"#;
+        let (from, to) = (r"F:\Games\Steam", r"D:\SteamLibrary");
+        let out = move_app_entry(text, "212680", from, to, 287_269_333).expect("changed");
+        assert!(apps_of(&out, from).is_empty(), "{out}");
+        assert_eq!(apps_of(&out, to), vec!["212680"]);
+        assert!(out.contains("\t\t\t\"212680\"\t\t\"287269333\"\n"), "{out}");
+        // Moving it again changes nothing.
+        assert_eq!(move_app_entry(&out, "212680", from, to, 1), None);
+    }
+
+    #[test]
+    fn only_a_real_steam_install_has_a_library_to_delete_from() {
+        let game = |install: &str, manifest: &str| InstalledGame {
+            app_id: "212680".into(),
+            name: "FTL".into(),
+            install_path: PathBuf::from(install),
+            manifest_path: PathBuf::from(manifest),
+            size_on_disk: 0,
+        };
+        assert_eq!(
+            library_of_install(&game(
+                "/games/Steam/steamapps/common/FTL",
+                "/games/Steam/steamapps/appmanifest_212680.acf"
+            )),
+            Some(PathBuf::from("/games/Steam"))
+        );
+        // Not under common.
+        assert_eq!(
+            library_of_install(&game(
+                "/games/Steam/steamapps/FTL",
+                "/games/Steam/steamapps/appmanifest_212680.acf"
+            )),
+            None
+        );
+        // The manifest belongs to some other library.
+        assert_eq!(
+            library_of_install(&game(
+                "/games/Steam/steamapps/common/FTL",
+                "/elsewhere/steamapps/appmanifest_212680.acf"
+            )),
+            None
+        );
+        // `common` itself, which would be every game in the library.
+        assert_eq!(
+            library_of_install(&game(
+                "/games/Steam/steamapps/common",
+                "/games/Steam/steamapps/appmanifest_212680.acf"
+            )),
+            None
+        );
     }
 }
