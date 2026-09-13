@@ -6,7 +6,11 @@
 //   pc-gamepak --create          the create-cartridge wizard
 //
 // Exactly one window is built, so the wizard costs nothing when a cartridge is
-// inserted and the popup costs nothing while making one.
+// inserted and the popup costs nothing while making one. And two with none at
+// all, for front-ends that have their own buttons (see headless.rs):
+//
+//   pc-gamepak --drive <path> --play <n>              play, stay up while it runs
+//   pc-gamepak --drive <path> --safe-eject [--force]  eject, report on stdout
 //
 // Launcher commands:
 //   drive_path()                             -> String
@@ -68,6 +72,8 @@
 // confines to the cartridge itself.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod headless;
 
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
@@ -953,6 +959,10 @@ fn unmount(drive_path: &str) -> Result<(), String> {
             "This cartridge is not on a removable drive, so there is nothing to eject.".to_string(),
         );
     }
+
+    // A `--play` still watching this drive closes its session now, while the
+    // volume is there to write it to, and gets out of the way of the saves.
+    headless::stop_players(drive_path);
 
     // Before the drive goes. This is the only moment a linked save can be
     // turned back into a real directory, and the last moment a copied one can
@@ -2095,6 +2105,25 @@ fn main() {
     if let Some(index) = args.iter().position(|arg| arg == "--eject") {
         let drive = args.get(index + 1).cloned().unwrap_or_default();
         std::process::exit(run_elevated_eject(&drive) as i32);
+    }
+
+    // Play and Eject for a front-end with its own buttons. Before the insert
+    // reaction, which is about a cartridge arriving and not about being asked.
+    let play = headless::play_index(&args);
+    if play.is_some() || headless::wants_safe_eject(&args) {
+        let drive = cartridge::drive_from_args(args.iter().cloned());
+        if drive.is_empty() {
+            eprintln!("--play and --safe-eject need --drive");
+            std::process::exit(1);
+        }
+        std::process::exit(match play {
+            Some(Ok(index)) => headless::play(&drive, index),
+            Some(Err(why)) => {
+                eprintln!("{why}");
+                1
+            }
+            None => headless::safe_eject(&drive, args.iter().any(|arg| arg == "--force")),
+        });
     }
     let settings = args.iter().any(|arg| arg == "--settings");
     let wizard = settings || args.iter().any(|arg| arg == "--create");
