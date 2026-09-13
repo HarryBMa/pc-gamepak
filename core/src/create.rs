@@ -1965,8 +1965,18 @@ fn copy_steam_game(
         return Err(steamlib::LibraryError::SteamRunning.to_string());
     }
 
-    let game = steamlib::locate(&steam_root, app_id)
-        .ok_or_else(|| steamlib::LibraryError::GameNotFound(request.title.clone()).to_string())?;
+    // Never the cartridge's own copy: see `locate_off`.
+    let game = steamlib::locate_off(&steam_root, app_id, root).ok_or_else(|| {
+        if steamlib::locate(&steam_root, app_id).is_some() {
+            format!(
+                "the only copy of {} Steam knows about is the one on this cartridge, so there \
+                 is nothing to copy it from",
+                request.title
+            )
+        } else {
+            steamlib::LibraryError::GameNotFound(request.title.clone()).to_string()
+        }
+    })?;
 
     // Measured, not taken from the manifest. `SizeOnDisk` is what Steam last
     // recorded, and it drifts from what is really there: FTL's says 286,586,003
@@ -2084,13 +2094,15 @@ pub fn move_plan(request: &CartridgeRequest) -> Vec<String> {
     games
         .into_iter()
         .filter(|(id, _)| is_numeric(id))
-        .map(|(id, title)| match steamlib::locate(&steam_root, &id) {
-            Some(game) => format!(
-                "delete {} ({}) once the cartridge verifies",
-                game.install_path.display(),
-                format::human_bytes(steamlib::tree_size(&game.install_path))
-            ),
-            None => format!("{title}: Steam has no install of app {id} to delete"),
+        .map(|(id, title)| {
+            match steamlib::locate_off(&steam_root, &id, Path::new(&request.drive_path)) {
+                Some(game) => format!(
+                    "delete {} ({}) once the cartridge verifies",
+                    game.install_path.display(),
+                    format::human_bytes(steamlib::tree_size(&game.install_path))
+                ),
+                None => format!("{title}: Steam has no install of app {id} to delete"),
+            }
         })
         .collect()
 }

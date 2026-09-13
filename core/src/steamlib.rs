@@ -64,7 +64,29 @@ pub struct InstalledGame {
 
 /// Find where Steam actually installed an app, across every library folder.
 pub fn locate(steam_root: &Path, app_id: &str) -> Option<InstalledGame> {
-    for library in steam::library_paths(steam_root) {
+    locate_in(steam::library_paths(steam_root), app_id)
+}
+
+/// Find an install of an app that is not on `drive`.
+///
+/// The copy source when writing a cartridge. A cartridge is itself a Steam
+/// library, so rewriting one whose game Steam already lists there would find
+/// the cartridge's own copy — and copy it onto itself — whenever that library
+/// comes first in Steam's list. `None` when the cartridge holds the only copy.
+pub fn locate_off(steam_root: &Path, app_id: &str, drive: &Path) -> Option<InstalledGame> {
+    let canonical =
+        |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let drive = canonical(drive);
+    locate_in(
+        steam::library_paths(steam_root)
+            .into_iter()
+            .filter(|library| !canonical(library).starts_with(&drive)),
+        app_id,
+    )
+}
+
+fn locate_in(libraries: impl IntoIterator<Item = PathBuf>, app_id: &str) -> Option<InstalledGame> {
+    for library in libraries {
         let manifest_path = library.join(format!("appmanifest_{app_id}.acf"));
         let Ok(text) = std::fs::read_to_string(&manifest_path) else {
             continue;
@@ -1188,6 +1210,42 @@ mod tests {
         );
 
         assert_eq!(locate(scratch.path(), "999999"), None);
+    }
+
+    #[test]
+    fn the_copy_source_is_never_the_cartridge_it_is_copied_to() {
+        // The cartridge is listed first, the way a freshly registered one can
+        // be, and both it and the PC hold the game.
+        let scratch = crate::testutil::Scratch::new("locate-off");
+        let cart = scratch.join("CART");
+        let pc = scratch.join("pc");
+        let manifest = r#""AppState" { "appid" "212680" "name" "FTL"
+            "installdir" "FTL" "StateFlags" "4" }"#;
+        for library in [cart.join("SteamLibrary"), pc.clone()] {
+            std::fs::create_dir_all(library.join("steamapps/common/FTL")).unwrap();
+            std::fs::write(library.join("steamapps/appmanifest_212680.acf"), manifest).unwrap();
+        }
+        std::fs::create_dir_all(scratch.join("steamapps")).unwrap();
+        std::fs::write(
+            scratch.join("steamapps/libraryfolders.vdf"),
+            format!(
+                "\"libraryfolders\" {{ \"0\" {{ \"path\" \"{}\" }} \"1\" {{ \"path\" \"{}\" }} }}",
+                cart.join("SteamLibrary").display(),
+                pc.display()
+            ),
+        )
+        .unwrap();
+
+        assert!(locate(scratch.path(), "212680")
+            .unwrap()
+            .install_path
+            .starts_with(&cart));
+        let source = locate_off(scratch.path(), "212680", &cart).expect("the PC's copy");
+        assert_eq!(source.install_path, pc.join("steamapps/common/FTL"));
+
+        // With the PC's copy gone, the cartridge is all there is: no source.
+        std::fs::remove_dir_all(pc.join("steamapps/common/FTL")).unwrap();
+        assert_eq!(locate_off(scratch.path(), "212680", &cart), None);
     }
 
     #[test]
