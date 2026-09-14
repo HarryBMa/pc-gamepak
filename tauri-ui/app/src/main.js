@@ -110,14 +110,24 @@ function hslToRgb(h, s, l) {
   return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
 }
 
-/** The label contrast of an accent at lightness `l`, with the better ink. */
+/**
+ * The label contrast of an accent at lightness `l`, with the better ink.
+ *
+ * Both inks carry a little of the accent's hue, which is right for a colour and
+ * wrong for a grey: a neutral accent would get a faintly red label from hue 0.
+ * So the inks are tinted exactly as far as the accent is saturated, and any
+ * accent at the sampler's usual saturation or above is inked as it always was.
+ */
 function inkFor(h, s, l) {
+  const tint = Math.min(s / 0.72, 1);
+  const darkSat = 0.22 * tint;
+  const lightSat = 0.12 * tint;
   const accentLum = luminance(...hslToRgb(h, s, l));
-  const dark = contrast(accentLum, luminance(...hslToRgb(h, 0.22, 0.11)));
-  const light = contrast(accentLum, luminance(...hslToRgb(h, 0.12, 0.97)));
+  const dark = contrast(accentLum, luminance(...hslToRgb(h, darkSat, 0.11)));
+  const light = contrast(accentLum, luminance(...hslToRgb(h, lightSat, 0.97)));
   return dark >= light
-    ? { ratio: dark, ink: `hsl(${h.toFixed(0)} 22% 11%)` }
-    : { ratio: light, ink: `hsl(${h.toFixed(0)} 12% 97%)` };
+    ? { ratio: dark, ink: `hsl(${h.toFixed(0)} ${(darkSat * 100).toFixed(0)}% 11%)` }
+    : { ratio: light, ink: `hsl(${h.toFixed(0)} ${(lightSat * 100).toFixed(0)}% 97%)` };
 }
 
 /**
@@ -159,11 +169,63 @@ function setAccent(h, s, preferred) {
 }
 
 /**
+ * How much colour a cover has to carry before its accent may be a colour.
+ *
+ * Measured as the mean per-pixel weight the sampler uses — saturation squared,
+ * so a faint tint over a large area and a vivid speck in a small one both count
+ * for little. Calibrated against 85 real covers from a Steam library cache:
+ * black-and-white art (DayZ, FTL) scores 0, a grey cover with a trace of slate
+ * 0.0025, and the covers a person would call colourful start near 0.02. Below
+ * LOW the accent is neutral, above HIGH it is exactly what it always was, and in
+ * between it fades, so two nearly identical covers cannot land on opposite sides
+ * of a cliff.
+ */
+const COLOUR_LOW = 0.004;
+const COLOUR_HIGH = 0.03;
+
+/** Ten-degree hue bins, and how many either side of a peak count as the same colour: ±30°. */
+const HUE_BINS = 36;
+const HUE_REACH = 3;
+
+/**
+ * A colourless cover's accent: a light grey. Mid grey is what a disabled button
+ * looks like, and black-and-white art is mostly its whites anyway.
+ */
+const NEUTRAL_LIGHTNESS = 0.86;
+
+function setNeutralAccent() {
+  setAccent(0, 0, NEUTRAL_LIGHTNESS);
+}
+
+function smoothstep(edge0, edge1, value) {
+  const t = Math.min(Math.max((value - edge0) / (edge1 - edge0), 0), 1);
+  return t * t * (3 - 2 * t);
+}
+
+/**
  * Pick the colour a person would name if asked to describe the cover.
  *
- * A flat average of any cover is mud, so each pixel is weighted by its own
- * saturation squared, biased toward the lit areas. Hues are summed as vectors
- * so reds either side of 0° do not cancel out.
+ * Each pixel is weighted by its own saturation squared, biased toward the lit
+ * areas, because a flat average of any cover is mud. Two things used to go wrong
+ * after that, and both painted Play orange on art with no orange in it.
+ *
+ * Every hue on the cover was averaged into one, and the average of two colours
+ * is a third: red and yellow made orange, a green background behind a blue and a
+ * purple character made cyan, a red figure among purple and blue ones made
+ * magenta. Now the pixels go into a hue histogram, the 60° window holding the
+ * most weight wins, and only the pixels inside it are averaged, so the answer is
+ * a colour the cover actually contains. The window rather than the tallest single
+ * bin, because a colour family spread over several bins — the reds, oranges and
+ * pinks of one illustration — would otherwise lose to a pale sky that happens to
+ * sit in one. Hues are still summed as vectors inside the window, so reds either
+ * side of 0° do not cancel out.
+ *
+ * And saturation was floored at 0.72 however little colour there was, so a grey
+ * cover with a trace of blue came out vivid azure — while a cover with no colour
+ * at all returned early and kept the stock amber, which is the orange. Now the
+ * amount of colour decides how much the accent is allowed: none gives a neutral
+ * light accent, a trace gives a muted one, and a colourful cover is treated
+ * exactly as before.
  */
 function sampleAccent(img) {
   const SIZE = 48;
@@ -173,23 +235,28 @@ function sampleAccent(img) {
   // Read once, so the CPU-backed canvas that willReadFrequently asks for would
   // cost the draw and buy nothing back.
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  // Neutral, not an early return: returning keeps whatever the previous cover
+  // left, which on a collection is another game's colour.
+  if (!ctx) return setNeutralAccent();
 
   ctx.drawImage(img, 0, 0, SIZE, SIZE);
   let data;
   try {
     data = ctx.getImageData(0, 0, SIZE, SIZE).data;
   } catch {
-    return; // tainted canvas: keep the default accent
+    return setNeutralAccent(); // tainted canvas: the colours cannot be read
   }
 
-  let x = 0;
-  let y = 0;
-  let satSum = 0;
-  let weight = 0;
+  const weights = new Float64Array(HUE_BINS);
+  const xs = new Float64Array(HUE_BINS);
+  const ys = new Float64Array(HUE_BINS);
+  const sats = new Float64Array(HUE_BINS);
+  let opaque = 0;
+  let total = 0;
 
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] < 200) continue;
+    opaque++;
     const r = data[i] / 255;
     const g = data[i + 1] / 255;
     const b = data[i + 2] / 255;
@@ -205,22 +272,52 @@ function sampleAccent(img) {
     if (max === r) h = 60 * (((g - b) / d) % 6);
     else if (max === g) h = 60 * ((b - r) / d + 2);
     else h = 60 * ((r - g) / d + 4);
+    h = ((h % 360) + 360) % 360;
 
     const w = s * s * (0.3 + l);
     const rad = (h * Math.PI) / 180;
-    x += Math.cos(rad) * w;
-    y += Math.sin(rad) * w;
-    satSum += s * w;
-    weight += w;
+    const bin = Math.floor(h / (360 / HUE_BINS)) % HUE_BINS;
+    weights[bin] += w;
+    xs[bin] += Math.cos(rad) * w;
+    ys[bin] += Math.sin(rad) * w;
+    sats[bin] += s * w;
+    total += w;
   }
 
-  if (weight === 0) return; // a greyscale cover keeps the default
+  const strength = smoothstep(COLOUR_LOW, COLOUR_HIGH, opaque ? total / opaque : 0);
+  if (strength === 0) return setNeutralAccent();
+
+  let peak = 0;
+  let heaviest = -1;
+  for (let bin = 0; bin < HUE_BINS; bin++) {
+    let sum = 0;
+    for (let o = -HUE_REACH; o <= HUE_REACH; o++) {
+      sum += weights[(bin + o + HUE_BINS) % HUE_BINS];
+    }
+    if (sum > heaviest) {
+      heaviest = sum;
+      peak = bin;
+    }
+  }
+
+  let x = 0;
+  let y = 0;
+  let satSum = 0;
+  let weight = 0;
+  for (let o = -HUE_REACH; o <= HUE_REACH; o++) {
+    const bin = (peak + o + HUE_BINS) % HUE_BINS;
+    x += xs[bin];
+    y += ys[bin];
+    satSum += sats[bin];
+    weight += weights[bin];
+  }
 
   const hue = (Math.atan2(y, x) * 180) / Math.PI;
   // Floor the saturation and hold the lightness out of the pastel range so the
-  // sampled accent always has enough body to carry a button.
-  const saturation = Math.min(Math.max(satSum / weight, 0.72), 0.9);
-  setAccent(hue, saturation, 0.575);
+  // sampled accent has enough body to carry a button — then scale both by how
+  // much colour there was, so a faint cover gets a faint accent, not a loud one.
+  const saturation = Math.min(Math.max(satSum / weight, 0.72), 0.9) * strength;
+  setAccent(hue, saturation, NEUTRAL_LIGHTNESS + (0.575 - NEUTRAL_LIGHTNESS) * strength);
 }
 
 /* ==========================================================================
