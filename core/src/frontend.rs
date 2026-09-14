@@ -45,8 +45,19 @@ use serde::{Deserialize, Serialize};
 pub const LAUNCHER: &str = "launcher";
 /// The Decky plugin: cartridge games as a row on the Steam home screen.
 pub const DECKY: &str = "decky";
-/// A Playnite extension. Not written yet; named here so the shape is visible.
+/// The Playnite extension: a cartridge slot as the first tile of the library.
 pub const PLAYNITE: &str = "playnite";
+/// The GOG Galaxy 2.0 integration: cartridge games owned once seen, installed
+/// while the cartridge is in.
+pub const GOG_GALAXY: &str = "gog_galaxy";
+/// Heroic Games Launcher, through `pc-gamepak-sync`: cartridge games as sideloads.
+pub const HEROIC: &str = "heroic";
+/// Pegasus Frontend, through `pc-gamepak-sync`: a "PC GamePak" collection.
+pub const PEGASUS: &str = "pegasus";
+/// ES-DE, through `pc-gamepak-sync`: a "PC GamePak" system.
+pub const ESDE: &str = "esde";
+/// LaunchBox and Big Box. Designed, not written; named so the shape is visible.
+pub const LAUNCHBOX: &str = "launchbox";
 
 /// Whether a front-end comes with the project or has to be installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +94,19 @@ pub struct FrontEnd {
 pub fn known() -> Vec<FrontEnd> {
     let decky = decky_path();
     let playnite = playnite_path();
+    let galaxy = galaxy_path();
+    let sync = sync_path();
+    // Heroic, Pegasus and ES-DE have no plugin runtime of their own: one small
+    // program writes their files, so all three are installed when it is.
+    let synced = |id, name, description| FrontEnd {
+        id,
+        name,
+        kind: Kind::Plugin,
+        description,
+        installed: present(&sync),
+        install_path: sync.as_ref().map(|path| path.display().to_string()),
+        implemented: true,
+    };
     vec![
         FrontEnd {
             id: LAUNCHER,
@@ -106,14 +130,97 @@ pub fn known() -> Vec<FrontEnd> {
             id: PLAYNITE,
             name: "Playnite library",
             kind: Kind::Plugin,
-            description: "Cartridge games added to Playnite's library while the drive is in.",
+            description: "A cartridge slot as the first tile in Playnite's library.",
             installed: playnite.as_ref().is_some_and(|path| path.is_dir()),
             install_path: playnite.map(|path| path.display().to_string()),
-            // Nothing is written. Named so the settings dialog can say "not
-            // built yet" rather than silently implying the list is complete.
+            implemented: true,
+        },
+        FrontEnd {
+            id: GOG_GALAXY,
+            name: "GOG Galaxy library",
+            kind: Kind::Plugin,
+            description: "Cartridge games in GOG Galaxy, installed while the cartridge is in.",
+            installed: present(&galaxy),
+            install_path: galaxy.map(|path| path.display().to_string()),
+            implemented: true,
+        },
+        synced(
+            HEROIC,
+            "Heroic Games Launcher",
+            "Cartridge games as sideloaded games in Heroic, through pc-gamepak-sync.",
+        ),
+        synced(
+            PEGASUS,
+            "Pegasus Frontend",
+            "A PC GamePak collection in Pegasus, through pc-gamepak-sync.",
+        ),
+        synced(
+            ESDE,
+            "ES-DE",
+            "A PC GamePak system in ES-DE, through pc-gamepak-sync.",
+        ),
+        FrontEnd {
+            id: LAUNCHBOX,
+            name: "LaunchBox",
+            kind: Kind::Plugin,
+            description: "A cartridge slot in LaunchBox and Big Box.",
+            install_path: None,
+            installed: false,
+            // Designed, not written: LaunchBox's plugin SDK ships only inside a
+            // LaunchBox install. Listed so the dialog says so rather than
+            // implying the list is complete.
             implemented: false,
         },
     ]
+}
+
+fn present(path: &Option<PathBuf>) -> bool {
+    path.as_ref().is_some_and(|path| path.exists())
+}
+
+/// Where the GOG Galaxy integration lives: a folder of Galaxy's own plugins,
+/// named after the release zip's top folder. `PC_GAMEPAK_GALAXY_DIR` overrides.
+fn galaxy_path() -> Option<PathBuf> {
+    if let Some(from_env) = std::env::var_os("PC_GAMEPAK_GALAXY_DIR") {
+        return Some(PathBuf::from(from_env));
+    }
+    if !cfg!(target_os = "windows") {
+        return None; // Galaxy 2.0 integrations are a Windows install here.
+    }
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    Some(
+        PathBuf::from(local)
+            .join("GOG.com")
+            .join("Galaxy")
+            .join("plugins")
+            .join("installed")
+            .join("pc-gamepak-galaxy"),
+    )
+}
+
+/// Where `pc-gamepak-sync` is installed, as its README installs it: beside the
+/// launcher's settings on Windows, under `~/.local/share` elsewhere.
+/// `PC_GAMEPAK_SYNC_PATH` overrides.
+fn sync_path() -> Option<PathBuf> {
+    if let Some(from_env) = std::env::var_os("PC_GAMEPAK_SYNC_PATH") {
+        return Some(PathBuf::from(from_env));
+    }
+    if cfg!(target_os = "windows") {
+        let local = std::env::var_os("LOCALAPPDATA")?;
+        return Some(
+            PathBuf::from(local)
+                .join("PC-GamePak")
+                .join("pc-gamepak-sync.pyz"),
+        );
+    }
+    let home = std::env::var_os("HOME")?;
+    Some(
+        PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("pc-gamepak")
+            .join("pc-gamepak-sync.pyz"),
+    )
 }
 
 /// Where Decky keeps its plugins.
@@ -137,11 +244,12 @@ fn decky_path() -> Option<PathBuf> {
     )
 }
 
-/// Where a Playnite extension would live.
+/// Where the Playnite extension lives.
 ///
 /// Playnite is Windows software, and its extensions sit under the roaming
-/// profile. Returned on other platforms too when the override is set, because
-/// Playnite runs under Proton and the tests have to reach this.
+/// profile in a folder named after the extension's `Id`, which is `PCGamePak`.
+/// Returned on other platforms too when the override is set, because Playnite
+/// runs under Proton and the tests have to reach this.
 fn playnite_path() -> Option<PathBuf> {
     if let Some(from_env) = std::env::var_os("PC_GAMEPAK_PLAYNITE_DIR") {
         return Some(PathBuf::from(from_env));
@@ -328,21 +436,55 @@ mod tests {
     }
 
     #[test]
-    fn the_register_names_the_launcher_first_and_marks_what_is_unbuilt() {
+    fn the_register_names_the_launcher_first_and_lists_every_plugin() {
         let all = known();
         assert_eq!(all[0].id, LAUNCHER);
         assert_eq!(all[0].kind, Kind::BuiltIn);
         assert!(all[0].installed, "the built-in one is always there");
 
-        let playnite = all.iter().find(|f| f.id == PLAYNITE).expect("listed");
+        for id in [DECKY, PLAYNITE, GOG_GALAXY, HEROIC, PEGASUS, ESDE] {
+            let plugin = all.iter().find(|f| f.id == id).expect("listed");
+            assert!(plugin.implemented, "{id}");
+            assert_eq!(plugin.kind, Kind::Plugin, "{id}");
+        }
+
+        let launchbox = all.iter().find(|f| f.id == LAUNCHBOX).expect("listed");
         assert!(
-            !playnite.implemented,
+            !launchbox.implemented,
             "nothing is written; the dialog must not offer a dead switch"
         );
 
-        let decky = all.iter().find(|f| f.id == DECKY).expect("listed");
-        assert!(decky.implemented);
-        assert_eq!(decky.kind, Kind::Plugin);
+        let mut ids: Vec<_> = all.iter().map(|f| f.id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), all.len(), "no id is listed twice");
+    }
+
+    #[test]
+    fn heroic_pegasus_and_esde_are_installed_together_with_the_sync_tool() {
+        // One program writes all three front-ends' files, so one file decides
+        // whether any of their switches can do anything.
+        let scratch = crate::testutil::Scratch::new("frontend-sync");
+        let tool = scratch.join("pc-gamepak-sync.pyz");
+        std::env::set_var("PC_GAMEPAK_SYNC_PATH", &tool);
+
+        let installed = |id| {
+            known()
+                .into_iter()
+                .find(|f| f.id == id)
+                .expect("listed")
+                .installed
+        };
+        for id in [HEROIC, PEGASUS, ESDE] {
+            assert!(!installed(id), "{id} without the sync tool");
+        }
+
+        std::fs::write(&tool, b"zip").expect("write");
+        for id in [HEROIC, PEGASUS, ESDE] {
+            assert!(installed(id), "{id} with the sync tool");
+        }
+
+        std::env::remove_var("PC_GAMEPAK_SYNC_PATH");
     }
 
     #[test]

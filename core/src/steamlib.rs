@@ -248,7 +248,7 @@ fn manifest_ids(steamapps: &Path) -> Vec<String> {
 }
 
 /// The `installdir` a manifest names, which is relative to `common`.
-fn install_dir_in(text: &str) -> Option<String> {
+pub(crate) fn install_dir_in(text: &str) -> Option<String> {
     steam::parse_keyvalues(text)
         .get("AppState")?
         .get("installdir")?

@@ -126,8 +126,18 @@ is a **plugin**, and **Settings → Where a cartridge opens** is the list:
 | | |
 |---|---|
 | **PC GamePak launcher** | The cartridge's own window. Built in, on by default. |
-| **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-decky). |
-| **Playnite library** | Cartridge games in Playnite's library while the drive is in. Not built yet, and listed so the shape is visible. |
+| **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/decky). |
+| **Playnite library** | A cartridge slot as the first tile in Playnite's library: empty with no cartridge in, the cartridge's art with one. Play starts a single game directly and opens this launcher to choose from a collection; the tile's menu ejects. Through the [Playnite extension](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/playnite). |
+| **GOG Galaxy library** | Cartridge games owned in GOG Galaxy once seen, installed while the cartridge is in; Play goes through this launcher. Through the [Galaxy integration](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/gog-galaxy). |
+| **Heroic Games Launcher** | Cartridge games as sideloaded games while the cartridge is in. |
+| **Pegasus Frontend** | A PC GamePak collection of whatever is plugged in. |
+| **ES-DE** | A PC GamePak system of whatever is plugged in. |
+| **LaunchBox** | A cartridge slot in LaunchBox and Big Box. Designed, not built yet; listed so the shape is visible. |
+
+Heroic, Pegasus and ES-DE read files rather than load plugins, so one program,
+[pc-gamepak-sync](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/sync),
+writes all three; each is installed when it is. Every plugin lives in
+[pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins).
 
 A plugin has to be installed before its switch does anything, and the dialog says
 so rather than offering a dead control. More than one may be on: a desktop that
@@ -149,6 +159,39 @@ No socket, no daemon, nothing to keep in step. A plugin reads that file, finds
 whether it is the designated front-end, and behaves accordingly — which is what
 lets one be written in Python inside Steam's process tree and another in C# inside
 Playnite's.
+
+### Play and Eject without the window
+
+A front-end with its own Play button does not have to open the launcher's window
+to get what the window does. Two arguments do it with no window at all:
+
+```
+pc-gamepak --drive D:\ --play 0
+pc-gamepak --drive D:\ --safe-eject [--force]
+```
+
+`--play <n>` plays game *n* — 0 on a single-game cartridge, a collection's games
+in the order `cartridge.conf` lists them. It brings the saves and shader caches
+off the cartridge, counts the launch, starts the game, and **stays running while
+the game does**: a program running from the drive is how it knows — or, for a
+Steam game, a program running from its install folder in any Steam library,
+because Steam may start a second copy of the game instead of the cartridge's.
+When that has
+been gone for fifteen seconds (a game that restarts itself leaves a gap) it closes
+the session and takes the saves and caches back to the cartridge. Whatever started
+it can time that process. Two exceptions: a save that changed on both sides opens
+the window instead, because only the window can ask which to keep; and a cartridge
+that points at a game installed elsewhere has nothing on the drive to watch, so
+the game is started and the session closed at once, as **Start the game** does.
+
+`--play` is a click by another name — it is what the Playnite slot's Play runs —
+so it is not bound by the rule below about starting programs on the cartridge.
+Nothing runs it on insert.
+
+`--safe-eject` is the window's Eject. It prints one word on the first line —
+`ejected`, `busy` or `error` — and lines for a person after it, and exits 0, 2 or
+1 to match. `busy` means a program is running from the drive and nothing was
+done; `--force` closes it first, which is **Force quit and eject**.
 
 ### What the launcher does when you plug one in
 
