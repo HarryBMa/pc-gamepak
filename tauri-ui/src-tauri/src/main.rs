@@ -1581,10 +1581,13 @@ fn get_settings() -> settings::Settings {
 
 /// Store the settings and hand back what was stored, so the window and the file
 /// cannot drift apart.
+///
+/// The front-end switches are kept as they are on disk: the settings form does
+/// not send them, and `set_frontend` is what changes them. See
+/// [`settings::save_form`].
 #[tauri::command]
 fn set_settings(settings: settings::Settings) -> Result<settings::Settings, String> {
-    settings::save(&settings)?;
-    Ok(settings)
+    settings::save_form(settings)
 }
 
 /// How well this cartridge is actually connected.
