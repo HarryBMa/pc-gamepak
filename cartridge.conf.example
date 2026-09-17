@@ -30,6 +30,29 @@
 #   If omitted, the launcher looks for cover.png, cover.jpg, poster.png or box.png
 #   at the root.
 #
+# description  (optional)
+#   A sentence or two about the game, shown under the title. Text only — it is
+#   printed as text, never as markup. Kept to 600 characters; how many of those
+#   lines are visible is the skin's business, and the stock window shows three.
+#
+# genre, publisher, year  (optional)
+#   Printed as one line: "Sega · Platformer · 1991". Any of the three may be
+#   left out and the separators close up. A few words each, at most.
+#
+# screenshot  (optional, repeatable, up to 4)
+#   A picture of the game, relative to this file, shown as a row of thumbnails.
+#   Same rules as `cover` — must stay on the cartridge, and capped at 2 MB each,
+#   which is smaller than a cover's 8 MB because these are thumbnails. A path
+#   that is not there is skipped rather than substituted, so a typo costs you
+#   one thumbnail rather than printing the cover four times.
+#
+#     screenshot=shots/green-hill.jpg
+#     screenshot=shots/marble.jpg
+#
+#   None of these five keys is required, and a cartridge that omits them looks
+#   exactly as it did before they existed: the window hides what it has nothing
+#   for.
+#
 # save  (optional, repeatable)
 #   Where this game keeps its saves on the host, so they can travel with the
 #   cartridge. Written as
@@ -134,6 +157,12 @@
 executable=steam://rungameid/1091500
 title=Cyberpunk 2077
 cover=cover.jpg
+description=Night City is a place to be somebody. V takes a job that goes wrong and ends up sharing a skull with a dead rockstar.
+genre=Action RPG
+publisher=CD Projekt Red
+year=2020
+screenshot=shots/night-city.jpg
+screenshot=shots/badlands.jpg
 save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
 
 # ----- A carried game, which needs no save line at all -----

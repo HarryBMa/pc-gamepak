@@ -122,15 +122,29 @@ layers below are for.
     │   ├── #game-list          the rail. One .game-row per game
     │   ├── #title-logo         printed instead of the title when there is one
     │   ├── #game-title
+    │   ├── #game-byline        publisher · genre · year, when the cartridge says
+    │   ├── #game-description   a sentence or two, when the cartridge says
+    │   ├── #screenshots        up to four <li> > <img>, when the cartridge says
     │   ├── #notice             why Play is disabled, when it is
     │   └── #button-row
     │       ├── #play-ring > #btn-play    .btn.btn--play — the ring is the
     │       │                            flex child and is flex: 1, so set
     │       │                            #play-ring, not .btn--play, to size it
+    │       ├── #btn-settings             .btn.btn--eject.btn--settings
     │       └── #btn-eject                .btn.btn--eject, carries .pad-badge
     ├── #sheet                  the ⓘ panel
     └── #toast
 ```
+
+**The three descriptive elements are hidden unless the cartridge fills them in**,
+which most do not: `description=`, `genre=`, `publisher=`, `year=` and
+`screenshot=` are all optional. Style them as though they are there, and they
+will be when a cartridge has something to say. Nothing about a skin written
+before they existed changes.
+
+`#btn-settings` carries `.btn--eject` as well as its own class, which is what
+makes it arrive already looking like the skin it is in. Give it `.btn--settings`
+rules to tell the two apart, or `display: none` to leave the row as it was.
 
 A row in `#game-list`, built at runtime:
 
@@ -225,6 +239,20 @@ Defined in `tokens.css`. Redefine on `:root`.
 `--accent` is re-sampled from each cover at load. A skin whose palette is painted
 rather than printed — a CRT's front panel, a HUD — should set it and mean it.
 
+Two more the descriptive elements read:
+
+```
+--description-lines           how many lines of prose fit. 3 by default
+--byline-size                 the publisher · genre · year line
+--shot-radius                 the screenshot thumbnails' corner
+```
+
+`--description-lines` is the one that matters. Core caps a description at 600
+characters so a cartridge cannot put a novel in the window; how much of that is
+*visible* is yours. A wide skin raises it; a skin with no room for prose hides
+`#game-description` outright, which is tidier than clamping it to nothing and
+leaving its margin behind.
+
 ---
 
 ## What is not allowed
@@ -302,6 +330,10 @@ python -m http.server 8731        # from the repository root
 - `localhost:8731/tauri-ui/app/index.html?drive=D:\` — one game
 - `…&state=bundle` — a collection
 - `…&state=noexec` — a cartridge with nothing to play
+- `…&state=described` — a cartridge that fills in `description=`, `genre=`,
+  `publisher=`, `year=` and four `screenshot=` lines. The plain state above
+  leaves all of them out, which is what almost every cartridge does, so judge a
+  skin against both
 - `…&skin=retro` — hands the launcher `docs/skins/retro.css` as if the cartridge
   were carrying it, which is the same path a real one takes
 

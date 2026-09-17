@@ -442,6 +442,74 @@ body.is-gamepad .pad-badge {
   --auto-title-leading: 0.96;
 }
 
+/* ---- What the cartridge says about the game ----------------------------
+   All three are hidden by the window when the cartridge says nothing, which
+   is every cartridge written before these keys existed. The rules below only
+   describe how they look when they are there.
+
+   How *much* of the description is visible is a skin's decision, not this
+   file's: core caps the text at 600 characters so a cartridge cannot put a
+   novel in the DOM, and the clamp here decides how many of those lines fit the
+   stock window. A skin with a wider window raises `--description-lines`; one
+   with no room for prose hides `#game-description` outright, which is cleaner
+   than clamping it to zero lines and leaving its margin behind. */
+#game-byline {
+  margin: 8px 0 0;
+  font-size: var(--byline-size, 12px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--ink) 62%, transparent);
+}
+
+#game-description {
+  margin: 10px 0 0;
+  font-size: var(--text);
+  line-height: 1.5;
+  color: color-mix(in oklch, var(--ink) 80%, transparent);
+  /* The two-value form is not yet everywhere the launcher runs, so this is the
+     prefixed box clamp — which is the one both webviews implement. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--description-lines, 3);
+  overflow: hidden;
+}
+
+#screenshots {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The same rule the cover needs above, for the same reason: `display` on an id
+   selector beats the browser's [hidden] rule, so the two elements that set one
+   would still lay out when the cartridge gave them nothing — at no height, but
+   with their margins intact. That was 22px of drift on every cartridge using
+   none of these keys, which is nearly all of them, in all fifteen skins.
+
+   Written per element rather than as a blanket `[hidden]` override, because
+   `#sheet[hidden]` deliberately stays in the layout so it can animate. */
+#game-description[hidden],
+#screenshots[hidden] {
+  display: none;
+}
+
+#screenshots li {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+#screenshots img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--shot-radius, 4px);
+  border: 1px solid oklch(1 0 0 / 0.12);
+}
+
 /* Shown only when something is stopping Play from working. */
 #notice {
   margin: 12px 0 0;

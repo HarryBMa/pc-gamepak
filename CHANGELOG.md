@@ -44,6 +44,28 @@ A side effect: cartridges are now named `God of War Ragnarok` rather than
 truncated to eleven characters, because the volume label limit follows the
 filesystem.
 
+### A cartridge can say more than its name
+
+Five optional keys — `description=`, `genre=`, `publisher=`, `year=` and
+`screenshot=`, the last repeatable up to four times. The window prints them
+under the title and hides whatever the cartridge leaves out, which is all of it
+for every cartridge made before now.
+
+This is the piece the skins were missing. A skin could arrange a title and a
+picture because a title and a picture were all there was; the shelf of console
+looks people actually want — a byline, a blurb, a row of screenshots in a
+plastic bezel — needed the window to have those things in it first, because a
+skin is CSS and CSS cannot add markup.
+
+Descriptions are capped at 600 characters so a cartridge cannot put a novel in
+the window, and how many of those lines are *visible* is the skin's to set with
+`--description-lines`. Screenshots are capped at 2 MB each and a path that is
+not there is skipped rather than replaced with the cover.
+
+Settings is now a button in the launcher too. It had no way in from a cartridge
+in the slot, which is exactly the moment somebody wants to change what happens
+on insert.
+
 ### Saves travel with the cartridge
 
 Two mechanisms, and which one applies depends on whether the cartridge carries

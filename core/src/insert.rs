@@ -228,6 +228,7 @@ mod tests {
         GameEntry {
             title: title.to_string(),
             executable: executable.to_string(),
+            meta: Default::default(),
             cover: String::new(),
             cover_path: String::new(),
             background: String::new(),
@@ -243,6 +244,7 @@ mod tests {
         CartridgeInfo {
             title: title.to_string(),
             executable: executable.to_string(),
+            meta: Default::default(),
             cover_path: String::new(),
             cover: String::new(),
             background: String::new(),

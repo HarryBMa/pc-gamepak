@@ -49,6 +49,10 @@ const el = {
   titleLogo: document.getElementById("title-logo"),
   cartMark: document.getElementById("cart-mark"),
   title: document.getElementById("game-title"),
+  byline: document.getElementById("game-byline"),
+  description: document.getElementById("game-description"),
+  screenshots: document.getElementById("screenshots"),
+  settings: document.getElementById("btn-settings"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
   play: document.getElementById("btn-play"),
@@ -1058,6 +1062,48 @@ function setGameTitle(title) {
 }
 
 /**
+ * Print what the cartridge says about the game, and hide whatever it does not.
+ *
+ * Every field is optional and most cartridges have none of them, so the normal
+ * outcome here is three hidden elements and a window that looks exactly as it
+ * did before any of this existed.
+ *
+ * `textContent`, never `innerHTML`: this is text out of a file on a volume
+ * somebody else may have written, and the one thing it must not be able to do
+ * is bring markup with it.
+ *
+ * On a collection each game carries its own set, so this is repointed on every
+ * pick, the same way the title is.
+ */
+function setGameMeta(game) {
+  const meta = game?.meta ?? {};
+
+  const byline = meta.byline ?? "";
+  el.byline.hidden = byline === "";
+  el.byline.textContent = byline;
+
+  const description = meta.description ?? "";
+  el.description.hidden = description === "";
+  el.description.textContent = description;
+
+  // Rebuilt rather than reordered: the list is at most four items, and a
+  // collection changes all of them at once when the pick moves.
+  const shots = Array.isArray(meta.screenshots) ? meta.screenshots : [];
+  el.screenshots.replaceChildren();
+  el.screenshots.hidden = shots.length === 0;
+  for (const shot of shots) {
+    const item = document.createElement("li");
+    const img = document.createElement("img");
+    img.src = shot;
+    // Decorative: the game is already named above, and a screenshot of it has
+    // nothing to add that a screen reader could use.
+    img.alt = "";
+    item.append(img);
+    el.screenshots.append(item);
+  }
+}
+
+/**
  * Print the cartridge's mark and the name under it.
  *
  * `logoOf` is what separates a single game from a collection. A single game's
@@ -1084,6 +1130,11 @@ function setGameTitle(title) {
 function renderLogo() {
   const game = currentGame();
   const collected = isCollection();
+
+  // Called from here because this already runs on every pick, and what the
+  // cartridge says about a game has to follow the rail exactly as the logo and
+  // the title do.
+  setGameMeta(game);
   const mode = getComputedStyle(document.documentElement)
     .getPropertyValue("--skin-logo")
     .trim();
@@ -1609,6 +1660,17 @@ el.openWizard.addEventListener("click", async () => {
   }
 });
 
+// Straight to the settings half of the wizard, rather than to its front door.
+// Somebody pressing this has a cartridge in the slot and a setting in mind.
+el.settings.addEventListener("click", async () => {
+  try {
+    await invoke("open_wizard_settings");
+  } catch (error) {
+    console.error(error);
+    toast("Could not open Settings.", true);
+  }
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   const sheetOpen = el.sheet.classList.contains("is-open");
@@ -1710,6 +1772,22 @@ async function demoSkinCss() {
   }
 }
 
+/**
+ * Stand in for what `core::meta` sends, for the preview harness.
+ *
+ * The byline arrives prebuilt from Rust rather than assembled in the window, so
+ * this takes it the same way rather than taking three fields and joining them —
+ * a preview that built the line itself could not show the line being wrong.
+ */
+function demoMeta(description, byline, shots = 4) {
+  return {
+    description,
+    byline,
+    screenshots: Array.from({ length: shots }, () => "src/demo/cover.jpg"),
+    screenshotPaths: [],
+  };
+}
+
 async function demoInvoke(command, args) {
   const state = new URLSearchParams(location.search).get("state");
   switch (command) {
@@ -1738,6 +1816,13 @@ async function demoInvoke(command, args) {
               icon: "src/demo/cover.jpg",
               cover_path: "",
               sizeBytes: 64_200_000_000,
+              // Different on each game on purpose: the descriptive elements
+              // follow the rail, and there is no way to see that they do if
+              // both games say the same thing.
+              meta: demoMeta(
+                "Kratos and his son Atreus carry his wife's ashes to the highest peak in the realms.",
+                "Sony · Action · 2018",
+              ),
             },
             {
               title: "God of War: Ragnarök",
@@ -1748,6 +1833,10 @@ async function demoInvoke(command, args) {
               icon: "src/demo/cover.jpg",
               cover_path: "",
               sizeBytes: 44_700_000_000,
+              meta: demoMeta(
+                "Fimbulwinter is ending. Kratos and Atreus travel the Nine Realms as Ragnarök closes in.",
+                "Sony · Action · 2022",
+              ),
             },
           ],
         };
@@ -1764,6 +1853,17 @@ async function demoInvoke(command, args) {
         is_bundle: false,
         holds_game: true,
         games: [],
+        // Only under `&state=described`. The plain preview stays bare on
+        // purpose: it is what the overwhelming majority of cartridges are, and
+        // a skin has to be judged against one that says nothing as well as one
+        // that says everything.
+        meta:
+          state === "described"
+            ? demoMeta(
+                "A locksmith's apprentice inherits a house that remembers every door it has ever had, and every door it was told to forget.",
+                "Hearthfire · Adventure · 2024",
+              )
+            : undefined,
       };
     case "can_eject":
       // A cartridge on a fixed path has no drive to unmount, so the button

@@ -13,6 +13,8 @@ use serde::Serialize;
 pub struct GameEntry {
     pub title: String,
     pub executable: String,
+    /// What this game's own `[game]` section says about it.
+    pub meta: crate::meta::Meta,
     /// Cover as a `data:` URI, or empty string if none.
     pub cover: String,
     /// Absolute path to the cover image, or empty string.
@@ -87,6 +89,10 @@ pub struct CartridgeInfo {
     /// over as a `data:` URI — the window never opens a path on the drive, so
     /// there is one place that decides what a cartridge may be read for.
     pub skin_css: String,
+
+    /// What the cartridge says about itself beyond its name. Empty for every
+    /// cartridge written before these keys existed.
+    pub meta: crate::meta::Meta,
 }
 
 /// A stylesheet the cartridge carries, if it has one and it is not absurd.
@@ -230,6 +236,9 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
 
         let ini = parse_ini(&content);
         let game_sections = parse_game_sections(&content);
+        // Scanned from the text rather than taken from the maps above, because
+        // `screenshot=` repeats and a map keeps one value per key.
+        let (outer_meta, game_meta) = crate::meta::read(root, &content);
 
         // ---- Bundle format: one or more [game] sections ----
         if !game_sections.is_empty() {
@@ -253,7 +262,8 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
 
             let games: Vec<GameEntry> = game_sections
                 .iter()
-                .map(|g| {
+                .enumerate()
+                .map(|(index, g)| {
                     let game_title = g
                         .get("title")
                         .cloned()
@@ -276,6 +286,11 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                     GameEntry {
                         title: game_title,
                         executable: game_exec,
+                        // Both lists come from the same pass over the same
+                        // sections in the same order, so the index matches —
+                        // but a cartridge that somehow produced fewer gets an
+                        // empty set rather than a panic.
+                        meta: game_meta.get(index).cloned().unwrap_or_default(),
                         cover: cover_as_data_uri(&cover_path),
                         cover_path,
                         background: cover_as_data_uri(&background_path),
@@ -311,6 +326,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 is_bundle: true,
                 games,
                 skin_css: skin_css(root),
+                meta: outer_meta,
             });
         }
 
@@ -359,6 +375,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             is_bundle: false,
             games: Vec::new(),
             skin_css: skin_css(root),
+            meta: outer_meta,
         });
     }
 
@@ -404,6 +421,10 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             is_bundle: false,
             skin_css: skin_css(root),
             games: Vec::new(),
+            // An autorun.inf has no descriptive keys and never will: it is a
+            // Windows format from before any of this, read here only so a drive
+            // that has one still opens.
+            meta: crate::meta::Meta::default(),
         });
     }
 
@@ -430,7 +451,7 @@ pub fn resolve_cover(root: &Path, rel: &str) -> String {
 /// `cover=` comes out of a file on a volume someone else may have written, so
 /// `..\..\Users\me\.ssh\id_rsa` has to be rejected rather than read and handed
 /// to the webview.
-fn join_within(root: &Path, rel: &str) -> Option<PathBuf> {
+pub(crate) fn join_within(root: &Path, rel: &str) -> Option<PathBuf> {
     use std::path::Component;
 
     let candidate = Path::new(rel);

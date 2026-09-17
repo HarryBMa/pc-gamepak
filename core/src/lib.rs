@@ -24,6 +24,7 @@ pub mod frontend;
 pub mod health;
 pub mod home;
 pub mod insert;
+pub mod meta;
 pub mod notify;
 pub mod playnite;
 pub mod portable;

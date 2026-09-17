@@ -107,6 +107,21 @@
         <img id="title-logo" alt="" hidden />
         <h1 id="game-title">Reading cartridge…</h1>
 
+        <!--
+          What the cartridge says about the game, beyond its name. Every one of
+          these is hidden when the cartridge is silent, which is every cartridge
+          written before `description=`, `genre=`, `publisher=`, `year=` and
+          `screenshot=` existed — so an old cartridge shows exactly what it
+          showed before, and a skin written against the old window is unaffected.
+
+          They are here rather than in the details sheet because a skin cannot
+          add markup: an element that only exists on cartridges that use it is
+          an element no skin can lay out in advance.
+        -->
+        <p id="game-byline" hidden></p>
+        <p id="game-description" hidden></p>
+        <ul id="screenshots" hidden aria-label="Screenshots"></ul>
+
         <!-- The only explanation of why Play is disabled, so it is announced. -->
         <p id="notice" role="status" hidden></p>
 
@@ -122,6 +137,28 @@
               <span class="btn__sweep" aria-hidden="true"></span>
             </button>
           </span>
+          <!--
+            Settings had no way in from the launcher at all: the wizard owned it,
+            and a cartridge in the slot is exactly when somebody wants to change
+            what happens on insert. A peer of Eject rather than an icon in the
+            chrome, because the chrome only appears under the pointer and this
+            is not a pointer-only action.
+
+            It carries `btn--eject` as well as its own class on purpose: all
+            fifteen shipped skins style `.btn--eject` and none of them has ever
+            heard of this button, so borrowing that class is what makes it
+            arrive already looking like the skin it is in. `btn--settings` is
+            there for a skin that wants to tell the two apart.
+          -->
+          <button id="btn-settings" class="btn btn--eject btn--settings" type="button"
+                  aria-label="Settings" title="Settings">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
+                 aria-hidden="true">
+              <circle cx="8" cy="8" r="2.4" />
+              <path d="M8 1.6v1.6M8 12.8v1.6M14.4 8h-1.6M3.2 8H1.6M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5" />
+            </svg>
+          </button>
           <button id="btn-eject" class="btn btn--eject" type="button" disabled
                   aria-label="Eject" title="Eject — E">
             <!-- Eject has its own face button, like the other three. -->
