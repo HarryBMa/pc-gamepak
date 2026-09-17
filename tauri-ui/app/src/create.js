@@ -201,6 +201,7 @@ const el = {
   onInsertHint: $("on-insert-hint"),
   setPlaytime: $("set-playtime"),
   setSaveSync: $("set-save-sync"),
+  setSounds: $("set-sounds"),
   settingsSave: $("settings-save"),
   settingsStatus: $("settings-status"),
 
@@ -2247,6 +2248,7 @@ function applySettings() {
   el.setPlaytime.checked = settings.trackPlaytime !== false;
   // Off unless it has been switched on: it writes to the user's home.
   el.setSaveSync.checked = Boolean(settings.saveSync);
+  el.setSounds.checked = settings.sounds !== false;
   // Tuning edits Defender and Search, which exist on one platform.
   el.setTuneRow.hidden = platform !== "windows";
   el.tuneNow.hidden = platform !== "windows";
@@ -2404,6 +2406,7 @@ async function saveSettings() {
         onCartridgeInsert: el.setOnInsert.value,
         trackPlaytime: el.setPlaytime.checked,
         saveSync: el.setSaveSync.checked,
+        sounds: el.setSounds.checked,
         gameFolderRoots: settings.gameFolderRoots ?? [],
       },
     });

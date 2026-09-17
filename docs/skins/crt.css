@@ -1,0 +1,238 @@
+/* ==========================================================================
+   CRT — a television on the carpet
+
+   The whole window is a wood-and-plastic TV: a thick bezel, a curved glass
+   screen with scanlines rolling over it, and a column of knobs on the right.
+   The game's details sit on the glass, over the art.
+
+   Sound: crt. Moments: the tube warms up from a bright line, the screen
+   flickers faintly while it sits, launch collapses the picture to a dot the
+   way a set being switched off does.
+   ========================================================================== */
+
+:root {
+  --skin-width: 860;
+  --skin-height: 640;
+  --skin-art: hero;
+  --skin-logo: none;
+  --skin-sound: crt;
+  --description-lines: 3;
+  --shot-radius: 3px;
+
+  --crt-body: #1b1b1d;
+  --crt-green: #3dff8b;
+  --ink: #f1f5f0;
+  --radius: 22px;
+}
+
+#card {
+  background:
+    radial-gradient(120% 90% at 50% 0%, #2a2a2e 0%, var(--crt-body) 60%),
+    var(--crt-body);
+}
+
+/* The glass. Inset from the bezel on three sides and more on the right, where
+   the knobs are. */
+#plate {
+  inset: 34px 128px 34px 34px;
+  border-radius: 38px / 30px;
+  box-shadow:
+    inset 0 0 0 2px #000,
+    0 0 0 12px #0c0c0d,
+    0 0 0 14px #333338;
+}
+
+#scrim-top {
+  display: none;
+}
+
+#scrim-bottom {
+  --scrim-inset: auto 128px 34px 34px;
+  --scrim-height: 62%;
+  --scrim-radius: 0 0 38px 38px / 0 0 30px 30px;
+}
+
+/* Scanlines and the curvature vignette, over the art and under the text. */
+#skin-chrome {
+  inset: 34px 128px 34px 34px;
+  border-radius: 38px / 30px;
+  z-index: 2;
+  background:
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / 0.55) 100%);
+  animation: crt-flicker 5s steps(1) infinite;
+}
+
+/* A slow bright band rolling down the tube. */
+#skin-chrome::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, transparent 0%, rgb(255 255 255 / 0.05) 48%, transparent 52%);
+  background-size: 100% 300%;
+  animation: crt-roll 7s linear infinite;
+}
+
+/* The knobs and the power lamp, down the right-hand side. */
+#skin-panel {
+  inset: 0 0 0 auto;
+  width: 128px;
+  height: auto;
+}
+
+#skin-panel::before {
+  content: "";
+  position: absolute;
+  top: 70px;
+  left: 34px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background:
+    conic-gradient(from 30deg, #555 0 3deg, transparent 3deg 360deg),
+    radial-gradient(circle at 40% 35%, #4a4a50, #151517 70%);
+  box-shadow:
+    0 0 0 3px #0a0a0b,
+    0 110px 0 -2px #26262a,
+    0 110px 0 1px #0a0a0b,
+    0 6px 14px rgb(0 0 0 / 0.6);
+}
+
+#skin-panel::after {
+  content: "";
+  position: absolute;
+  bottom: 70px;
+  left: 56px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b0b0b;
+  transition: background 300ms, box-shadow 300ms;
+}
+
+body:not([data-state="ejected"]):not([data-state="reading"]) #skin-panel::after {
+  background: #ff3b30;
+  box-shadow: 0 0 10px 2px rgb(255 59 48 / 0.7);
+}
+
+#stage {
+  position: absolute;
+  z-index: 5;
+  inset: auto 170px 64px 70px;
+  margin: 0;
+  padding: 0;
+}
+
+#game-title {
+  --title-size: 36px;
+  --title-stretch: 100%;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  text-transform: none;
+  text-shadow: 0 0 12px rgb(61 255 139 / 0.35);
+}
+
+#game-byline,
+#game-description {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+}
+
+.btn--play {
+  flex: none;
+  height: 44px;
+  padding: 0 30px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--crt-green);
+  box-shadow:
+    inset 0 0 0 2px var(--crt-green),
+    0 0 18px rgb(61 255 139 / 0.4);
+  text-shadow: 0 0 8px rgb(61 255 139 / 0.8);
+}
+
+#play-ring {
+  flex: 0 0 auto;
+}
+
+.btn--eject {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+/* ---- Moments ----------------------------------------------------------- */
+
+#face::after {
+  content: "";
+  position: absolute;
+  inset: 34px 128px 34px 34px;
+  z-index: 7;
+  border-radius: 38px / 30px;
+  pointer-events: none;
+  background: #fff;
+  opacity: 0;
+}
+
+/* Warm-up: a bright horizontal line opens into the picture. */
+body[data-state="reading"] #plate,
+body[data-state="reading"] #stage {
+  opacity: 0;
+}
+
+body[data-state="ready"] #plate {
+  animation: crt-on 900ms cubic-bezier(0.2, 0.7, 0.1, 1) both;
+}
+
+body[data-state="ready"] #stage {
+  animation: crt-text 400ms 600ms steps(4) both;
+}
+
+/* Switch-off: squash to a line, then to a dot, then a flash. */
+body[data-state="launching"] #plate,
+body[data-state="launching"] #stage,
+body[data-state="launching"] #skin-chrome {
+  animation: crt-off 650ms ease-in forwards;
+}
+
+body[data-state="launching"] #face::after {
+  animation: crt-flash 650ms ease-in forwards;
+}
+
+body[data-state="ejecting"] #plate {
+  animation: crt-off 500ms ease-in forwards;
+}
+
+@keyframes crt-on {
+  0% { transform: scale(1, 0.004); filter: brightness(8); opacity: 1; }
+  45% { transform: scale(1, 0.004); filter: brightness(8); }
+  100% { transform: none; filter: none; opacity: 1; }
+}
+
+@keyframes crt-text {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes crt-off {
+  0% { transform: none; filter: none; }
+  55% { transform: scale(1, 0.006); filter: brightness(6); }
+  100% { transform: scale(0.004, 0.004); filter: brightness(10); opacity: 0; }
+}
+
+@keyframes crt-flash {
+  0%, 70% { opacity: 0; }
+  80% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
+@keyframes crt-roll {
+  from { background-position: 0 100%; }
+  to { background-position: 0 -200%; }
+}
+
+@keyframes crt-flicker {
+  0%, 100% { opacity: 1; }
+  47% { opacity: 0.94; }
+  48% { opacity: 1; }
+  83% { opacity: 0.97; }
+}

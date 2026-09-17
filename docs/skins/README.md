@@ -1,173 +1,167 @@
 # Skin examples
 
-Fifteen worked skins. None of them ship inside the launcher — copy one onto a
-cartridge and it wears it:
+Nine worked skins, one per console idea. None of them ship inside the launcher —
+copy one onto a cartridge and it wears it:
 
 ```
 H:\.gamepak\skin.css
 ```
 
 Then replug the cartridge. [`../SKINNING.md`](../SKINNING.md) is the reference:
-the elements a skin styles, the two layers it owns, the states, and what the
-content security policy forbids.
+the elements a skin styles, the layers it owns, the states it can animate, the
+sound sets it can ask for, and what the content security policy forbids.
 
-### luna
+Each of these sets its own **window size**, animates the **moments** a cartridge
+goes through (`data-state` on `<body>`), and most ask for a **sound set**. Two
+are deliberately silent.
 
-<img src="luna.png" alt="The launcher wearing the luna skin" width="440" />
+---
 
-Explorer, about 2003. A title bar, a white pane, and every game's icon at 32px. The only one that shows no artwork at all.
+### master-system
 
-[`luna.css`](luna.css)
+<img src="master-system.png" alt="The launcher wearing the master-system skin" width="440" />
 
-### retro
+A console with the lid open. A black case with a red stripe across the top, a
+louvred vent down the right, and the cartridge art seated in a slot on the left.
+The power LED only lights once a cartridge is actually readable; launching
+floods the window with the stripe's red.
 
-<img src="retro.png" alt="The launcher wearing the retro skin" width="440" />
+900×600 · sound: `console`
 
-A wood-grain television. The screen is set into the cabinet, the hero plays on it, and the knobs and lamps are drawn on a layer the skin owns.
+[`master-system.css`](master-system.css)
 
-[`retro.css`](retro.css)
+---
 
-### cyberpunk
+### crt
 
-<img src="cyberpunk.png" alt="The launcher wearing the cyberpunk skin" width="440" />
+<img src="crt.png" alt="The launcher wearing the crt skin" width="440" />
 
-Wide and split. Titles down the left, the hero filling the right, and the selected game's logo printed over it.
+A television on the carpet. The whole window is a wood-and-plastic set: a thick
+bezel, a curved glass screen with scanlines rolling over it, and a column of
+knobs on the cabinet beside the glass. Switching on opens the picture from a
+horizontal line; Eject collapses it back to a dot, the way a tube does.
 
-[`cyberpunk.css`](cyberpunk.css)
+860×640 · sound: `crt`
 
-### phantom
+[`crt.css`](crt.css)
 
-<img src="phantom.png" alt="The launcher wearing the phantom skin" width="440" />
+---
 
-Black and gold. A hero band across the top, a two-up grid under it, and nothing else. Up and down move by two.
+### modern-glass
 
-[`phantom.css`](phantom.css)
+<img src="modern-glass.png" alt="The launcher wearing the modern-glass skin" width="440" />
 
-### desktop
+Clean and minimal. A deep blue room lit by two slow-moving glows, a frosted icon
+rail down the left, the cover as a floating card, and the details on a panel
+beside it. The only motion is a soft rise on arrival and a press on launch:
+restraint is the design, so the moments are quiet rather than absent.
 
-<img src="desktop.png" alt="The launcher wearing the desktop skin" width="440" />
+920×560 · sound: `console`
 
-Games as a grid of shortcuts with a taskbar. Asks for icons rather than covers, and the row width is measured, so the pad moves by a row.
+[`modern-glass.css`](modern-glass.css)
 
-[`desktop.css`](desktop.css)
+---
 
 ### arcade
 
 <img src="arcade.png" alt="The launcher wearing the arcade skin" width="440" />
 
-A cabinet. Scanlines and a marquee, the games run sideways, and the two buttons are domes that drop onto their own plastic.
+A cabinet in the corner of a pizza place. Tall, because a cabinet is: a lit
+marquee across the top with chase lights running under it, the art in a bezelled
+monitor, and a control deck with a ball-top stick and four buttons along the
+bottom. The marquee strikes on like a tube starting.
+
+640×820 · sound: `arcade`
 
 [`arcade.css`](arcade.css)
 
-### cozy
+---
 
-<img src="cozy.png" alt="The launcher wearing the cozy skin" width="440" />
+### cyberpunk
 
-Cream and rounded. The light one, with the artwork kept out of it and Play sitting on a shadow it presses into.
+<img src="cyberpunk.png" alt="The launcher wearing the cyberpunk skin" width="440" />
 
-[`cozy.css`](cozy.css)
+Dynamic and animated. Neon on near-black: magenta and cyan edges cut at angles,
+the art behind a clipped frame, a scanning line sweeping the whole window
+continuously. The most animated of the nine — it exists to show ambient motion
+and state motion working together. Launch tears the picture chromatically before
+it goes.
 
-### bigpicture
+940×600 · sound: `neon`
 
-<img src="bigpicture.png" alt="The launcher wearing the bigpicture skin" width="440" />
+[`cyberpunk.css`](cyberpunk.css)
 
-A hero behind, covers along the bottom, the logo in front. The one the three art slots exist for.
+---
 
-[`bigpicture.css`](bigpicture.css)
+### minimal
 
-### bricolage
+<img src="minimal.png" alt="The launcher wearing the minimal skin" width="440" />
 
-<img src="bricolage.png" alt="The launcher wearing the bricolage skin" width="440" />
+Focused. Almost nothing: the art large on the left bleeding to the edge, a
+single hairline, the game named in quiet type, and one filled button. The window
+is wide and short so the emptiness is the point.
 
-Lab bench equipment. Label-maker tape hanging off the header, hard black offset
-shadows, and hazard stripes down the row that is live. Shows no fill artwork at
-all — the covers are specimens in a rack.
+880×520 · sound: `handheld`
 
-[`bricolage.css`](bricolage.css)
+[`minimal.css`](minimal.css)
 
-### phosphor
+---
 
-<img src="phosphor.png" alt="The launcher wearing the phosphor skin" width="440" />
+### handheld
 
-An amber terminal from 1984. The only skin with `--skin-row-art: none`, so the
-rail is type and initials rather than pictures, and the scanlines are drawn on
-the layer above everything. A disk array listing, not a shelf.
+<img src="handheld.png" alt="The launcher wearing the handheld skin" width="440" />
 
-[`phosphor.css`](phosphor.css)
+A pocket console with a green screen. A grey plastic shell, portrait, with a
+four-shade green LCD — the art is pushed through a filter until it is four
+greens. A D-pad and the A/B buttons sit below it. The screen boots with the logo
+sliding down, ghosts faintly while it sits, and inverts twice on launch.
 
-### atomic
+500×780 · sound: `handheld`
 
-<img src="atomic.png" alt="The launcher wearing the atomic skin" width="440" />
+[`handheld.css`](handheld.css)
 
-Translucent purple plastic, 1999. The only one that puts `backdrop-filter`
-between the interface and the artwork, so the hero shows through the frosted
-chassis with the circuit dots printed on it.
+---
 
-[`atomic.css`](atomic.css)
+### 3d-console
 
-### akihabara
+<img src="3d-console.png" alt="The launcher wearing the 3d-console skin" width="440" />
 
-<img src="akihabara.png" alt="The launcher wearing the akihabara skin" width="440" />
+Immersive. A cartridge standing in the slot of a console on a lit desk. The
+cover is tipped back in perspective so it reads as a physical object, drifting
+very slightly the whole time. Launching turns it to face you and brightens it
+out.
 
-A slot loader. Every panel is notched with `clip-path`, the rail is a stack of
-loading bays lit down one edge, and the row that is loaded gets a kanji state
-badge.
+900×620 · sound: `console`
 
-[`akihabara.css`](akihabara.css)
+[`3d-console.css`](3d-console.css)
 
-### shelf
+---
 
-<img src="shelf.png" alt="The launcher wearing the shelf skin" width="440" />
+### genesis
 
-Game boxes standing on a shelf, seen at an angle. A grid with `perspective`,
-every box turned in 3D, and the big installs taking two columns — the first
-skin to lay out from `data-size` rather than from position.
+<img src="genesis.png" alt="The launcher wearing the genesis skin" width="440" />
 
-[`shelf.css`](shelf.css)
+A frame made for the game. The window becomes the face of a 16-bit console: a
+black moulded frame with a red accent line, a raised nameplate at the top and a
+spec tab at the bottom. This is the one to copy when a cartridge wants its *own*
+housing — four colour variables away from being a different machine.
 
-### jukebox
+880×600 · sound: `arcade`
 
-<img src="jukebox.png" alt="The launcher wearing the jukebox skin" width="440" />
+[`genesis.css`](genesis.css)
 
-A wheel of covers turning around the one in front. The sibling combinator does
-the work: everything after the selected row leans one way and everything before
-it leans the other, which is what makes it a wheel and not a row of tilted
-cards.
+---
 
-[`jukebox.css`](jukebox.css)
+## Seeing one without a cartridge
 
-### eurorack
-
-<img src="eurorack.png" alt="The launcher wearing the eurorack skin" width="440" />
-
-Modules bolted across rails in unequal widths. Fixed height, variable width
-from `data-size`, screws in the corners and a panel LED on the plate that is
-live. The only skin whose rows are neither a column nor a grid — they wrap.
-
-[`eurorack.css`](eurorack.css)
-
-Every one of those is the same launcher with the same markup. What changes is
-the window's size, the shape of the list, which of the four artworks is asked
-for in each of the three places one can go, and whether the result reads as a
-poster, a file window or an appliance.
-
-The screenshots are of the sample cartridge in the browser preview, taken
-through the same path a real drive takes: the stylesheet is handed to the
-launcher as the cartridge's own, and nothing else about the build changes.
-
-## Trying one without a cartridge
-
-The launcher runs in a browser with a sample cartridge, which is a faster loop
-than writing a drive:
+Serve the repository root and hand the launcher a skin by name:
 
 ```bash
-python -m http.server 8731        # from the repository root
+python -m http.server 8731
 ```
 
-```
-localhost:8731/tauri-ui/app/index.html?drive=D:\&state=bundle&skin=retro
-```
+`localhost:8731/tauri-ui/app/index.html?drive=D:&state=described&skin=crt`
 
-`&skin=` hands the launcher that file as if the cartridge were carrying it, so
-this is the same path a real drive takes. `&state=bundle` gives you a collection
-so the list is real. Edit the file and reload.
+`&state=described` fills in the description, byline and screenshots. Leave it
+off and the cartridge says nothing, which is what most cartridges do — judge a
+skin against both.

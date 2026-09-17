@@ -1,0 +1,302 @@
+/* ==========================================================================
+   Handheld — a pocket console with a green screen
+
+   A grey plastic shell, portrait, with a four-shade green LCD. The art is
+   pushed through a filter until it is four greens; the text is dark green on
+   the screen; a D-pad and the A/B buttons sit below it.
+
+   Sound: handheld. Moments: the screen boots with the logo sliding down the
+   way the real one does, the LCD ghosts faintly while it sits, launch inverts
+   the screen twice, Eject fades the LCD to blank.
+   ========================================================================== */
+
+:root {
+  --skin-width: 500;
+  --skin-height: 780;
+  --skin-art: grid;
+  --skin-logo: none;
+  --skin-sound: handheld;
+  --description-lines: 2;
+  --shot-radius: 0;
+
+  --hh-shell: #c9c7bd;
+  --hh-lcd: #9bbc0f;
+  --hh-dark: #0f380f;
+  --hh-mid: #306230;
+  --ink: #0f380f;
+  --ink-3: #306230;
+  --radius: 18px 18px 64px 18px;
+}
+
+#card {
+  background: linear-gradient(180deg, #d6d4ca, var(--hh-shell));
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+#scrim-top,
+#scrim-bottom {
+  display: none;
+}
+
+/* The screen surround: a dark bezel with the lettering and the battery lamp. */
+#skin-panel {
+  inset: 34px 34px auto 34px;
+  height: 470px;
+  border-radius: 12px 12px 40px 12px;
+  background: #5a5c68;
+  z-index: 0;
+}
+
+#skin-panel::before {
+  content: "DOT MATRIX WITH STEREO SOUND";
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: italic 700 9px/1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: #b9bac4;
+}
+
+#skin-panel::after {
+  content: "";
+  position: absolute;
+  top: 120px;
+  left: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b0b0b;
+}
+
+body:not([data-state="ejected"]) #skin-panel::after {
+  background: #ff2d2d;
+  box-shadow: 0 0 6px #ff2d2d;
+}
+
+/* The LCD itself holds both the art and the text, in four greens.
+
+   One panel, the full height of the screen. It used to be a 250px plate with a
+   second green rectangle patched in under it for the text to sit on, and the
+   seam between them showed: the art half stayed grey while the text half was
+   green. */
+#plate {
+  inset: 64px 70px auto 70px;
+  height: 440px;
+  border-radius: 2px;
+  background: var(--hh-lcd);
+  box-shadow: 0 0 0 2px #2b2d33;
+  /* Above the bezel. `#skin-panel` is the surround and comes *after* the plate
+     in the markup, so at the same stacking level it paints over it — the screen
+     was the bezel's grey with the art hidden behind it. */
+  z-index: 1;
+}
+
+/* Four greens, out of the filter alone.
+
+   This used to greyscale the art and multiply it over the panel's green, which
+   composites to grey here — the blend never applied, so the screen came out the
+   colour of the desaturated cover. A filter chain needs no backdrop and cannot
+   be isolated out from under itself: sepia lands the whole image near 40°, the
+   rotate carries it to green, and the saturate makes it the only colour left. */
+#plate img {
+  filter: grayscale(1) contrast(1.35) sepia(1) hue-rotate(35deg) saturate(6)
+    brightness(0.92);
+  opacity: 0.92;
+}
+
+/* Pixel grid over the LCD. */
+#skin-chrome {
+  inset: 64px 70px auto 70px;
+  height: 440px;
+  z-index: 4;
+  background:
+    linear-gradient(rgb(15 56 15 / 0.08) 1px, transparent 1px) 0 0 / 3px 3px,
+    linear-gradient(90deg, rgb(15 56 15 / 0.08) 1px, transparent 1px) 0 0 / 3px 3px;
+  pointer-events: none;
+}
+
+/* The art fades into the panel toward the bottom, so the text has somewhere
+   quiet to sit without a hard edge across the screen. */
+#plate::after {
+  content: "";
+  position: absolute;
+  inset: 40% 0 0 0;
+  background: linear-gradient(180deg, transparent, var(--hh-lcd) 62%);
+  pointer-events: none;
+}
+
+/* The D-pad: a cross from two gradients on one square.
+
+   Not box-shadow copies — a shadow repeats the element's *shape*, so a rounded
+   rectangle offset four times is four rounded rectangles, which is what this
+   was and why it came out as a pile of blocks rather than a cross. */
+#face::before {
+  content: "";
+  position: absolute;
+  left: 54px;
+  bottom: 96px;
+  width: 96px;
+  height: 96px;
+  background:
+    linear-gradient(90deg, transparent 32px, #1c1c20 32px 64px, transparent 64px),
+    linear-gradient(180deg, transparent 32px, #1c1c20 32px 64px, transparent 64px);
+}
+
+/* A and B. Here a box-shadow copy *is* right: the shape being repeated is a
+   circle, and a circle is what the second button is. */
+#face::after {
+  content: "";
+  position: absolute;
+  right: 64px;
+  bottom: 186px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #8b1e4d;
+  box-shadow: -58px 30px 0 0 #8b1e4d;
+}
+
+#stage {
+  position: absolute;
+  z-index: 5;
+  inset: 330px 84px 240px 84px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+}
+
+#game-title {
+  --title-size: 20px;
+  --title-stretch: 100%;
+  --title-leading: 1.1;
+  color: var(--hh-dark);
+  text-shadow: none;
+  font-family: inherit;
+}
+
+#game-byline {
+  color: var(--hh-mid);
+  font-size: 10px;
+}
+
+#game-description {
+  color: var(--hh-dark);
+  font-size: 11px;
+}
+
+#screenshots {
+  display: none;
+}
+
+/* The real buttons sit on the shell as START and SELECT do: centred, below the
+   D-pad and A/B rather than across them, and tilted as a pair.
+
+   The row was centred at the D-pad's own height, so Play landed on top of it at
+   an angle. Rotating the row rather than the button keeps the three tilted
+   together, which is what the moulding does. */
+#button-row {
+  position: absolute;
+  left: -84px;
+  right: -84px;
+  top: 372px;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  transform: rotate(-24deg);
+}
+
+#play-ring {
+  flex: 0 0 auto;
+}
+
+.btn--play {
+  flex: none;
+  height: 30px;
+  padding: 0 24px;
+  border-radius: 15px;
+  background: #7d7f8c;
+  color: #1c1c20;
+  font-family: system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.3);
+}
+
+.btn--eject {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #7d7f8c;
+  color: #1c1c20;
+  border: 0;
+}
+
+#chrome .icon-btn {
+  background: rgb(0 0 0 / 0.25);
+}
+
+/* ---- Moments ----------------------------------------------------------- */
+
+#skin-chrome::after {
+  content: "PC GAMEPAK";
+  position: absolute;
+  top: 110px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 900 24px/1 system-ui, sans-serif;
+  color: var(--hh-dark);
+  opacity: 0;
+}
+
+body[data-state="reading"] #plate img,
+body[data-state="reading"] #stage {
+  opacity: 0;
+}
+
+body[data-state="ready"] #skin-chrome::after {
+  animation: hh-boot 1300ms linear both;
+}
+
+body[data-state="ready"] #plate img {
+  animation: hh-show 300ms 1300ms steps(3) both;
+}
+
+body[data-state="ready"] #stage {
+  animation: hh-show 300ms 1400ms steps(3) both;
+}
+
+body[data-state="launching"] #plate,
+body[data-state="launching"] #skin-chrome {
+  animation: hh-invert 180ms steps(1) 4;
+}
+
+body[data-state="ejecting"] #plate img,
+body[data-state="ejecting"] #stage {
+  animation: hh-blank 500ms steps(4) forwards;
+}
+
+@keyframes hh-boot {
+  0% { opacity: 1; transform: translateY(-120px); }
+  70% { opacity: 1; transform: none; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes hh-show {
+  from { opacity: 0; }
+  to { opacity: 0.9; }
+}
+
+@keyframes hh-invert {
+  50% { filter: invert(1); }
+}
+
+@keyframes hh-blank {
+  to { opacity: 0; }
+}

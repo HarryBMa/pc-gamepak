@@ -1,0 +1,204 @@
+/* ==========================================================================
+   Master System — a console with the lid open
+
+   A black case with a red stripe across the top, a louvred vent down the
+   right, and the cartridge art seated in a slot on the left with the game's
+   details beside it. Landscape, because this is a machine seen from the front.
+
+   Sound: console. Moments: the art drops into the slot, the power LED comes
+   on, Play floods the case red, Eject lifts the art back out.
+   ========================================================================== */
+
+:root {
+  --skin-width: 900;
+  --skin-height: 600;
+  --skin-art: grid;
+  --skin-logo: none;
+  --skin-sound: console;
+  --description-lines: 4;
+  --shot-radius: 2px;
+
+  --ms-case: #16171a;
+  --ms-red: #d8232a;
+  --ink: #e9eaec;
+  --radius: 6px;
+}
+
+#card {
+  background: var(--ms-case);
+}
+
+#scrim-top,
+#scrim-bottom {
+  display: none;
+}
+
+/* The slot. The art is a picture sitting in the machine, not the window. */
+#plate {
+  inset: 96px auto auto 40px;
+  width: 300px;
+  height: 420px;
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 10px #0b0c0e,
+    0 0 0 11px #3a3d44,
+    0 24px 48px rgb(0 0 0 / 0.6);
+}
+
+/* The stripe and the wordmark. */
+#skin-chrome::before {
+  content: "SEGA  MASTER SYSTEM";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 56px;
+  padding-left: 28px;
+  display: flex;
+  align-items: center;
+  font: 800 15px/1 system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  white-space: pre;
+  color: #fff;
+  background: linear-gradient(180deg, #2a2c31, #1a1b1f);
+  border-bottom: 3px solid var(--ms-red);
+}
+
+/* The vent. A louvre is a repeating gradient; no image needed. */
+#skin-chrome::after {
+  content: "";
+  position: absolute;
+  top: 96px;
+  right: 26px;
+  width: 46px;
+  height: 420px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(180deg, #0d0e10 0 6px, #212327 6px 13px);
+  box-shadow: inset 0 0 0 1px #34373d;
+}
+
+/* `#skin-panel` ships as a zero-height strip along the bottom. This skin owns
+   it outright and makes it full-bleed, for the power LED. */
+#skin-panel {
+  inset: 0;
+  height: auto;
+}
+
+#skin-panel::before {
+  content: "";
+  position: absolute;
+  top: 23px;
+  right: 116px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4a1114;
+  transition: background 400ms ease, box-shadow 400ms ease;
+}
+
+body[data-state="ready"] #skin-panel::before,
+body[data-state="launching"] #skin-panel::before {
+  background: var(--ms-red);
+  box-shadow: 0 0 12px 2px rgb(216 35 42 / 0.8);
+}
+
+#stage {
+  position: absolute;
+  z-index: 5;
+  inset: 96px 104px 40px 388px;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+
+#game-title {
+  --title-size: 34px;
+  --title-stretch: 100%;
+  --title-leading: 1.05;
+  text-transform: none;
+  text-shadow: none;
+}
+
+#game-byline {
+  color: #8d9199;
+}
+
+#button-row {
+  margin-top: auto;
+}
+
+#play-ring {
+  flex: 0 0 auto;
+}
+
+.btn--play {
+  flex: none;
+  height: 46px;
+  padding: 0 38px;
+  border-radius: 3px;
+  background: var(--ms-red);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.btn--eject {
+  height: 46px;
+  width: 46px;
+  border-radius: 3px;
+  background: #232529;
+  border-color: #3a3d44;
+}
+
+/* ---- Moments ----------------------------------------------------------- */
+
+#face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  background: var(--ms-red);
+  opacity: 0;
+}
+
+/* Power-on: the case is dark while the cartridge is read. */
+body[data-state="reading"] #plate,
+body[data-state="reading"] #stage {
+  opacity: 0;
+}
+
+body[data-state="ready"] #plate {
+  animation: ms-seat 560ms cubic-bezier(0.18, 0.9, 0.2, 1) both;
+}
+
+body[data-state="ready"] #stage {
+  animation: ms-fade 500ms 180ms ease-out both;
+}
+
+body[data-state="launching"] #face::after {
+  animation: ms-flood 700ms ease-in forwards;
+}
+
+body[data-state="ejecting"] #plate {
+  animation: ms-unseat 420ms ease-in forwards;
+}
+
+@keyframes ms-seat {
+  from { transform: translateY(-60px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@keyframes ms-fade {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ms-flood {
+  0% { opacity: 0; clip-path: inset(0 0 100% 0); }
+  40% { opacity: 0.85; }
+  100% { opacity: 0.85; clip-path: inset(0); }
+}
+
+@keyframes ms-unseat {
+  to { transform: translateY(-80px); opacity: 0; }
+}

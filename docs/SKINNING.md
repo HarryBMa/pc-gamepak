@@ -23,7 +23,9 @@ It is read by the backend, capped at 256 KB, and inlined into the window as
 text — the window never opens a path on the drive, which is the same arrangement
 the artwork already had.
 
-Fifteen worked examples are in [`skins/`](skins/). Copy one and edit it.
+Nine worked examples are in [`skins/`](skins/) — one per console idea, each with
+its own window size, its own animated moments and, for most, a sound set. Copy
+one and edit it.
 
 **What this trades away.** A stylesheet cannot run code, but it can move, cover
 and restyle anything on screen, including making Eject look like Play or putting
@@ -173,6 +175,57 @@ Both ignore the pointer, so nothing a skin draws can get between somebody and a
 button. Do not undo that.
 
 ---
+
+## The moments: `data-state`
+
+The classes below describe *things* — a disabled button, a selected row. This
+one describes *what is happening*, on `<body>`, where every rule can see it:
+
+```css
+body[data-state="launching"] #face { animation: crt-bloom 800ms ease-in forwards }
+```
+
+| `data-state` | When |
+|---|---|
+| `reading` | the window is up and the cartridge has not been read yet |
+| `ready` | a cartridge is seated and playable |
+| `blocked` | seated, but there is nothing to play |
+| `launching` | Play has been pressed |
+| `ejecting` | Eject has been pressed and the drive has not gone yet |
+| `ejected` | the slot is empty — what Eject leaves behind |
+
+The names come from what the window does, not from the console metaphor. There
+is **no `inserting`**: the window opens *because* the cartridge was inserted, so
+that moment is already over before any CSS exists. `reading` is the first frame
+anyone sees, and it is where a power-on animation belongs — it is set in the
+markup, not by script, so the animation starts on the first paint.
+
+`ready` is also where an entrance belongs, and it is reached once per insert: a
+launch that comes back lands on `ready` again, but the window was never away, so
+do not put a *second* entrance there that a returning player has to sit through.
+
+## Sound
+
+The one thing a skin cannot do in CSS. The window owns playback; the skin only
+says which set:
+
+```css
+:root { --skin-sound: arcade }
+```
+
+`console`, `arcade`, `crt`, `handheld`, `neon`, or unset for silence. Each set
+has three sounds and they are tied to the states above: `ready` plays the insert
+sound, `launching` the launch, `ejecting` the eject.
+
+Two gates before anything is heard — the skin has to name a set, **and** Settings
+has to allow sound at all. That is deliberate: this window opens by itself when
+a drive appears, so unprompted noise from a window nobody asked for needs a
+switch that is not on the cartridge.
+
+The sets ship with the launcher rather than with the cartridge. A cartridge
+carrying its own audio would need a way to hand the window a file it can play,
+and that does not exist yet: the skin arrives as text and the artwork as `data:`
+URIs, and the window never opens a path on the drive itself.
 
 ## States to style
 

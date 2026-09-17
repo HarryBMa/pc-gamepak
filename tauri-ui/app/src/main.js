@@ -331,6 +331,106 @@ function sampleAccent(img) {
 /** How long the face takes to leave or enter the slot; matches style.css. */
 const SEAT_MS = 620;
 
+/* ==========================================================================
+   State, and the sounds that go with it
+   ========================================================================== */
+
+/**
+ * The cartridge's lifecycle, published on <body data-state>.
+ *
+ * A skin could already style *things* — a disabled Play, a selected row — but
+ * not *moments*. The classes that existed sat on the elements they described
+ * (`#card.is-ejected`, `#btn-play.is-launching`), so a skin wanting to sweep the
+ * whole window on launch had nothing at the top of the tree to hang it on. This
+ * is that: one attribute on <body>, which every rule can see.
+ *
+ *   reading    the window is up and the cartridge has not been read yet
+ *   ready      a cartridge is seated and playable
+ *   blocked    seated, but there is nothing to play
+ *   launching  Play has been pressed
+ *   ejecting   Eject has been pressed and the drive has not gone yet
+ *   ejected    the slot is empty — what Eject leaves behind
+ *
+ * The names come from what the window actually does rather than from the
+ * console metaphor: there is no `inserting`, because the window opens *because*
+ * the cartridge was inserted, so that moment is already over. `reading` is the
+ * first frame anyone sees, and it is where a power-on animation belongs.
+ *
+ * Set in the markup as well as here, so the first paint already has it and a
+ * skin's opening animation does not start a frame late.
+ */
+function setState(next) {
+  const previous = document.body.dataset.state;
+  if (previous === next) return;
+  document.body.dataset.state = next;
+  playStateSound(next, previous);
+}
+
+/** The state a seated cartridge is in, once it is known whether it can play. */
+function settleState() {
+  setState(playable() ? "ready" : "blocked");
+}
+
+/**
+ * The one thing a skin cannot do in CSS.
+ *
+ * Sound is the piece of a console a stylesheet has no way to reach, so the
+ * window owns playback and the skin only names a set:
+ *
+ *     :root { --skin-sound: arcade; }
+ *
+ * The sets ship with the launcher rather than with the cartridge. A cartridge
+ * carrying its own audio needs a way to hand the window a file it can play, and
+ * that does not exist yet — the skin arrives as text, the artwork as `data:`
+ * URIs, and nothing on the drive is opened by the window itself.
+ *
+ * Two gates before anything is heard, because the launcher opens *by itself*
+ * when a drive appears and unprompted noise from a window nobody asked for is a
+ * bad surprise: the skin has to name a set, and Settings has to allow sound.
+ */
+const SOUND_SETS = ["console", "arcade", "crt", "handheld", "neon"];
+
+/** Which state changes are worth hearing. Everything else is silent. */
+const STATE_SOUNDS = { ready: "insert", launching: "launch", ejecting: "eject" };
+
+let soundsAllowed = true;
+const soundCache = new Map();
+
+function skinSoundSet() {
+  const asked = getComputedStyle(document.documentElement)
+    .getPropertyValue("--skin-sound")
+    .trim()
+    .toLowerCase();
+  return SOUND_SETS.includes(asked) ? asked : null;
+}
+
+function playStateSound(next, previous) {
+  // Arriving at `ready` from `reading` is the cartridge being seated. Arriving
+  // from `launching` or `ejecting` is something that came back, and is silent.
+  if (next === "ready" && previous && previous !== "reading") return;
+
+  const name = STATE_SOUNDS[next];
+  if (!name || !soundsAllowed) return;
+  const set = skinSoundSet();
+  if (!set) return;
+
+  const key = `${set}/${name}`;
+  try {
+    let audio = soundCache.get(key);
+    if (!audio) {
+      audio = new Audio(`src/sounds/${key}.wav`);
+      audio.volume = 0.35;
+      soundCache.set(key, audio);
+    }
+    audio.currentTime = 0;
+    // A webview may refuse to play before the window has been interacted with.
+    // That is a refusal to make noise, the safe direction, so it is swallowed.
+    audio.play().catch(() => {});
+  } catch (error) {
+    debugLog(`sound: ${error}`);
+  }
+}
+
 /**
  * Show what is behind the cartridge.
  *
@@ -349,6 +449,7 @@ function showSlot(label, action) {
     el.insert.onclick = null;
   }
   el.card.classList.add("is-ejected");
+  setState("ejected");
   // Nothing on the face is reachable once it has left the slot.
   el.face.inert = true;
 }
@@ -1205,6 +1306,15 @@ async function init() {
   // look and then changes its mind a frame later.
   wearSkin(cartridge.skin_css ?? "");
 
+  // The other half of the sound gate. A backend too old to know the setting is
+  // treated as allowing it, the same way `can_eject` is: the skin still has to
+  // ask before anything is heard.
+  try {
+    soundsAllowed = (await invoke("get_settings"))?.sounds !== false;
+  } catch {
+    soundsAllowed = true;
+  }
+
   // A directory has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
   // build that does not know the command should keep the button it had.
@@ -1264,6 +1374,9 @@ async function init() {
   setBusy(false);
   await showWindow();
   seat();
+  // The cartridge is on screen and its state is known: the moment a skin's
+  // entrance belongs to, and the moment the insert sound belongs to.
+  settleState();
   // After the window, deliberately. Copying a save directory takes as long as
   // it takes, and the cartridge should be on screen while it happens rather
   // than the launcher sitting blank behind a file copy nobody can see.
@@ -1524,6 +1637,9 @@ function resetPlay() {
   el.play.classList.remove("is-launching");
   el.playLabel.textContent = "Play";
   setBusy(false);
+  // Only if the cartridge is still seated: a launch that ended in an eject has
+  // left the slot empty, and that state outranks this one.
+  if (document.body.dataset.state === "launching") settleState();
 }
 
 async function doPlay() {
@@ -1532,6 +1648,7 @@ async function doPlay() {
 
   launching = true;
   setBusy(true);
+  setState("launching");
   el.play.classList.add("is-launching");
   el.playLabel.textContent = "Launching";
   toast("Launching…");
@@ -1547,7 +1664,12 @@ async function doPlay() {
     toast("Launched");
     // The game has the screen now. The launcher steps back to the taskbar
     // rather than closing, so Eject is still there when the game is over.
-    setTimeout(standAside, 900);
+    // It settles back to `ready` as it goes, so a skin's launch animation has
+    // run its course and the window is at rest when it comes back.
+    setTimeout(() => {
+      if (document.body.dataset.state === "launching") settleState();
+      standAside();
+    }, 900);
   } catch (error) {
     toast(String(error), true);
     resetPlay();
@@ -1576,12 +1698,15 @@ async function doEject() {
   if (!cartridge || el.eject.disabled) return;
 
   setBusy(true);
+  setState("ejecting");
   toast("Ejecting…");
   try {
     const outcome = await invoke("eject_with_guard", { drivePath: cartridge.drive_path });
     if (!outcome?.ejected) {
       toast(outcome?.message || "Left mounted.");
       setBusy(false);
+      // The drive is still here, so the window goes back to what it was.
+      settleState();
       return;
     }
     // The face leaves the slot, and what is left is the thing to take out —
@@ -1592,6 +1717,7 @@ async function doEject() {
   } catch (error) {
     toast(String(error), true);
     setBusy(false);
+    settleState();
   }
 }
 

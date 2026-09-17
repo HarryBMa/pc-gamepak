@@ -66,6 +66,34 @@ Settings is now a button in the launcher too. It had no way in from a cartridge
 in the slot, which is exactly the moment somebody wants to change what happens
 on insert.
 
+### Skins can animate the moments, and make a sound
+
+A skin could already style *things* — a disabled button, a selected row. It could
+not style *what was happening*, because the classes for that sat on the elements
+they described and there was nothing at the top of the tree to hang a rule on.
+
+`<body data-state>` is that: `reading`, `ready`, `blocked`, `launching`,
+`ejecting`, `ejected`. So a skin can open like a television warming up, flash
+twice on launch, and collapse to a dot on eject.
+
+The names come from what the window actually does rather than from the console
+metaphor — there is no `inserting`, because the window opens *because* a
+cartridge was inserted, so that moment is over before any stylesheet exists.
+
+And sound, which is the one thing a stylesheet cannot do. The launcher ships five
+sets — `console`, `arcade`, `crt`, `handheld`, `neon` — and a skin picks one with
+`--skin-sound`. Nothing is ever heard unless the skin asks *and* Settings allows
+it, which is a new switch there: this window opens by itself when a drive
+appears, and unprompted noise from a window nobody opened needs a way off that
+is not on the cartridge.
+
+**The fifteen example skins are replaced by nine**, one per console idea:
+Master System, CRT, modern glass, arcade cabinet, cyberpunk, minimal, a green
+handheld, a console on a desk, and a moulded 16-bit frame. Each sets its own
+window size, animates its own moments, and most carry a sound set. They are
+examples, not shipped looks — nothing about a cartridge changes unless it carries
+a `skin.css` of its own.
+
 ### Saves travel with the cartridge
 
 Two mechanisms, and which one applies depends on whether the cartridge carries

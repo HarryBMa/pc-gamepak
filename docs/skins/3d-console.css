@@ -1,0 +1,239 @@
+/* ==========================================================================
+   3D Console — immersive
+
+   A cartridge standing in the slot of a console on a lit desk. The cover is
+   tipped back in perspective so it reads as a physical object, with a sheen
+   crossing it, and the console body below catches its light.
+
+   Sound: console. Moments: the cartridge lowers into the slot and the slot
+   light comes on, the cartridge floats and its sheen sweeps while it sits,
+   launch pushes it down into the console with a flash from the slot, Eject
+   pops it up and out.
+   ========================================================================== */
+
+:root {
+  --skin-width: 900;
+  --skin-height: 620;
+  --skin-art: grid;
+  --skin-logo: none;
+  --skin-sound: console;
+  --description-lines: 4;
+  --shot-radius: 6px;
+
+  --3d-blue: #2d7cff;
+  --ink: #f1f3f8;
+  --radius: 14px;
+}
+
+#card {
+  background:
+    radial-gradient(60% 50% at 25% 75%, rgb(255 170 90 / 0.18), transparent 70%),
+    radial-gradient(50% 60% at 25% 30%, rgb(45 124 255 / 0.12), transparent 70%),
+    linear-gradient(180deg, #14161c, #0b0c10);
+}
+
+#scrim-top,
+#scrim-bottom {
+  display: none;
+}
+
+/* The console body and its slot light. */
+#skin-panel {
+  inset: auto auto 58px 50px;
+  width: 340px;
+  height: 120px;
+  z-index: 2;
+  border-radius: 10px 10px 14px 14px;
+  background: linear-gradient(180deg, #2c2f38, #15161b 70%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 24px 40px rgb(0 0 0 / 0.7);
+  transform: perspective(700px) rotateX(24deg);
+  transform-origin: bottom;
+}
+
+#skin-panel::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 60px;
+  right: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: #07080a;
+  box-shadow: 0 0 0 1px #3a3d46;
+  transition: box-shadow 500ms, background 500ms;
+}
+
+body[data-state="ready"] #skin-panel::before,
+body[data-state="launching"] #skin-panel::before {
+  background: var(--3d-blue);
+  box-shadow: 0 0 18px 4px rgb(45 124 255 / 0.7);
+}
+
+#skin-panel::after {
+  content: "PC GAMEPAK";
+  position: absolute;
+  left: 22px;
+  bottom: 20px;
+  font: 700 10px/1 system-ui, sans-serif;
+  letter-spacing: 0.3em;
+  color: rgb(255 255 255 / 0.4);
+}
+
+/* The cartridge itself: tipped back, standing in the slot. */
+#plate {
+  inset: 60px auto auto 110px;
+  width: 220px;
+  height: 330px;
+  z-index: 3;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 6px #1d1f26,
+    0 30px 50px -10px rgb(0 0 0 / 0.8);
+  transform: perspective(900px) rotateY(18deg) rotateX(4deg);
+  transform-origin: bottom center;
+  animation: td-float 5s ease-in-out infinite;
+}
+
+/* A sheen crossing the cartridge. */
+#skin-chrome {
+  inset: 60px auto auto 110px;
+  width: 220px;
+  height: 330px;
+  z-index: 4;
+  border-radius: 6px;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.22) 48%, transparent 60%) no-repeat;
+  background-size: 300% 100%;
+  transform: perspective(900px) rotateY(18deg) rotateX(4deg);
+  transform-origin: bottom center;
+  animation: td-sheen 5.5s ease-in-out infinite, td-float 5s ease-in-out infinite;
+}
+
+#stage {
+  position: absolute;
+  z-index: 5;
+  inset: 70px 50px 58px 460px;
+  margin: 0;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: rgb(10 12 18 / 0.72);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(10px);
+}
+
+#game-title {
+  --title-size: 30px;
+  --title-stretch: 100%;
+  text-transform: none;
+}
+
+#game-byline {
+  color: #9aa3b8;
+}
+
+#button-row {
+  margin-top: auto;
+}
+
+#play-ring {
+  flex: 0 0 auto;
+}
+
+.btn--play {
+  flex: none;
+  height: 44px;
+  padding: 0 36px;
+  border-radius: 10px;
+  background: var(--3d-blue);
+  color: #fff;
+  box-shadow: 0 0 22px rgb(45 124 255 / 0.55);
+}
+
+.btn--eject {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+/* ---- Moments ----------------------------------------------------------- */
+
+#face::after {
+  content: "";
+  position: absolute;
+  z-index: 7;
+  left: 110px;
+  bottom: 164px;
+  width: 220px;
+  height: 20px;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgb(120 180 255 / 0.95), transparent 70%);
+  opacity: 0;
+}
+
+body[data-state="reading"] #plate,
+body[data-state="reading"] #skin-chrome,
+body[data-state="reading"] #stage {
+  opacity: 0;
+}
+
+body[data-state="ready"] #plate,
+body[data-state="ready"] #skin-chrome {
+  animation: td-lower 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both, td-float 5s 900ms ease-in-out infinite;
+}
+
+body[data-state="ready"] #stage {
+  animation: td-fade 600ms 400ms ease-out both;
+}
+
+body[data-state="launching"] #plate,
+body[data-state="launching"] #skin-chrome {
+  animation: td-push 700ms cubic-bezier(0.5, 0, 0.8, 0.4) forwards;
+}
+
+body[data-state="launching"] #face::after {
+  animation: td-flash 700ms ease-out forwards;
+}
+
+body[data-state="ejecting"] #plate,
+body[data-state="ejecting"] #skin-chrome {
+  animation: td-pop 500ms cubic-bezier(0.3, 0, 0.3, 1) forwards;
+}
+
+@keyframes td-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6px; }
+}
+
+@keyframes td-sheen {
+  0%, 100% { background-position: 100% 0; }
+  50% { background-position: 0% 0; }
+}
+
+@keyframes td-lower {
+  from { opacity: 0; translate: 0 -80px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@keyframes td-fade {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes td-push {
+  to { translate: 0 140px; opacity: 0; }
+}
+
+@keyframes td-flash {
+  0%, 50% { opacity: 0; transform: scale(1); }
+  70% { opacity: 1; transform: scale(1.6, 4); }
+  100% { opacity: 0; transform: scale(2.4, 8); }
+}
+
+@keyframes td-pop {
+  30% { translate: 0 20px; }
+  to { translate: 0 -160px; opacity: 0; }
+}

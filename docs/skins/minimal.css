@@ -1,0 +1,205 @@
+/* ==========================================================================
+   Minimal — focused
+
+   Almost nothing: the art large on the left bleeding to the edge, a single
+   hairline, the game named in quiet type, and one filled button. The window
+   is short and wide so the art can be a picture rather than a thumbnail.
+
+   Sound: handheld, the smallest of the sets. Moments: the art fades in over a
+   slow push, a hairline draws down the left, the details settle one line at a
+   time, launch lifts the whole window a few pixels and fades it.
+   ========================================================================== */
+
+:root {
+  --skin-width: 880;
+  --skin-height: 520;
+  --skin-art: hero;
+  --skin-logo: none;
+  --skin-sound: handheld;
+  --description-lines: 4;
+  --shot-radius: 6px;
+
+  --mn-bg: #0c1726;
+  --mn-blue: #3a8bff;
+  --ink: #eef3fa;
+  --radius: 16px;
+}
+
+#card {
+  background: var(--mn-bg);
+}
+
+#scrim-top {
+  display: none;
+}
+
+#plate {
+  inset: 0 auto 0 56px;
+  width: 470px;
+  border-radius: 0;
+}
+
+/* The art fades into the background on its right edge rather than stopping. */
+#scrim-bottom {
+  --scrim-inset: 0 auto 0 56px;
+  --scrim-height: auto;
+  --scrim-radius: 0;
+  width: 470px;
+  --scrim-image: linear-gradient(90deg, transparent 55%, var(--mn-bg) 100%);
+}
+
+/* A narrow rail down the left: one dot and a vertical wordmark. */
+#skin-panel {
+  inset: 0 auto 0 0;
+  width: 56px;
+  height: auto;
+  background: #08111d;
+  border-right: 1px solid rgb(255 255 255 / 0.08);
+}
+
+#skin-panel::before {
+  content: "";
+  position: absolute;
+  top: 24px;
+  left: 20px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--mn-blue);
+}
+
+#skin-panel::after {
+  content: "PC  GAMEPAK";
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  writing-mode: vertical-rl;
+  transform: translateX(-50%) rotate(180deg);
+  font: 600 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.4em;
+  white-space: pre;
+  color: rgb(255 255 255 / 0.35);
+}
+
+/* The hairline between art and text. */
+#skin-chrome::before {
+  content: "";
+  position: absolute;
+  top: 56px;
+  bottom: 56px;
+  left: 556px;
+  width: 1px;
+  background: rgb(255 255 255 / 0.14);
+  transform-origin: top;
+}
+
+#stage {
+  position: absolute;
+  z-index: 5;
+  inset: 56px 44px 44px 590px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#game-title {
+  --title-size: 28px;
+  --title-stretch: 100%;
+  --title-leading: 1.1;
+  font-weight: 600;
+  text-transform: none;
+  text-shadow: none;
+}
+
+#game-byline {
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.5);
+}
+
+#game-description {
+  color: rgb(255 255 255 / 0.7);
+}
+
+#screenshots {
+  display: none;
+}
+
+#button-row {
+  margin-top: auto;
+}
+
+.btn--play {
+  height: 44px;
+  border-radius: 10px;
+  background: var(--mn-blue);
+  color: #fff;
+  box-shadow: none;
+}
+
+.btn--eject {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: transparent;
+  border-color: rgb(255 255 255 / 0.14);
+}
+
+/* ---- Moments ----------------------------------------------------------- */
+
+body[data-state="reading"] #plate,
+body[data-state="reading"] #stage > * {
+  opacity: 0;
+}
+
+body[data-state="ready"] #plate {
+  animation: mn-push 1400ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+body[data-state="ready"] #skin-chrome::before {
+  animation: mn-line 800ms 300ms cubic-bezier(0.6, 0, 0.2, 1) both;
+}
+
+body[data-state="ready"] #stage > * {
+  animation: mn-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+body[data-state="ready"] #stage > :nth-child(2) { animation-delay: 380ms; }
+body[data-state="ready"] #stage > :nth-child(3) { animation-delay: 440ms; }
+body[data-state="ready"] #stage > :nth-child(4) { animation-delay: 500ms; }
+body[data-state="ready"] #stage > :nth-child(5) { animation-delay: 560ms; }
+body[data-state="ready"] #stage > :nth-child(6) { animation-delay: 620ms; }
+body[data-state="ready"] #stage > :nth-child(7) { animation-delay: 680ms; }
+body[data-state="ready"] #stage > :nth-child(8) { animation-delay: 740ms; }
+body[data-state="ready"] #stage > :nth-child(9) { animation-delay: 800ms; }
+
+body[data-state="launching"] #face {
+  animation: mn-lift 800ms ease-in forwards;
+}
+
+body[data-state="ejecting"] #plate {
+  animation: mn-out 500ms ease-in forwards;
+}
+
+@keyframes mn-push {
+  from { opacity: 0; transform: scale(1.06); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes mn-line {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes mn-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes mn-lift {
+  to { opacity: 0.4; transform: translateY(-6px); }
+}
+
+@keyframes mn-out {
+  to { opacity: 0; transform: translateX(-30px); }
+}

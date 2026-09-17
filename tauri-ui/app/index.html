@@ -13,7 +13,9 @@
        artwork, so the window never opens a file itself. -->
   <style id="cart-skin"></style>
 </head>
-<body>
+<!-- The first state anyone sees, set here rather than by script so a skin's
+     opening animation starts on the first paint instead of a frame late. -->
+<body data-state="reading">
   <!--
     The window is a slot with a cartridge seated in it. #face carries everything
     printed on the cartridge and rides out of the slot on Eject, revealing the

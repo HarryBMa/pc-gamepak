@@ -115,6 +115,15 @@ pub struct Settings {
     /// survives being carried to another machine, which a default of off would
     /// quietly undo for everybody who never found the switch.
     pub track_playtime: bool,
+
+    /// Whether a skin may make a sound.
+    ///
+    /// **On**, but a skin has to ask as well: the launcher ships the sets and
+    /// plays nothing unless the cartridge's stylesheet names one. Two gates
+    /// rather than one because this window opens *by itself* when a drive
+    /// appears, so there has to be somewhere to turn noise off that is not the
+    /// cartridge.
+    pub sounds: bool,
 }
 
 impl Default for Settings {
@@ -142,6 +151,7 @@ impl Default for Settings {
             default_format: false,
             save_sync: false,
             track_playtime: true,
+            sounds: true,
             frontends: crate::frontend::Frontends::default(),
             on_cartridge_insert: crate::insert::InsertAction::default(),
         }
@@ -268,6 +278,7 @@ mod tests {
             default_format: true,
             save_sync: true,
             track_playtime: false,
+            sounds: false,
             on_cartridge_insert: crate::insert::InsertAction::AutoLaunchGame,
             ..Settings::default()
         };
