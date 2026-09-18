@@ -211,6 +211,29 @@ impl Filesystem {
         matches!(self, Self::Exfat | Self::Ntfs | Self::Btrfs)
     }
 
+    /// Can *this* machine make it?
+    ///
+    /// The two platforms answer this with different machinery, and asking the
+    /// wrong one is not a near miss. Linux shells out to `mkfs.<fs>` and so the
+    /// question is whether that tool is on PATH; Windows formats through
+    /// `Format-Volume`, which knows three filesystems and has no `mkfs`
+    /// anywhere. Probing PATH for `mkfs.ntfs` on Windows therefore answered
+    /// "no" for every entry, and the wizard — which greys out anything it
+    /// cannot create — offered a picker in which nothing could be chosen.
+    ///
+    /// `windows_can_create` already existed and was never called, which is why
+    /// it needed `allow(dead_code)` to compile on the platform it was for.
+    fn creatable_here(self) -> bool {
+        #[cfg(windows)]
+        {
+            self.windows_can_create()
+        }
+        #[cfg(not(windows))]
+        {
+            crate::proc::tool_exists(self.mkfs_tool())
+        }
+    }
+
     fn summary(self) -> &'static str {
         match self {
             Self::Exfat => "Reads and writes everywhere, macOS included, and holds none of what a game needs \u{2014} no symlinks, so Proton will not unpack onto it. Pick it only when a Mac has to write to the drive.",
@@ -260,7 +283,7 @@ impl Filesystem {
             native_on: self.native_on(),
             needs: self.needs(),
             runs_proton: self.runs_proton(),
-            can_create_here: crate::proc::tool_exists(self.mkfs_tool()),
+            can_create_here: self.creatable_here(),
         }
     }
 }
@@ -868,6 +891,25 @@ mod tests {
         let (program, args) = mkfs_command("/dev/sdb1", Filesystem::Btrfs, "Cinder");
         assert_eq!(program, "pkexec");
         assert_eq!(args, vec!["mkfs.btrfs", "-f", "-L", "Cinder", "/dev/sdb1"]);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_can_offer_the_three_it_can_actually_make() {
+        // The regression this exists for: `can_create_here` asked whether
+        // `mkfs.ntfs` was on PATH, which on Windows is never true, so the
+        // wizard greyed out every entry in its own filesystem picker.
+        let offered: Vec<&str> = all_filesystems()
+            .into_iter()
+            .filter(|f| f.can_create_here)
+            .map(|f| f.id)
+            .collect();
+        assert!(offered.contains(&"ntfs"), "{offered:?}");
+        assert!(offered.contains(&"exfat"), "{offered:?}");
+        assert!(
+            !offered.contains(&"ext4"),
+            "Format-Volume cannot make ext4: {offered:?}"
+        );
     }
 
     #[test]
