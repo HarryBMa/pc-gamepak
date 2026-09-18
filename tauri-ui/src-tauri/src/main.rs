@@ -35,8 +35,6 @@
 //   push_shaders(drive_path)                 -> Vec<Synced>  (on eject)
 //   push_saves(drive_path)                   -> Vec<SyncOutcome>  (on eject)
 //   resolve_save_conflict(drive_path, slot_id, keep) -> SyncOutcome
-//   open_wizard_settings()                   -> ()  (opens/focuses the
-//                                               wizard, straight to Settings)
 //
 // Wizard commands:
 //   list_games()                             -> GameList { games, problems } (Playnite + Steam)
@@ -1908,16 +1906,6 @@ async fn create_cartridge(
 // Entry point
 // --------------------------------------------------------------------------
 
-/// The launcher popup's own way into the wizard, alongside the tray menu's.
-///
-/// The popup is a cartridge's home, not a settings surface, so this jumps
-/// straight past cartridge creation to Settings — the same place the tray
-/// menu's "Open settings" lands.
-#[tauri::command]
-fn open_wizard_settings(app: tauri::AppHandle) {
-    spawn_open_wizard(app, true);
-}
-
 /// The wizard itself, on the tab it opens with.
 ///
 /// The popup had a way to Settings but none to the thing Settings belongs to,
@@ -2172,7 +2160,6 @@ fn main() {
             register_with_steam,
             unregister_from_steam,
             create_cartridge,
-            open_wizard_settings,
             open_wizard_window,
         ])
         .setup(move |app| {

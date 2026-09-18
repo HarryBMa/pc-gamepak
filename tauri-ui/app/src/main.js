@@ -52,7 +52,6 @@ const el = {
   byline: document.getElementById("game-byline"),
   description: document.getElementById("game-description"),
   screenshots: document.getElementById("screenshots"),
-  settings: document.getElementById("btn-settings"),
   stage: document.getElementById("stage"),
   notice: document.getElementById("notice"),
   play: document.getElementById("btn-play"),
@@ -1783,17 +1782,6 @@ el.openWizard.addEventListener("click", async () => {
     await invoke("open_wizard_window");
   } catch (error) {
     console.error(error);
-  }
-});
-
-// Straight to the settings half of the wizard, rather than to its front door.
-// Somebody pressing this has a cartridge in the slot and a setting in mind.
-el.settings.addEventListener("click", async () => {
-  try {
-    await invoke("open_wizard_settings");
-  } catch (error) {
-    console.error(error);
-    toast("Could not open Settings.", true);
   }
 });
 

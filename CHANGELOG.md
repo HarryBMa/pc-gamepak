@@ -62,10 +62,6 @@ the window, and how many of those lines are *visible* is the skin's to set with
 `--description-lines`. Screenshots are capped at 2 MB each and a path that is
 not there is skipped rather than replaced with the cover.
 
-Settings is now a button in the launcher too. It had no way in from a cartridge
-in the slot, which is exactly the moment somebody wants to change what happens
-on insert.
-
 ### Skins can animate the moments, and make a sound
 
 A skin could already style *things* — a disabled button, a selected row. It could

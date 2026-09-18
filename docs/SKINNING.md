@@ -132,7 +132,6 @@ layers below are for.
     │       ├── #play-ring > #btn-play    .btn.btn--play — the ring is the
     │       │                            flex child and is flex: 1, so set
     │       │                            #play-ring, not .btn--play, to size it
-    │       ├── #btn-settings             .btn.btn--eject.btn--settings
     │       └── #btn-eject                .btn.btn--eject, carries .pad-badge
     ├── #sheet                  the ⓘ panel
     └── #toast
@@ -143,10 +142,6 @@ which most do not: `description=`, `genre=`, `publisher=`, `year=` and
 `screenshot=` are all optional. Style them as though they are there, and they
 will be when a cartridge has something to say. Nothing about a skin written
 before they existed changes.
-
-`#btn-settings` carries `.btn--eject` as well as its own class, which is what
-makes it arrive already looking like the skin it is in. Give it `.btn--settings`
-rules to tell the two apart, or `display: none` to leave the row as it was.
 
 A row in `#game-list`, built at runtime:
 
