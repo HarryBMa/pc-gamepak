@@ -173,6 +173,14 @@ Fixed along the way:
   so on. A pick now belongs to the tab it was clicked on, and Write waits for
   downloads still in flight.
 - Picking a logo, hero or icon no longer becomes the game's remembered cover.
+- The Edit tab and the drive lists name a cartridge by what its
+  `cartridge.conf` says, not by the drive's volume label — which only changes
+  when a drive is erased, so a drive rewritten from FTL to Cult of the Lamb
+  still called itself FTL. Edit also re-reads a cartridge after it has been
+  written over.
+- The Windows tuning buttons in Settings name the drive they will change, and
+  fall back to the cartridge open on Edit, or the only drive plugged in, rather
+  than refusing until a drive was chosen on another tab.
 - The artwork picker's preview shows all four pictures at once, each in its own
   shape — the hero as a banner, the cover with the logo over it, and the drive
   icon — with the one being chosen outlined. The Hero tab used to put the hero

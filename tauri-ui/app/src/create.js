@@ -971,13 +971,19 @@ function renderDrives({ onlyCartridges = false, choose = selectDrive } = {}) {
 
     const name = document.createElement("span");
     name.className = "drive__name";
-    name.textContent = drive.label || drive.path;
+    // Editing is about what is on the drive, so it leads with that; the volume
+    // label only changes when a drive is erased and is often an older game's.
+    name.textContent = onlyCartridges
+      ? drive.cartridgeTitle || drive.label || drive.path
+      : drive.label || drive.path;
 
     const meta = document.createElement("span");
     meta.className = "drive__meta";
-    meta.textContent = drive.hasCartridge && !onlyCartridges
-      ? `${formatBytes(drive.freeBytes)} free · has a cartridge`
-      : `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
+    meta.textContent = onlyCartridges
+      ? `${drive.label} · ${formatBytes(drive.freeBytes)} free`
+      : drive.hasCartridge
+        ? `${formatBytes(drive.freeBytes)} free · has ${drive.cartridgeTitle || "a cartridge"}`
+        : `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
     if (drive.hasCartridge && !onlyCartridges) meta.classList.add("drive__warn");
 
     btn.append(name, meta);
@@ -1593,7 +1599,7 @@ function renderBuild() {
   if (drive) {
     el.buildMediaTitle.textContent = drive.label || drive.path;
     const bits = [`${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`];
-    if (drive.hasCartridge) bits.push("has a cartridge");
+    if (drive.hasCartridge) bits.push(`has ${drive.cartridgeTitle || "a cartridge"}`);
     el.buildMediaMeta.textContent = bits.join(" · ");
   } else {
     el.buildMediaTitle.textContent = "No drive chosen";
@@ -2117,6 +2123,8 @@ async function write() {
     }
     el.remaining.textContent = "0:00";
     finished = true;
+    // Whatever the Edit tab had open may be the cartridge just overwritten.
+    editing = null;
   } catch (error) {
     status(String(error), "error");
     el.runningPhase.textContent = "Stopped";
@@ -2608,9 +2616,9 @@ async function refreshEditDrives() {
 function renderEditMedia() {
   const drive = drives.find((d) => d.path === editing?.drivePath);
   if (drive) {
-    el.editMediaTitle.textContent = drive.label || drive.path;
+    el.editMediaTitle.textContent = editing.title || drive.label || drive.path;
     el.editMediaMeta.textContent =
-      `${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
+      `${drive.label} · ${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`;
   } else {
     el.editMediaTitle.textContent = "Choose a cartridge";
     el.editMediaMeta.textContent = "";
@@ -2815,6 +2823,30 @@ function renderEditGames() {
 /** Which direction the shown plan is for, or null when none is shown. */
 let tunePending = null;
 
+/**
+ * The drive tuning acts on: the one chosen on Create, else the cartridge open
+ * on Edit, else the only drive plugged in.
+ */
+function tuneDrive() {
+  const path = selectedDrive
+    ?? (activeTab === "edit" ? editing?.drivePath : null)
+    ?? (drives.length === 1 ? drives[0].path : null);
+  return drives.find((d) => d.path === path) ?? null;
+}
+
+/** Name the drive on the buttons, so it is clear what they will change. */
+function renderTuneTarget() {
+  const drive = tuneDrive();
+  el.btnTune.disabled = !drive;
+  el.btnUntune.disabled = !drive;
+  el.btnTune.textContent = drive ? `Apply to ${drive.label}` : "Apply to a drive";
+  if (!drive && tunePending === null) {
+    el.tuneStatus.textContent = drives.length
+      ? "Choose a drive on the Create tab to apply this to it."
+      : "Plug a cartridge in to apply this to it.";
+  }
+}
+
 const TWEAKS = ["defender", "indexing"];
 
 /**
@@ -2825,8 +2857,9 @@ const TWEAKS = ["defender", "indexing"];
  * not a checkbox that stands in for having read anything.
  */
 async function showTunePlan(applying) {
-  if (!selectedDrive) {
-    el.tuneStatus.textContent = "Choose a drive first.";
+  const drive = tuneDrive();
+  if (!drive) {
+    renderTuneTarget();
     return;
   }
   el.tuneStatus.textContent = "Reading what would change…";
@@ -2834,7 +2867,7 @@ async function showTunePlan(applying) {
   let commands;
   try {
     commands = await invoke("tuning_plan", {
-      drivePath: selectedDrive,
+      drivePath: drive.path,
       tweaks: TWEAKS,
       applying,
     });
@@ -2843,7 +2876,7 @@ async function showTunePlan(applying) {
     return;
   }
 
-  tunePending = applying;
+  tunePending = { applying, path: drive.path };
   el.tunePlan.replaceChildren();
   for (const command of commands) {
     const li = document.createElement("li");
@@ -2868,17 +2901,18 @@ function resetTune() {
   el.tunePlan.replaceChildren();
   el.tuneStatus.textContent = "";
   showTuneButtons(false);
+  renderTuneTarget();
 }
 
 async function runTuning() {
   if (tunePending === null) return;
-  const applying = tunePending;
+  const { applying, path } = tunePending;
   el.btnTuneRun.disabled = true;
   el.tuneStatus.textContent = "Waiting for Windows…";
 
   try {
     const done = await invoke("apply_tuning", {
-      drivePath: selectedDrive,
+      drivePath: path,
       tweaks: TWEAKS,
       applying,
     });
@@ -3400,7 +3434,8 @@ async function demoInvoke(command, args) {
         { path: "/run/media/harry/CINDER", label: "CINDER",
           totalBytes: 128_035_676_160, freeBytes: 119_014_128_640, hasCartridge: false },
         { path: "/run/media/harry/HOLLOW", label: "HOLLOW",
-          totalBytes: 128_035_676_160, freeBytes: 18_253_611_008, hasCartridge: true },
+          totalBytes: 128_035_676_160, freeBytes: 18_253_611_008, hasCartridge: true,
+          cartridgeTitle: "God of War Collection" },
       ];
     case "executable_choices":
       return [
