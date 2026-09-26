@@ -18,7 +18,7 @@
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   overflow: hidden;
   /* Square. A rounded corner on a transparent, undecorated window leaves a
      wedge of nothing that Windows fills with its own border, and the two curves
@@ -115,15 +115,72 @@
    Columns
    ========================================================================== */
 
-/* Two jobs across the top. Not a segmented control floating in the middle of
-   the page — these sit on the same rule the header ends with, so the tab that
-   is open reads as continuous with the panel below it. */
-#tabs {
+/* Three jobs down the left. A strip of tabs across the top had room for two;
+   the shelf made three, and a column has room for more without crowding the
+   title bar. */
+#sidebar {
   display: flex;
-  gap: 6px;
-  padding: 8px 18px 0;
-  border-bottom: 1px solid oklch(1 0 0 / 0.06);
-  background: oklch(1 0 0 / 0.015);
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 10px;
+  border-right: 1px solid oklch(1 0 0 / 0.06);
+  background: oklch(0 0 0 / 0.16);
+}
+
+.side-tab {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: left;
+  cursor: pointer;
+  transition: color 160ms linear, background-color 160ms linear;
+}
+
+.side-tab svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.side-tab:hover {
+  color: var(--ink);
+  background: oklch(1 0 0 / 0.04);
+}
+
+.side-tab[aria-selected="true"] {
+  color: var(--ink);
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.side-tab[aria-selected="true"] svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.side-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.side-tab__count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.side-tab__count[hidden] {
+  display: none;
 }
 
 .tab {
@@ -169,13 +226,24 @@
 
 #columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 348px;
+  grid-template-columns: 148px minmax(0, 1fr) 348px;
   min-height: 0;
   background: linear-gradient(180deg, oklch(1 0 0 / 0.006), oklch(1 0 0 / 0));
 }
 
+/* The shelf is not a cartridge being built, so it has no preview: the list
+   takes the rail's width instead. */
+#columns.is-shelf {
+  grid-template-columns: 148px minmax(0, 1fr);
+}
+
+#columns.is-shelf #rail {
+  display: none;
+}
+
 #panel-create,
-#panel-edit {
+#panel-edit,
+#panel-created {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -187,7 +255,93 @@
    panel renders underneath Create, which it has been doing unnoticed because
    the left column scrolls and nobody scrolled. */
 #panel-create[hidden],
-#panel-edit[hidden] {
+#panel-edit[hidden],
+#panel-created[hidden] {
+  display: none;
+}
+
+/* --- Created ------------------------------------------------------------- */
+
+#panel-created {
+  padding: 20px 20px 18px;
+  overflow-y: auto;
+  animation: rise 320ms var(--ease) both;
+}
+
+#created-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shelf-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 9px 10px 9px 12px;
+  border-radius: 11px;
+  border: 1px solid oklch(1 0 0 / 0.07);
+  background: oklch(0 0 0 / 0.22);
+}
+
+/* Plugged in right now: the one thing that changes what the row can do. */
+.shelf-row.is-here {
+  border-color: color-mix(in oklch, var(--accent) 40%, transparent);
+}
+
+.shelf-row .plate {
+  flex: none;
+  width: 40px;
+  height: 60px;
+}
+
+.shelf-row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.shelf-row__title {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shelf-row__games,
+.shelf-row__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shelf-row__meta {
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+
+.shelf-row__here {
+  color: var(--good);
+}
+
+.shelf-row__forget {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.shelf-row__forget:hover {
+  color: var(--danger);
+}
+
+#created-empty[hidden] {
   display: none;
 }
 
@@ -2434,8 +2588,11 @@ dialog form {
 }
 
 /* The grid keeps its shape when a slot goes: three slots, three columns. */
+/* However many slots are showing share the row: a collection hides two. */
 .art-slots:has(.art-slot[hidden]) {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
 }
 
 .art-slot[hidden] {

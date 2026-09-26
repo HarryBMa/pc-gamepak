@@ -122,15 +122,22 @@ const el = {
   status: $("status"),
 
   // Dialogs
+  columns: $("columns"),
   tabCreate: $("tab-create"),
   tabEdit: $("tab-edit"),
+  tabCreated: $("tab-created"),
   panelCreate: $("panel-create"),
   panelEdit: $("panel-edit"),
+  panelCreated: $("panel-created"),
+  createdList: $("created-list"),
+  createdEmpty: $("created-empty"),
+  createdCount: $("created-count"),
   editMediaTitle: $("edit-media-title"),
   editMediaMeta: $("edit-media-meta"),
   btnChangeCart: $("btn-change-cart"),
   editFormWrap: $("edit-form-wrap"),
   btnRefetchArt: $("btn-refetch-art"),
+  btnRemoveLogo: $("btn-remove-logo"),
   editTitle: $("edit-title"),
   editArtSlots: $("edit-art-slots"),
   editCoverSlot: $("edit-cover-slot"),
@@ -651,6 +658,30 @@ function icon(paths, size = 14) {
 const ICON_IMAGE = ["M2.4 3.6h11.2v8.8H2.4z", "M2.4 10l3.2-2.6 2.6 2 2-1.4 3.4 2.4", "M5.9 6.3v.01"];
 const ICON_CROSS = ["M4.4 4.4l7.2 7.2", "M11.6 4.4l-7.2 7.2"];
 const ICON_GRIP = ["M6 4.5h.01", "M10 4.5h.01", "M6 8h.01", "M10 8h.01", "M6 11.5h.01", "M10 11.5h.01"];
+const ICON_STAR = ["M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4-2.9-2.8 4-.6z"];
+
+/**
+ * The game a collection's drive icon is made from: the one starred, else the
+ * first. An icon chosen for the cartridge itself still wins over either.
+ */
+function primaryOf(rows) {
+  return rows.find((game) => game.primary) ?? rows[0] ?? null;
+}
+
+function primaryIndexOf(rows) {
+  return rows.length > 1 ? rows.indexOf(primaryOf(rows)) : null;
+}
+
+/**
+ * What Explorer will show, by the rule the backend applies: the cartridge's
+ * own icon, else (for a collection) the primary game's icon or cover, else
+ * `fallback`.
+ */
+function driveIconPreview(rows, fallback) {
+  if (art.icon?.preview) return art.icon.preview;
+  const primary = rows.length > 1 ? primaryOf(rows) : null;
+  return primary?.icon || primary?.cover || fallback;
+}
 
 /**
  * One list of games, drawn the same way wherever it appears.
@@ -684,11 +715,11 @@ function renderGameRows(list, rows, { showSize = false, removable = false, onCha
     // an empty slot waiting to be filled in.
     const thumb = document.createElement("span");
     thumb.className = "order-row__art";
-    const art = safeSrc(game.cover);
-    if (art) {
+    const cover = safeSrc(game.cover);
+    if (cover) {
       const img = document.createElement("img");
       img.alt = "";
-      img.src = art;
+      img.src = cover;
       thumb.append(img);
     } else {
       thumb.classList.add("is-empty");
@@ -721,6 +752,30 @@ function renderGameRows(list, rows, { showSize = false, removable = false, onCha
       event.stopPropagation();
       openArtwork("cover", Number(li.dataset.index));
     });
+
+    // Which game the drive shows in Explorer. Only a collection has a choice.
+    if (rows.length > 1) {
+      const star = document.createElement("button");
+      star.className = "row-btn";
+      star.type = "button";
+      star.draggable = false;
+      star.append(icon(ICON_STAR));
+      const primary = primaryOf(rows) === game;
+      star.classList.toggle("is-set", primary);
+      star.setAttribute("aria-pressed", String(primary));
+      star.title = primary
+        ? `${game.name ?? game.title} is the drive icon`
+        : `Use ${game.name ?? game.title} as the drive icon`;
+      star.setAttribute("aria-label", star.title);
+      star.addEventListener("click", (event) => {
+        event.stopPropagation();
+        for (const other of rows) other.primary = other === game;
+        // Picking a game is picking the icon, so a custom one stops winning.
+        art.icon = null;
+        onChange();
+      });
+      li.append(star);
+    }
     li.append(poster);
 
     if (removable) {
@@ -1086,6 +1141,8 @@ function openGamePicker() {
 
 function openMediaPicker() {
   openPick("media");
+  // Open on what is known, then fill in what has been plugged in since.
+  if (!building) void refreshDrives();
 }
 
 async function selectDrive(drive) {
@@ -1396,10 +1453,15 @@ function refreshRail() {
       el.railKindText.textContent = games.length > 1 ? "Multicartridge" : "Cartridge";
       el.railKindCount.hidden = games.length <= 1;
       el.railKindCount.textContent = `${games.length} games`;
-      renderRailLauncher(editing.cover, {
+      // A collection opens on its first game, with that game's art and logo.
+      const collection = games.length > 1;
+      renderRailLauncher(collection ? games[0]?.cover || editing.cover : editing.cover, {
         title: el.editTitle.value.trim() || editing.title,
         first: games[0]?.title,
         games: games.length,
+        logo: collection
+          ? games[0]?.logo
+          : art.logo?.remove ? null : art.logo?.preview ?? editing.logo,
       });
       el.railSpace.hidden = true;
       el.railPlan.hidden = true;
@@ -1486,8 +1548,7 @@ function renderRailLauncher(coverSrc, override = null) {
   // same question there as here: what will this look like when it is plugged
   // in — which is most of what editing a cartridge is for.
   if (override) {
-    el.railLauncherLogo.hidden = true;
-    el.railLauncherStage.classList.remove("has-logo");
+    showRailLogo(override.logo);
     el.railLauncherEyebrow.hidden = !collection;
     el.railLauncherEyebrow.textContent = collection ? override.title || "Collection" : "";
     const name = (collection ? override.first : override.title) || override.title || "Nothing yet";
@@ -1497,14 +1558,10 @@ function renderRailLauncher(coverSrc, override = null) {
     return;
   }
 
-  // A collection's own name goes above the title, because on a collection the
-  // title names whichever game is selected rather than the cartridge.
-  const logoSrc = safeSrc(art.logo?.preview);
-  el.railLauncherLogo.hidden = !logoSrc;
-  if (logoSrc) el.railLauncherLogo.src = logoSrc;
-  el.railLauncherStage.classList.toggle("has-logo", Boolean(logoSrc));
-
-  el.railLauncherEyebrow.hidden = !collection || Boolean(logoSrc);
+  // A collection prints the selected game's own logo, as the launcher does,
+  // with the collection's name above it.
+  showRailLogo(collection ? picked[0]?.logo : art.logo?.preview);
+  el.railLauncherEyebrow.hidden = !collection;
   el.railLauncherEyebrow.textContent = collection ? cartridgeTitle() || "Collection" : "";
 
   // With a logo the title is already printed in the artwork; without one this
@@ -1518,6 +1575,22 @@ function renderRailLauncher(coverSrc, override = null) {
   renderRailExplorer();
 }
 
+/** Name the logo slot for what it does on this kind of cartridge. */
+function labelLogoSlot(plate, collection) {
+  const slot = plate.closest(".art-slot");
+  slot.querySelector(".art-slot__name").textContent = collection ? "Collection logo" : "Logo";
+  slot.title = collection
+    ? "Shown in the launcher's corner. Each game's own logo is set from its row."
+    : "";
+}
+
+function showRailLogo(src) {
+  const logoSrc = safeSrc(src);
+  el.railLauncherLogo.hidden = !logoSrc;
+  if (logoSrc) el.railLauncherLogo.src = logoSrc;
+  el.railLauncherStage.classList.toggle("has-logo", Boolean(logoSrc));
+}
+
 /** The drive as Explorer will label it — the one thing the icon slot is for. */
 function renderRailExplorer() {
   el.railExplorerLabel.textContent = platform === "windows" ? "In Explorer" : "In the file manager";
@@ -1526,7 +1599,7 @@ function renderRailExplorer() {
   el.railExplorer.hidden = !drive || !named;
   if (!drive) return;
 
-  const icon = safeSrc(art.icon?.preview) || safeSrc(art.cover?.preview) || safeSrc(picked[0]?.cover);
+  const icon = safeSrc(driveIconPreview(picked, art.cover?.preview ?? picked[0]?.cover));
   el.railExplorerIcon.style.backgroundImage = icon ? `url("${icon}")` : "";
   el.railExplorerIcon.classList.toggle("is-blank", !icon);
 
@@ -1618,9 +1691,12 @@ function renderBuild() {
 
   // --- Artwork ----------------------------------------------------------
   el.coverSlot.hidden = collection;
+  // A collection's own logo is the mark in the launcher's corner — a SEGA for
+  // a shelf of Mega Drive games — while each game's logo is set from its row.
+  labelLogoSlot(el.slotLogo, collection);
   setPlate(el.collectionCover, el.collectionCoverImg, coverSrc);
   setPlate(el.slotLogo, el.slotLogoImg, art.logo?.preview);
-  setPlate(el.slotIcon, el.slotIconImg, art.icon?.preview ?? coverSrc);
+  setPlate(el.slotIcon, el.slotIconImg, driveIconPreview(picked, coverSrc));
   // No fallback to the cover: a hero is a different shape, and standing a
   // portrait in for one would look like a hero had been chosen when none had.
   setPlate(el.slotHero, el.slotHeroImg, art.background?.preview);
@@ -1934,6 +2010,7 @@ function buildRequest() {
       collectionLogoSource: art.logo?.path ?? null,
       collectionIconSource: art.icon?.path ?? null,
       collectionBackgroundSource: art.background?.path ?? null,
+      primaryGame: primaryIndexOf(picked),
       games: picked.map((g) => ({
         title: g.name,
         executable: g.executable,
@@ -2025,6 +2102,7 @@ function startAnother() {
 
 /** The one button: write, update, or start again, depending on the tab. */
 function primaryAction() {
+  if (activeTab === "created") return;
   if (activeTab === "edit") return saveEdits();
   if (finished) return startAnother();
   return write();
@@ -2131,6 +2209,8 @@ async function write() {
     finished = true;
     // Whatever the Edit tab had open may be the cartridge just overwritten.
     editing = null;
+    // The backend put it on the shelf; the count in the sidebar should say so.
+    void refreshCreated();
   } catch (error) {
     status(String(error), "error");
     el.runningPhase.textContent = "Stopped";
@@ -2558,22 +2638,37 @@ function applyDefaults() {
    Create / Edit
    ========================================================================== */
 
-/** Which tab is showing. The rail belongs to both and never moves. */
-async function showTab(name) {
-  const isEdit = name === "edit";
-  activeTab = isEdit ? "edit" : "create";
+const TABS = ["create", "edit", "created"];
 
-  el.tabCreate.setAttribute("aria-selected", String(!isEdit));
-  el.tabEdit.setAttribute("aria-selected", String(isEdit));
-  el.tabCreate.tabIndex = isEdit ? -1 : 0;
-  el.tabEdit.tabIndex = isEdit ? 0 : -1;
-  el.panelCreate.hidden = isEdit;
-  el.panelEdit.hidden = !isEdit;
+/**
+ * Which panel is showing. The rail belongs to Create and Edit and never moves;
+ * the shelf has no cartridge being built, so it hides the rail.
+ */
+async function showTab(name) {
+  activeTab = TABS.includes(name) ? name : "create";
+  const isEdit = activeTab === "edit";
+
+  for (const [tab, panel, id] of [
+    [el.tabCreate, el.panelCreate, "create"],
+    [el.tabEdit, el.panelEdit, "edit"],
+    [el.tabCreated, el.panelCreated, "created"],
+  ]) {
+    const on = id === activeTab;
+    tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
+    panel.hidden = !on;
+  }
+  el.columns.classList.toggle("is-shelf", activeTab === "created");
+
+  if (activeTab === "created") {
+    el.barText.textContent = "Created cartridges";
+    await refreshCreated();
+    return;
+  }
 
   if (isEdit) {
     await refreshEditDrives();
-    const cartridges = (drives ?? []).filter((drive) => drive.hasCartridge);
-    const preferred = cartridges.find((drive) => drive.path === selectedDrive) ?? cartridges[0];
+    const preferred = preferredCartridge();
     if (preferred && (!editing || editing.drivePath !== preferred.path)) {
       await openEditor(preferred.path);
     }
@@ -2585,6 +2680,7 @@ async function showTab(name) {
     return;
   }
 
+  if (!building) await refreshDrives({ quick: true });
   el.barText.textContent = building
     ? `Writing ${on.format ? driveLabelFor(cartridgeTitle(), filesystem()) || driveLabel() : driveLabel()}`
     : isCollection()
@@ -2607,19 +2703,138 @@ async function refreshEditDrives() {
     status(String(error), "error");
     return;
   }
-  const cartridges = drives.filter((drive) => drive.hasCartridge);
-
   // Opening Edit with a cartridge plugged in and nothing selected picks one:
   // there is exactly one thing this tab can be about, and asking which is a
   // question with one answer.
-  if (activeTab === "edit" && cartridges.length > 0) {
-    const preferred = cartridges.find((drive) => drive.path === selectedDrive) ?? cartridges[0];
+  const preferred = preferredCartridge();
+  if (activeTab === "edit" && preferred) {
     if (!editing || editing.drivePath !== preferred.path) {
       await openEditor(preferred.path);
     }
   }
 
   renderEditMedia();
+}
+
+/**
+ * The cartridge Edit should be about: the one already open if it is still
+ * plugged in, then the drive Create has selected, then any. The open one comes
+ * first so that arriving from the shelf lands on the cartridge clicked there.
+ */
+function preferredCartridge() {
+  const cartridges = (drives ?? []).filter((drive) => drive.hasCartridge);
+  return cartridges.find((drive) => drive.path === editing?.drivePath)
+    ?? cartridges.find((drive) => drive.path === selectedDrive)
+    ?? cartridges[0];
+}
+
+/* ==========================================================================
+   Created — the shelf this machine has written
+   ========================================================================== */
+
+/** Read the shelf and the drives, then draw both the list and the count. */
+async function refreshCreated() {
+  let shelf = [];
+  try {
+    shelf = (await invoke("list_created")) ?? [];
+  } catch (error) {
+    status(String(error), "error");
+  }
+  el.createdCount.textContent = shelf.length ? String(shelf.length) : "";
+  el.createdCount.hidden = shelf.length === 0;
+  if (activeTab !== "created") return;
+
+  try {
+    drives = await invoke("list_target_drives");
+  } catch {
+    // Without drives nothing shows as plugged in, which is still true enough.
+  }
+  renderCreated(shelf);
+}
+
+function renderCreated(shelf) {
+  el.createdList.replaceChildren();
+  el.createdEmpty.hidden = shelf.length > 0;
+
+  for (const entry of shelf) {
+    // A cartridge is known by the name in its conf; the volume label outlives
+    // a rewrite, so it cannot say which cartridge is in the drive.
+    const here = (drives ?? []).find(
+      (drive) => drive.hasCartridge && drive.cartridgeTitle === entry.title,
+    );
+
+    const row = document.createElement("li");
+    row.className = here ? "shelf-row is-here" : "shelf-row";
+
+    const plate = document.createElement("div");
+    plate.className = entry.cover ? "plate" : "plate plate--empty";
+    if (entry.cover) {
+      const img = document.createElement("img");
+      img.alt = "";
+      img.src = entry.cover;
+      plate.append(img);
+    }
+
+    const body = document.createElement("div");
+    body.className = "shelf-row__body";
+    const title = document.createElement("p");
+    title.className = "shelf-row__title";
+    title.textContent = entry.title;
+    const games = document.createElement("p");
+    games.className = "shelf-row__games";
+    // A single game is the title again; only a collection has a list to show.
+    games.textContent = entry.games.length > 1
+      ? `${entry.games.length} games · ${entry.games.join(", ")}`
+      : entry.bytesCopied ? "Game on the cartridge" : "Game stays on this PC";
+    const meta = document.createElement("p");
+    meta.className = "shelf-row__meta mono";
+    const parts = [
+      entry.driveLabel,
+      new Date(entry.writtenAt * 1000).toLocaleDateString(undefined, {
+        day: "numeric", month: "short", year: "numeric",
+      }),
+    ];
+    if (entry.bytesCopied) parts.push(formatBytes(entry.bytesCopied));
+    meta.textContent = parts.filter(Boolean).join(" · ");
+    if (here) {
+      const plugged = document.createElement("span");
+      plugged.className = "shelf-row__here";
+      plugged.textContent = ` · plugged in at ${here.path}`;
+      meta.append(plugged);
+    }
+    body.append(title, games, meta);
+    row.append(plate, body);
+
+    if (here) {
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "change-btn";
+      edit.textContent = "Edit";
+      edit.addEventListener("click", async () => {
+        await openEditor(here.path);
+        await showTab("edit");
+      });
+      row.append(edit);
+    }
+
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "icon-btn shelf-row__forget";
+    forget.setAttribute("aria-label", `Remove ${entry.title} from this list`);
+    forget.title = "Remove from this list. The cartridge is not touched.";
+    forget.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" width="13" height="13" aria-hidden="true"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" /></svg>';
+    forget.addEventListener("click", async () => {
+      try {
+        await invoke("forget_created", { id: entry.id });
+      } catch (error) {
+        status(String(error), "error");
+      }
+      await refreshCreated();
+    });
+    row.append(forget);
+
+    el.createdList.append(row);
+  }
 }
 
 /** The cartridge being edited, stated the way Create states its media. */
@@ -2761,18 +2976,26 @@ function renderEditArt() {
   // A collection's cover is written and then never shown: the launcher paints
   // the selected game's art, not the cartridge's. Until something displays it,
   // offering the slot is offering work with nowhere to land.
-  const collection = (editing?.games ?? []).length > 1;
+  const games = editing?.games ?? [];
+  const collection = games.length > 1;
   el.editCoverSlot.hidden = collection;
+  labelLogoSlot(el.editLogo, collection);
 
   setPlate(el.editCover, el.editCoverImg, art.cover?.preview ?? editing?.cover);
-  setPlate(el.editLogo, el.editLogoImg, art.logo?.preview ?? editing?.logo);
+  const logo = art.logo?.remove ? null : art.logo?.preview ?? editing?.logo;
+  setPlate(el.editLogo, el.editLogoImg, logo);
+  el.btnRemoveLogo.hidden = !logo;
+  el.btnRemoveLogo.textContent = collection ? "Remove collection logo" : "Remove logo";
   setPlate(el.editHero, el.editHeroImg, art.background?.preview ?? editing?.background);
-  // Falls back to the cover only when the cartridge genuinely has no icon of
-  // its own, which is what autorun.inf does with it.
+  // A collection shows what saving will write: the primary game's. A single
+  // game falls back to the cover only when it has no icon of its own, which
+  // is what autorun.inf does with it.
   setPlate(
     el.editIcon,
     el.editIconImg,
-    art.icon?.preview ?? editing?.icon ?? art.cover?.preview ?? editing?.cover,
+    collection
+      ? driveIconPreview(games, editing?.cover)
+      : art.icon?.preview ?? editing?.icon ?? art.cover?.preview ?? editing?.cover,
   );
 }
 
@@ -2810,6 +3033,7 @@ function renderEditGames() {
     removable: true,
     onChange: () => {
       renderEditGames();
+      renderEditArt();
       refreshRail();
     },
   });
@@ -2950,9 +3174,11 @@ async function saveEdits() {
         drivePath: editing.drivePath,
         title: el.editTitle.value.trim() || editing.title,
         coverSource: art.cover?.path ?? null,
-        logoSource: art.logo?.path ?? null,
+        logoSource: art.logo?.remove ? null : art.logo?.path ?? null,
         iconSource: art.icon?.path ?? null,
         backgroundSource: art.background?.path ?? null,
+        primaryGame: primaryIndexOf(editing.games ?? []),
+        removeLogo: Boolean(art.logo?.remove),
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,
@@ -3058,7 +3284,25 @@ el.btnInheritCover.addEventListener("click", async () => {
 el.create.addEventListener("click", primaryAction);
 el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
+el.tabCreated.addEventListener("click", () => showTab("created"));
+// Drives are read again when the picker opens and when Create is shown, not on
+// window focus. A refresh on focus took the foreground back from a launcher
+// that had just opened on top of the wizard, so its arrow keys went here.
+// A vertical tablist moves with up and down, as a screen reader announces it.
+$("sidebar").addEventListener("keydown", (event) => {
+  const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+  if (!step) return;
+  event.preventDefault();
+  const next = TABS[(TABS.indexOf(activeTab) + step + TABS.length) % TABS.length];
+  void showTab(next).then(() => $(`tab-${next}`).focus());
+});
 el.btnRefetchArt.addEventListener("click", refetchArtwork);
+// Staged like every other change here, and written on Update.
+el.btnRemoveLogo.addEventListener("click", () => {
+  art.logo = { remove: true };
+  renderEditArt();
+  refreshRail();
+});
 
 // Edit is now a single tab action, not a second link in the drive list.
 draggable(el.editGames, () => editing?.games ?? [], () => {
@@ -3267,16 +3511,26 @@ async function refreshLibrary() {
   renderGames();
 }
 
-async function refreshDrives() {
+/**
+ * Read the drives again. Drives come and go while the wizard is open, and this
+ * used to run only at startup and after a write — so a drive plugged in later
+ * never reached Create, until visiting Edit happened to read the list for it.
+ *
+ * `quick` skips the volumes with no letter, which on Windows means a
+ * PowerShell round trip: fine when the picker opens, too slow for every focus.
+ */
+async function refreshDrives({ quick = false } = {}) {
   try {
     drives = await invoke("list_target_drives");
   } catch {
     drives = [];
   }
-  try {
-    unmounted = await invoke("list_unmounted_volumes");
-  } catch {
-    unmounted = [];
+  if (!quick) {
+    try {
+      unmounted = await invoke("list_unmounted_volumes");
+    } catch {
+      unmounted = [];
+    }
   }
   // A drive that has gone away takes the selection with it.
   if (selectedDrive && !drives.some((d) => d.path === selectedDrive)) {
@@ -3321,6 +3575,12 @@ async function start() {
   await refreshDrives();
   refreshRail();
   showPhase("build");
+  void refreshCreated();
+  // The browser preview can open on any panel: `?tab=created`.
+  if (!tauri) {
+    const tab = new URLSearchParams(location.search).get("tab");
+    if (tab) await showTab(tab);
+  }
 }
 
 /* ==========================================================================
@@ -3330,6 +3590,15 @@ async function start() {
    designed and reviewed without a drive:
        npx http-server tauri-ui  →  http://localhost:8080/app/create.html
    ========================================================================== */
+
+/** The browser preview's shelf. One cartridge plugged in, one on the shelf. */
+let demoShelf = [
+  { id: "1758900000", title: "God of War Collection",
+    games: ["God of War (2018)", "God of War Ragnarök"], driveLabel: "HOLLOW",
+    writtenAt: 1758900000, bytesCopied: 190_000_000_000, cover: "src/demo/gow-collection.jpg" },
+  { id: "1758200000", title: "Hollow Knight", games: ["Hollow Knight"], driveLabel: "KNIGHT",
+    writtenAt: 1758200000, bytesCopied: 0, cover: "src/demo/cover.jpg" },
+];
 
 async function demoInvoke(command, args) {
   switch (command) {
@@ -3400,6 +3669,11 @@ async function demoInvoke(command, args) {
       };
     case "update_cartridge":
       return { confPath: `${args.request.drivePath}/cartridge.conf`, warnings: [] };
+    case "list_created":
+      return demoShelf;
+    case "forget_created":
+      demoShelf = demoShelf.filter((entry) => entry.id !== args.id);
+      return null;
     case "host_platform":
       return new URLSearchParams(location.search).get("platform") || "linux";
     case "frontends":

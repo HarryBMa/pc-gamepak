@@ -73,8 +73,8 @@
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, drives, edit, format, frontend, health, home, idle, insert, playlog, playtrack,
-    saves, settings, sgdb, shaders, stats, tuning,
+    busy, create, created, drives, edit, format, frontend, health, home, idle, insert, playlog,
+    playtrack, saves, settings, sgdb, shaders, stats, tuning, unboxed,
 };
 
 use std::collections::HashMap;
@@ -2017,12 +2017,44 @@ async fn create_cartridge(
     gamepak_core::throttle::set_limit_mb_s(settings::load().default_copy_rate_mb_s);
 
     tauri::async_runtime::spawn_blocking(move || {
-        create::create_cartridge(&request, &mut |progress| {
+        let mut result = create::create_cartridge(&request, &mut |progress| {
             let _ = window.emit("cartridge://progress", progress);
-        })
+        })?;
+        // Here rather than in the window, so a write is on the shelf even if
+        // the window is closed before it hears back.
+        let label = drives::list_drives()
+            .into_iter()
+            .find(|drive| drive.path == request.drive_path)
+            .map(|drive| drive.label)
+            .unwrap_or_default();
+        if let Err(e) = created::record(&request.drive_path, &label, result.bytes_copied) {
+            result
+                .warnings
+                .push(format!("Not added to Created cartridges: {e}"));
+        }
+        Ok(result)
     })
     .await
     .map_err(|e| format!("the build thread failed: {e}"))?
+}
+
+/// Whether this machine is seeing this cartridge for the first time, which is
+/// when the launcher plays the unboxing. Asking records the answer.
+#[tauri::command]
+fn first_insert(title: String) -> bool {
+    unboxed::first_time(&title)
+}
+
+/// Every cartridge this wizard has written, newest first.
+#[tauri::command]
+fn list_created() -> Vec<created::CreatedView> {
+    created::list()
+}
+
+/// Take a cartridge off that list. Touches no drive.
+#[tauri::command]
+fn forget_created(id: String) -> Result<(), String> {
+    created::forget(&id)
 }
 
 // --------------------------------------------------------------------------
@@ -2137,14 +2169,14 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         return Ok(());
     }
 
-    // Resizable, unlike the popup: 880x660 is logical pixels, so at 150% or
+    // Resizable, unlike the popup: 1030x660 is logical pixels, so at 150% or
     // 200% desktop scaling the wizard is taller than the screen it opens on and
     // a fixed window leaves the title bar and the game list off the edge with
-    // no way back. The minimum keeps both columns usable.
+    // no way back. The minimum keeps the sidebar and both columns usable.
     let wizard = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
         .title("Create cartridge")
-        .inner_size(880.0, 660.0)
-        .min_inner_size(720.0, 520.0)
+        .inner_size(1030.0, 660.0)
+        .min_inner_size(870.0, 520.0)
         .resizable(true)
         .decorations(false)
         // Opaque on purpose. Transparency is what made the corner artefact
@@ -2293,6 +2325,9 @@ fn main() {
             register_with_steam,
             unregister_from_steam,
             create_cartridge,
+            list_created,
+            forget_created,
+            first_insert,
             open_wizard_settings,
             open_wizard_window,
         ])

@@ -87,6 +87,14 @@ pub struct UpdateRequest {
     /// The games, in the order they should appear. A single-game cartridge has
     /// exactly one; removing the last one is refused.
     pub games: Vec<UpdateGame>,
+    /// Take the cartridge's own logo off. For a collection that is the mark in
+    /// the launcher's corner; `logo_source` absent only ever keeps it.
+    #[serde(default)]
+    pub remove_logo: bool,
+    /// Which game the drive icon is made from, as an index into `games`.
+    /// Absent keeps the old rule: the icon slot, else the cover.
+    #[serde(default)]
+    pub primary_game: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -222,6 +230,8 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
             icon_source: None,
             background_source: None,
             games,
+            primary_game: None,
+            remove_logo: false,
         },
     )?;
 
@@ -422,6 +432,15 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
                 }
             }
         }
+        _ if request.remove_logo => {
+            if let Some(old) = existing_logo
+                .as_deref()
+                .filter(|name| is_ours_to_delete(name))
+            {
+                let _ = std::fs::remove_file(root.join(old));
+            }
+            None
+        }
         _ => existing_logo.clone(),
     };
 
@@ -485,7 +504,10 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
         }
         _ => None,
     };
-    let cover_full = icon_source.or_else(|| cover_name.as_ref().map(|name| root.join(name)));
+    let cover_full = icon_source.or_else(|| {
+        create::drive_icon_art(None, &entries, request.primary_game, cover_name.as_deref())
+            .map(|art| root.join(art))
+    });
     match autorun::write_autorun(root, &title, cover_full.as_deref()) {
         Ok(icon) => {
             result.autorun_written = true;
@@ -547,7 +569,7 @@ fn file_name_relative(root: &Path, absolute: &str) -> Option<String> {
 /// if `cover=` happened to point at it.
 fn is_ours_to_delete(name: &str) -> bool {
     let stem = name.rsplit('/').next().unwrap_or(name);
-    stem.starts_with("cover") || stem.starts_with("collection")
+    stem.starts_with("cover") || stem.starts_with("collection") || stem.starts_with("logo")
 }
 
 #[cfg(test)]
@@ -579,6 +601,8 @@ mod tests {
                     ..Default::default()
                 })
                 .collect(),
+            primary_game: None,
+            remove_logo: false,
         }
     }
 
@@ -616,6 +640,33 @@ mod tests {
         // The picture was not touched, and the conf still points at it.
         assert!(conf.contains("cover=cover.jpg"), "{conf}");
         assert!(scratch.join("cover.jpg").is_file());
+    }
+
+    #[test]
+    fn a_collection_logo_can_be_taken_off() {
+        let scratch = Scratch::new("edit-remove-logo");
+        scratch.write(".gamepak/logo.png", b"bluey");
+        scratch.write(
+            "cartridge.conf",
+            b"[collection]\ntitle=Mixed\nlogo=.gamepak/logo.png\n\n\
+              [game]\ntitle=Bluey\nexecutable=steam://rungameid/1\n\n[game]\ntitle=Blanc\nexecutable=steam://rungameid/2\n",
+        );
+        let games = [
+            ("Bluey", "steam://rungameid/1"),
+            ("Blanc", "steam://rungameid/2"),
+        ];
+
+        // Absent keeps it, as it always did.
+        update_at(scratch.path(), &request("Mixed", &games)).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(conf.contains("logo=.gamepak/logo.png"), "{conf}");
+
+        let mut req = request("Mixed", &games);
+        req.remove_logo = true;
+        update_at(scratch.path(), &req).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(!conf.contains("logo="), "{conf}");
+        assert!(!scratch.join(".gamepak/logo.png").exists());
     }
 
     #[test]

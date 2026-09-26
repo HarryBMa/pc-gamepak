@@ -44,20 +44,47 @@
       </div>
     </header>
 
-    <!-- Two jobs, not two modes of one job. Create makes a cartridge and asks
-         as little as it can; Edit changes one that exists and asks as much as
-         you like. The rail is the same in both, because it is the same
-         cartridge either way. -->
-    <nav id="tabs" role="tablist" aria-label="What to do">
-      <button id="tab-create" class="tab" type="button" role="tab"
-              aria-selected="true" aria-controls="panel-create">Create</button>
-      <button id="tab-edit" class="tab" type="button" role="tab"
-              aria-selected="false" aria-controls="panel-edit">Edit</button>
-    </nav>
-
     <div id="columns">
+      <!-- Three jobs, not three modes of one job. Create makes a cartridge and
+           asks as little as it can; Edit changes one that exists; Created is
+           the shelf this machine has written. The rail belongs to the first
+           two, because it is the same cartridge either way. -->
+      <nav id="sidebar" role="tablist" aria-orientation="vertical" aria-label="What to do">
+        <button id="tab-create" class="side-tab" type="button" role="tab"
+                aria-selected="true" aria-controls="panel-create">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" width="16" height="16" aria-hidden="true">
+            <path d="M10 4.5v11M4.5 10h11" />
+          </svg>
+          <span>Create</span>
+        </button>
+        <button id="tab-edit" class="side-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-edit" tabindex="-1">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
+               aria-hidden="true">
+            <path d="M12.8 4.2l3 3L7.5 15.5l-3.6.6.6-3.6z" />
+          </svg>
+          <span>Edit</span>
+        </button>
+        <button id="tab-created" class="side-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-created" tabindex="-1">
+          <!-- Cartridges standing on a shelf. -->
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
+               aria-hidden="true">
+            <rect x="3.5" y="4" width="3.4" height="11" rx="0.8" />
+            <rect x="8.3" y="4" width="3.4" height="11" rx="0.8" />
+            <path d="M13.4 5.2l3.2-.9 2.6 10.3-3.2.9z" />
+            <path d="M2 17.5h16" />
+          </svg>
+          <span>Created</span>
+          <span id="created-count" class="side-tab__count mono" hidden></span>
+        </button>
+      </nav>
+
       <!-- ============================================================
-           Left column: whichever phase the build is in
+           Middle column: whichever phase the build is in
            ============================================================ -->
       <div id="work">
         <div id="panel-create" role="tabpanel" aria-labelledby="tab-create">
@@ -353,6 +380,9 @@
                   <span class="art-slot__name">Hero</span>
                 </button>
               </div>
+              <button id="btn-remove-logo" class="link" type="button" hidden>
+                Remove logo
+              </button>
               <button id="btn-refetch-art" class="link" type="button"
                       title="Fetch a fresh poster for every game on this cartridge">
                 Refetch posters from SteamGridDB
@@ -366,6 +396,18 @@
 
             <p id="edit-status" class="hint" role="status" aria-live="polite"></p>
           </div>
+        </div>
+
+        <!-- ============================================================
+             Created — every cartridge written here, plugged in or not
+             ============================================================ -->
+        <div id="panel-created" role="tabpanel" aria-labelledby="tab-created" hidden>
+          <p class="build-label">Written on this PC</p>
+          <ul id="created-list" aria-label="Cartridges written on this PC"></ul>
+          <p id="created-empty" class="hint" hidden>
+            Nothing yet. Every cartridge you write from now on is kept here,
+            plugged in or not.
+          </p>
         </div>
       </div>
 

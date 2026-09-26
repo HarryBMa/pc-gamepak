@@ -33,6 +33,33 @@
       <button id="btn-insert" type="button">Insert cartridge</button>
     </div>
 
+    <!--
+      The first time this machine sees a cartridge: the box, the shrink-wrap
+      coming off, the lid opening, the cartridge lifted out. Played once, before
+      the cartridge seats; any key or click skips it. A skin can restyle every
+      part of it, or turn it off with `--skin-unbox: none`.
+    -->
+    <div id="unbox" hidden aria-hidden="true">
+      <div class="unbox__stage">
+        <div class="unbox__box">
+          <div class="unbox__inside">
+            <div class="unbox__cart">
+              <span class="unbox__ridges"></span>
+              <div class="unbox__label">
+                <img class="unbox__label-art" alt="" hidden />
+                <img class="unbox__logo" alt="" hidden />
+                <span class="unbox__title"></span>
+              </div>
+            </div>
+          </div>
+          <div class="unbox__lid">
+            <img class="unbox__front" alt="" hidden />
+            <span class="unbox__wrap"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="face" data-tauri-drag-region>
 
       <!-- The art. Two layers so a collection can cross-fade between games. -->

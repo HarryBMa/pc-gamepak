@@ -75,19 +75,32 @@ then the game's cover, then the cartridge's, then the game's initials. A row is
 that game, so it takes that game's picture and stops — otherwise a grid of ten
 shortcuts is ten copies of one cover.
 
-`--skin-logo: auto` is the stock behaviour: a single game prints its logo
-instead of the heading, and a collection's logo names the collection rather than
-the pick, so it goes to `#cart-mark` in the corner and the heading names the
-game. `game` prints the **selected game's** logo instead of the heading on a
-collection too, following the rail as it moves — pair it with `--skin-art: hero`
-and `--skin-row-art: grid` and you have a couch launcher. `none` keeps the
-heading as type. Whenever a logo is printed, `#stage` gains `.has-logo` and the
+`--skin-logo: auto` is the stock behaviour: a game prints its own logo instead
+of the heading — on a collection the **selected game's**, following the rail as
+it moves, and a game with no logo keeps the heading. The collection's own logo
+names the collection, not the pick, so it is never printed over a game; it goes
+to `#cart-mark` in the corner. `game` is the same except that a game with no logo
+borrows the collection's — pair it with `--skin-art: hero` and
+`--skin-row-art: grid` and you have a couch launcher. `none` keeps the heading
+as type. Whenever a logo is printed, `#stage` gains `.has-logo` and the
 base hides `#game-title`, so nothing repeats the name.
 
 `icon` is really `autorun.inf`'s and is 256px, so it makes a poor fill. It is on
 the list because a skin maker with a reason is better served by having it.
 
 ---
+
+**The unboxing.** The first time a PC sees a cartridge, the launcher opens it
+like a new game: `#unbox` shows the box (`.unbox__lid` with the cover as
+`.unbox__front` and the shrink-wrap gloss as `.unbox__wrap`), the lid swings
+open, and `.unbox__cart` — ridges, then a `.unbox__label` carrying the art, the
+logo or the title — lifts out before the cartridge seats. It plays once per
+cartridge per machine; any key, click or pad button skips it. A skin can restyle
+any of those parts, or turn it off:
+
+```css
+:root { --skin-unbox: none; }
+```
 
 ## The markup a skin styles
 

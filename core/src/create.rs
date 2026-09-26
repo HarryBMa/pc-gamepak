@@ -235,6 +235,26 @@ pub struct CartridgeRequest {
     /// clutter on a drive someone may also be using for something else.
     #[serde(default = "default_true")]
     pub write_icon: bool,
+    /// Which game of a collection the drive icon is made from, as an index
+    /// into `games`. A collection icon chosen outright still wins.
+    #[serde(default)]
+    pub primary_game: Option<usize>,
+}
+
+/// The picture a drive icon is made from, relative to the cartridge root.
+///
+/// An icon chosen for the cartridge itself, else the primary game's icon, else
+/// that game's cover, else `fallback` — which is what a collection used before
+/// it had a primary game.
+pub fn drive_icon_art<'a>(
+    own: Option<&'a str>,
+    games: &'a [GameArt],
+    primary: Option<usize>,
+    fallback: Option<&'a str>,
+) -> Option<&'a str> {
+    let game = primary.and_then(|index| games.get(index));
+    own.or_else(|| game.and_then(|game| game.icon.as_deref().or(game.cover.as_deref())))
+        .or(fallback)
 }
 
 /// serde needs a function; a bare `true` is not a valid default expression.
@@ -1106,10 +1126,13 @@ pub fn create_cartridge(
                 done_bytes: 0,
                 total_bytes: 0,
             });
-            let autorun_source = collection_icon
-                .as_deref()
-                .or(collection_cover.as_deref())
-                .map(|art| root.join(art));
+            let autorun_source = drive_icon_art(
+                collection_icon.as_deref(),
+                &entries,
+                request.primary_game,
+                collection_cover.as_deref(),
+            )
+            .map(|art| root.join(art));
             match autorun::write_autorun(&root, &title, autorun_source.as_deref()) {
                 Ok(icon) => {
                     result.autorun_written = true;
@@ -2650,6 +2673,38 @@ mod tests {
         );
         assert_eq!(sanitize_conf_value("  Hollow   Knight  "), "Hollow Knight");
         assert_eq!(sanitize_conf_value("\r\n\t "), "");
+    }
+
+    #[test]
+    fn the_drive_icon_follows_the_primary_game() {
+        let game = |cover: &str, icon: Option<&str>| GameArt {
+            cover: Some(cover.to_string()),
+            icon: icon.map(str::to_string),
+            ..Default::default()
+        };
+        let games = [
+            game(".gamepak/cover_0.png", None),
+            game(".gamepak/cover_1.png", Some(".gamepak/icon_1.png")),
+        ];
+        let fallback = Some(".gamepak/collection.png");
+
+        // Its own icon first, then its cover.
+        assert_eq!(
+            drive_icon_art(None, &games, Some(1), fallback),
+            Some(".gamepak/icon_1.png")
+        );
+        assert_eq!(
+            drive_icon_art(None, &games, Some(0), fallback),
+            Some(".gamepak/cover_0.png")
+        );
+        // A cartridge icon chosen outright wins over any game.
+        assert_eq!(
+            drive_icon_art(Some("own.png"), &games, Some(1), fallback),
+            Some("own.png")
+        );
+        // No primary, or one past the end, is the rule from before.
+        assert_eq!(drive_icon_art(None, &games, None, fallback), fallback);
+        assert_eq!(drive_icon_art(None, &games, Some(9), fallback), fallback);
     }
 
     #[test]

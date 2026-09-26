@@ -1381,3 +1381,223 @@ body.is-gamepad :focus {
   width: calc(var(--progress, 0) * 100%);
   background: var(--accent);
 }
+
+/* ==========================================================================
+   Unboxing — the first time this machine sees a cartridge
+   ==========================================================================
+   A box comes up, its shrink-wrap catches the light and slides off, the lid
+   swings open on its left edge, and the cartridge is lifted out towards you
+   before the window fades to the launcher. The timings below are the whole
+   choreography; main.js only starts it, skips it, and waits for the last
+   animation to end. */
+
+#unbox {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 80% at 50% 38%, color-mix(in oklch, var(--accent) 16%, oklch(0.2 0 0)), oklch(0.08 0 0) 72%);
+  cursor: pointer;
+}
+
+#unbox[hidden] {
+  display: none;
+}
+
+.unbox__stage {
+  width: 64%;
+  aspect-ratio: 3 / 4;
+  perspective: 1100px;
+}
+
+.unbox__box {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  border-radius: 6px;
+  box-shadow: 0 34px 60px -24px oklch(0 0 0 / 0.9);
+}
+
+/* The inside of the case: a dark tray the cartridge sits in. */
+.unbox__inside {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: linear-gradient(160deg, oklch(0.2 0 0), oklch(0.1 0 0));
+  box-shadow: inset 0 0 0 2px oklch(1 0 0 / 0.06), inset 0 12px 30px oklch(0 0 0 / 0.7);
+}
+
+/* A cartridge shape: a shell with grip ridges along the top and a label on
+   its face. Plain enough to stand for any system's. */
+.unbox__cart {
+  position: relative;
+  width: 76%;
+  height: 78%;
+  padding: 16% 9% 9%;
+  border-radius: 8px 8px 12px 12px;
+  background: linear-gradient(170deg, oklch(0.3 0.005 75), oklch(0.17 0.005 75));
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.14),
+    inset 0 -3px 8px oklch(0 0 0 / 0.5),
+    0 10px 24px -8px oklch(0 0 0 / 0.8);
+}
+
+.unbox__ridges {
+  position: absolute;
+  top: 5%;
+  left: 18%;
+  right: 18%;
+  height: 7%;
+  background: repeating-linear-gradient(90deg, oklch(0 0 0 / 0.45) 0 2px, transparent 2px 6px);
+  border-radius: 2px;
+}
+
+.unbox__label {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: oklch(0.14 0 0);
+}
+
+.unbox__label-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.unbox__logo {
+  position: relative;
+  max-width: 82%;
+  max-height: 42%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px oklch(0 0 0 / 0.7));
+}
+
+.unbox__title {
+  position: relative;
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  color: oklch(0.97 0 0);
+  text-shadow: 0 2px 10px oklch(0 0 0 / 0.8);
+}
+
+.unbox__logo:not([hidden]) + .unbox__title {
+  display: none;
+}
+
+/* The lid is the box's front: the cover art, hinged on the left. */
+.unbox__lid {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  transform-origin: left center;
+  backface-visibility: hidden;
+  background: color-mix(in oklch, var(--accent) 30%, oklch(0.22 0 0));
+  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.12);
+}
+
+.unbox__front {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The shrink-wrap: a gloss across the front that catches the light, then
+   slides off. */
+.unbox__wrap {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 30%, oklch(1 0 0 / 0.5) 45%, oklch(1 0 0 / 0.1) 52%, transparent 62%),
+    linear-gradient(180deg, oklch(1 0 0 / 0.1), transparent 40%);
+  background-size: 260% 100%, 100% 100%;
+  background-position: 120% 0, 0 0;
+}
+
+#unbox.is-playing .unbox__box {
+  animation:
+    unbox-arrive 560ms var(--ease) both,
+    unbox-set-down 520ms cubic-bezier(0.5, 0, 0.75, 0) 1800ms both;
+}
+
+#unbox.is-playing .unbox__wrap {
+  animation: unbox-wrap 620ms ease-in-out 480ms both;
+}
+
+#unbox.is-playing .unbox__lid {
+  animation: unbox-lid 700ms cubic-bezier(0.5, 0, 0.2, 1) 1080ms both;
+}
+
+#unbox.is-playing .unbox__cart {
+  animation: unbox-lift 640ms var(--ease) 1640ms both;
+}
+
+#unbox.is-playing {
+  animation: unbox-out 380ms ease-in 2300ms both;
+}
+
+@keyframes unbox-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.9) rotateX(8deg);
+  }
+}
+
+@keyframes unbox-wrap {
+  0% {
+    background-position: 120% 0, 0 0;
+    opacity: 1;
+  }
+  60% {
+    background-position: -20% 0, 0 0;
+    opacity: 1;
+  }
+  100% {
+    background-position: -20% 0, 0 0;
+    opacity: 0;
+    transform: translate(18%, -10%) rotate(-4deg);
+  }
+}
+
+@keyframes unbox-lid {
+  to {
+    transform: rotateY(-118deg);
+    filter: brightness(0.55);
+  }
+}
+
+@keyframes unbox-lift {
+  to {
+    transform: translateY(-16%) scale(1.12);
+  }
+}
+
+/* The empty box drops away beneath the cartridge as it rises. */
+@keyframes unbox-set-down {
+  to {
+    transform: translateY(6%) scale(0.97);
+    box-shadow: 0 10px 20px -18px oklch(0 0 0 / 0.9);
+  }
+}
+
+@keyframes unbox-out {
+  to {
+    opacity: 0;
+  }
+}

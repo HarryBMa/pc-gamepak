@@ -35,6 +35,7 @@ const invoke = tauri?.core?.invoke ?? demoInvoke;
 
 const el = {
   card: document.getElementById("card"),
+  unbox: document.getElementById("unbox"),
   face: document.getElementById("face"),
   slot: document.getElementById("slot"),
   slotLabel: document.getElementById("slot-label"),
@@ -217,7 +218,14 @@ function sampleAccent(img) {
     weight += w;
   }
 
-  if (weight === 0) return; // a greyscale cover keeps the default
+  // A greyscale cover gets the stock accent back. Returning without touching
+  // it kept whatever the previous game on a collection had set, so a black and
+  // white game's Play stayed the colour of the one above it on the rail.
+  if (weight === 0) {
+    document.documentElement.style.removeProperty("--accent");
+    document.documentElement.style.removeProperty("--accent-ink");
+    return;
+  }
 
   const hue = (Math.atan2(y, x) * 180) / Math.PI;
   // Floor the saturation and hold the lightness out of the pastel range so the
@@ -254,6 +262,80 @@ function showSlot(label, action) {
   // Nothing on the face is reachable once it has left the slot.
   el.face.inert = true;
 }
+
+/* ==========================================================================
+   Unboxing
+   ========================================================================== */
+
+/** Just past the last animation in style.css, in case its end is never seen. */
+const UNBOX_MS = 2750;
+
+/** Set while the unboxing plays: calling it ends the unboxing early. */
+let unboxing = null;
+
+/**
+ * Open the box, the first time this machine sees this cartridge.
+ *
+ * Asked of the backend, which records the answer, so it plays once per
+ * cartridge per PC. Skipped outright under reduced motion — the stylesheet
+ * switches animations off there, and a box that never opens is worse than none
+ * — and for a skin that says `--skin-unbox: none`.
+ */
+async function maybeUnbox(art) {
+  const style = getComputedStyle(document.documentElement);
+  if (style.getPropertyValue("--skin-unbox").trim() === "none") return;
+  let first = false;
+  try {
+    first = tauri
+      ? await invoke("first_insert", { title: cartridge?.title ?? "" })
+      : new URLSearchParams(location.search).has("unbox");
+  } catch {
+    return;
+  }
+  if (!first || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const game = currentGame();
+  const front = isCollection() ? cartridge?.cover || art : art;
+  const logo = isCollection() ? cartridge?.logo || game?.logo : cartridge?.logo;
+  showImage(el.unbox.querySelector(".unbox__front"), front);
+  showImage(el.unbox.querySelector(".unbox__label-art"), art);
+  showImage(el.unbox.querySelector(".unbox__logo"), logo);
+  el.unbox.querySelector(".unbox__title").textContent = cartridge?.title || game?.title || "";
+
+  el.unbox.hidden = false;
+  el.unbox.classList.add("is-playing");
+  await new Promise((resolve) => {
+    const timer = setTimeout(() => unboxing?.(), UNBOX_MS);
+    unboxing = () => {
+      clearTimeout(timer);
+      unboxing = null;
+      resolve();
+    };
+  });
+  el.unbox.classList.remove("is-playing");
+  el.unbox.hidden = true;
+}
+
+function showImage(img, src) {
+  const usable = Boolean(src) && /^(data:image\/|src\/)/.test(String(src));
+  img.hidden = !usable;
+  if (usable) img.src = src;
+  else img.removeAttribute("src");
+}
+
+// Any key, click or pad button skips it, and does nothing else: the Enter that
+// skips the box must not also press Play on the cartridge that comes out.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (!unboxing) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    unboxing();
+  },
+  { capture: true },
+);
+el.unbox.addEventListener("pointerdown", () => unboxing?.());
 
 /** Seat the cartridge: the entrance, mirroring the insert that just happened. */
 function seat() {
@@ -977,13 +1059,12 @@ function setGameTitle(title) {
 /**
  * Point the printed logo at whatever the skin asked for.
  *
- *   --skin-logo: auto    a single game prints its logo instead of the heading;
- *                        a collection's names the collection, so it goes to the
- *                        corner mark and the heading names the pick (the
- *                        stock behaviour, and the default)
- *   --skin-logo: game    the selected game's logo, printed instead of the
- *                        heading, on a collection too — which is the piece a
- *                        hero fill and a rail of covers were missing
+ *   --skin-logo: auto    the game's own logo instead of the heading — on a
+ *                        collection, the selected game's, so the logo moves
+ *                        with the rail; a game without one keeps the heading
+ *                        (the stock behaviour, and the default)
+ *   --skin-logo: game    the same, except that a game with no logo of its own
+ *                        borrows the collection's
  *   --skin-logo: none    no logo; the heading is type
  *
  * Called again on every pick, so the logo follows the rail rather than being
@@ -996,26 +1077,21 @@ function renderLogo() {
     .getPropertyValue("--skin-logo")
     .trim();
 
+  // A collection prints the selected game's own logo, so each game names
+  // itself as the rail moves; one without a logo falls back to the heading.
+  // The collection's logo is never printed over a game — that put Mirror's
+  // Edge's logo across Hollow Knight — unless a skin asks for `game` and the
+  // game has none.
   const logo =
     mode === "none"
       ? null
-      : mode === "game"
-        ? game?.logo || cartridge?.logo || null
-        : collected
-          ? null
+      : collected
+        ? game?.logo || (mode === "game" ? cartridge?.logo : null) || null
+        : mode === "game"
+          ? game?.logo || cartridge?.logo || null
           : cartridge?.logo || null;
 
-  // Printed *instead of* the heading only when it names the same thing the
-  // heading would have. Under `auto` on a collection it names the collection,
-  // not the pick — printing it over each one put Mirror's Edge's logo across
-  // Hollow Knight — so the heading stays and this hands the logo back.
-  const namesTheHeading = mode === "game" || !collected;
-
-  renderTitle(
-    game?.title ?? cartridge?.title,
-    logo,
-    namesTheHeading ? null : cartridge?.title,
-  );
+  renderTitle(game?.title ?? cartridge?.title, logo);
 }
 
 function renderTitle(title, logo, logoOf = null) {
@@ -1121,6 +1197,7 @@ async function init() {
 
   setBusy(false);
   await showWindow();
+  await maybeUnbox(launcherArt);
   seat();
   // After the window, deliberately. Copying a save directory takes as long as
   // it takes, and the cartridge should be on screen while it happens rather
@@ -1580,16 +1657,19 @@ invoke("debug_logging")
     debugPending = [];
   });
 
+/** A pad button during the unboxing skips it, like a key does. */
+const unlessUnboxing = (action) => (...args) => (unboxing ? unboxing() : action(...args));
+
 const gamepad = connectGamepad({
-  play: doPlay,
-  eject: doEject,
-  details: () => toggleSheet(),
-  move: (x, y) => step(x + y * columns()),
+  play: unlessUnboxing(doPlay),
+  eject: unlessUnboxing(doEject),
+  details: unlessUnboxing(() => toggleSheet()),
+  move: unlessUnboxing((x, y) => step(x + y * columns())),
   log: debugLog,
-  back: () => {
+  back: unlessUnboxing(() => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
     else closeWindow();
-  },
+  }),
 });
 
 el.close.addEventListener("click", closeWindow);

@@ -16,6 +16,7 @@ pub mod autorun;
 pub mod busy;
 pub mod cartridge;
 pub mod create;
+pub mod created;
 pub mod drives;
 pub mod edit;
 pub mod folders;
@@ -42,6 +43,7 @@ pub mod steamlib;
 pub mod throttle;
 pub mod trim;
 pub mod tuning;
+pub mod unboxed;
 pub mod verify;
 
 pub use cartridge::base64_encode;
