@@ -1737,6 +1737,12 @@ function refreshCreateButton() {
     el.create.disabled = true;
     return;
   }
+  if (pendingArt > 0) {
+    el.create.disabled = true;
+    el.readyMessage.textContent = "Downloading artwork…";
+    el.readyMessage.className = "";
+    return;
+  }
 
   // Edit writes changes to a cartridge that exists. Same button, same place,
   // one word different — there is no second Save tucked into the panel.
@@ -2211,10 +2217,26 @@ function kindFor(target) {
  * remembers the choice under, so reopening a cartridge can offer the artwork
  * that was used last time.
  */
-function artworkKeys() {
-  const name = artGameOf()?.name ?? cartridgeTitle() ?? "";
+function artworkKeys(target = artTarget) {
+  const owner = artGameOf() ?? (isCollection() || manual ? null : picked[0]);
+  const name = owner?.name ?? owner?.title ?? cartridgeTitle() ?? "";
   const game = name || "untitled";
-  return { cacheKey: `${game}-${kindFor(artTarget)}`, gameKey: game };
+  const keys = { cacheKey: `${game}-${kindFor(target)}` };
+  // Only a cover is remembered as "this game's picture": the backend falls
+  // back to it when a game has no cover of its own. Remembering the logo or
+  // the icon under the same key made the last pick of any kind the cover.
+  if (target === "cover") keys.gameKey = rememberKeyFor(owner, game);
+  return keys;
+}
+
+/** The key the backend looks a game's remembered cover up by. */
+function rememberKeyFor(game, fallback) {
+  if (game?.library === "steam") return `steam:${game.id}`;
+  if (game?.library === "playnite") return `playnite:${game.id}`;
+  if (game?.library === "folder") {
+    return String(game.id).split(/[\\/]/).filter(Boolean).pop() || fallback;
+  }
+  return fallback;
 }
 
 /**
@@ -2224,16 +2246,44 @@ function artworkKeys() {
  * buildRequest can hand the backend one set per `[game]` block. The
  * cartridge's own lives in `art`.
  */
-function applyArt(path, preview) {
-  const game = artGameOf();
+function applyArt(target, game, path, preview) {
   if (game) {
-    game[`${artTarget}Source`] = path;
-    game[artTarget] = preview;
+    game[`${target}Source`] = path;
+    game[target] = preview;
     renderActiveGameList();
     refreshRail();
     return;
   }
-  art[artTarget] = { path, preview };
+  art[target] = { path, preview };
+  if (activeTab === "edit") renderEditArt();
+}
+
+/**
+ * Which slot a pick belongs to, fixed at the moment it was clicked.
+ *
+ * A download takes a second or two, and reading the dialog's current tab when
+ * it finished filed each picture under whichever tab was open by then: pick a
+ * cover, move on to the logo, and the cover landed in the logo slot.
+ */
+function pickTarget() {
+  return { target: artTarget, game: artGameOf() };
+}
+
+/** Downloads still in flight. Write waits for them rather than leave art off. */
+let pendingArt = 0;
+
+async function downloadArt(url) {
+  const { target, game } = pickTarget();
+  pendingArt += 1;
+  refreshCreateButton();
+  try {
+    const got = await invoke("sgdb_download_artwork", { url, ...artworkKeys(target) });
+    applyArt(target, game, got.path, got.dataUri);
+    return { target, got };
+  } finally {
+    pendingArt -= 1;
+    refreshCreateButton();
+  }
 }
 
 function targetFor(kind) {
@@ -2309,13 +2359,12 @@ async function chooseArtwork(item, btn) {
   el.sgdbStatus.textContent = "Fetching…";
 
   try {
-    const got = await invoke("sgdb_download_artwork", { url: item.url, ...artworkKeys() });
-    applyArt(got.path, got.dataUri);
-    el.sgdbStatus.textContent = "";
+    const { target, got } = await downloadArt(item.url);
+    if (target === artTarget) el.sgdbStatus.textContent = "";
 
     // The icon is the only kind that becomes a different file on disk, so it
     // is the only one that reports back — a line of type, not a wizard page.
-    if (artTarget === "icon") {
+    if (target === "icon" && artTarget === "icon") {
       const name = String(got.path).split(/[/\\]/).pop();
       el.icoReceipt.hidden = false;
       el.icoReceipt.textContent = `${name} — becomes the drive icon.`;
@@ -2375,8 +2424,7 @@ el.sgdbUseManual.addEventListener("click", async () => {
   if (!url) return;
   el.sgdbStatus.textContent = "Fetching…";
   try {
-    const got = await invoke("sgdb_download_artwork", { url, ...artworkKeys() });
-    applyArt(got.path, got.dataUri);
+    await downloadArt(url);
     el.sgdbStatus.textContent = "";
     refreshPreview();
     refreshRail();
@@ -2387,10 +2435,11 @@ el.sgdbUseManual.addEventListener("click", async () => {
 
 /** A file on this machine, rather than anything fetched. */
 async function pickCoverFile(target = artTarget) {
+  // Read before the file dialog, which the art dialog may close under.
+  const game = artGameOf();
   try {
     const chosen = await invoke("pick_cover_image");
     if (!chosen) return;
-    const game = artGameOf();
     if (game) {
       game[`${target}Source`] = chosen.path;
       game[target] = chosen.preview;
@@ -3306,7 +3355,9 @@ async function demoInvoke(command, args) {
           thumb: "src/demo/gow-collection.jpg", width: 600, height: 900 },
       ];
     case "sgdb_download_artwork":
-      return { path: "/tmp/sgdb-cache/demo-cover.jpg", dataUri: "src/demo/cover.jpg" };
+      await new Promise((r) => setTimeout(r, Number(new URLSearchParams(location.search).get("slow") || 0)));
+      return { path: `/tmp/sgdb-cache/${args.cacheKey}-${args.url.split("/").pop()}`,
+               dataUri: "src/demo/cover.jpg" };
     case "list_target_drives":
       return [
         { path: "/run/media/harry/CINDER", label: "CINDER",

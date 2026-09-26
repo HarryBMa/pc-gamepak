@@ -167,6 +167,12 @@ Fixed along the way:
 - A game added by hand could not be given a drive: leaving that screen threw
   the entry away. It now has **Done**, and picks the likeliest program in the
   folder for you.
+- Artwork picked on SteamGridDB could land in the wrong slot. Each pick was
+  filed under whichever tab was open when its download *finished*, so choosing
+  quickly across Cover, Hero, Logo and Icon put the cover in the logo slot and
+  so on. A pick now belongs to the tab it was clicked on, and Write waits for
+  downloads still in flight.
+- Picking a logo, hero or icon no longer becomes the game's remembered cover.
 - Ctrl+Enter on the Edit tab started a Create write.
 - The collection name and the Edit tab's name were plain white boxes.
 
