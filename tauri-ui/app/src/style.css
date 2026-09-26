@@ -1406,8 +1406,10 @@ body.is-gamepad :focus {
   display: none;
 }
 
+/* Sized by whichever edge runs out first: a skin can make the window wide and
+   short, and a box sized by width alone then ran off the top and bottom. */
 .unbox__stage {
-  width: 64%;
+  height: min(78vh, calc(64vw * 4 / 3));
   aspect-ratio: 3 / 4;
   perspective: 1100px;
 }

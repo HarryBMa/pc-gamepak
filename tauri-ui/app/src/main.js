@@ -805,6 +805,18 @@ function step(delta) {
   select((selected + delta + list.length) % list.length);
 }
 
+/**
+ * One press of a direction, from the keys or the pad.
+ *
+ * A rail that is a single row — a horizontal strip — has no row above or
+ * below, so a vertical step of a whole row landed back on the same game and up
+ * and down did nothing. There they move along the strip instead.
+ */
+function move(x, y) {
+  const across = columns();
+  step(x + y * (across >= games().length ? 1 : across));
+}
+
 /** Which of a game's four pictures each name asks for. `grid` is the cover. */
 const ART_FIELD = {
   hero: "background",
@@ -1664,7 +1676,7 @@ const gamepad = connectGamepad({
   play: unlessUnboxing(doPlay),
   eject: unlessUnboxing(doEject),
   details: unlessUnboxing(() => toggleSheet()),
-  move: unlessUnboxing((x, y) => step(x + y * columns())),
+  move: unlessUnboxing((x, y) => move(x, y)),
   log: debugLog,
   back: unlessUnboxing(() => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
@@ -1715,7 +1727,7 @@ document.addEventListener("keydown", (event) => {
   if (!sheetOpen && isCollection() && ARROWS[event.key]) {
     event.preventDefault();
     const [x, y] = ARROWS[event.key];
-    step(x + y * columns());
+    move(x, y);
     return;
   }
 
