@@ -200,6 +200,7 @@ pub fn write_autorun(
     cover: Option<&Path>,
 ) -> std::io::Result<Option<String>> {
     let icon = cover.and_then(|path| make_icon(root, path));
+    remove_stale_icons(root, icon.as_deref());
     let contents = render_autorun(label, icon.as_deref());
     let path = root.join("autorun.inf");
     unprotect(&path);
@@ -209,11 +210,9 @@ pub fn write_autorun(
     // cartridge with a perfectly good icon still comes up as a generic
     // drive — which is what happened to every cartridge built before this.
     protect(&path, true);
-    // Explorer caches a drive's icon and does not re-read autorun.inf when the
-    // volume comes back, so a rewritten cartridge kept the icon it had the
-    // first time it was plugged in — for as long as the cache lived, which
-    // outlasts unplugging it. Telling the shell the drive changed is the
-    // supported way to drop that.
+    // Telling the shell the drive changed makes it re-read autorun.inf, but
+    // not the icon: that sits in iconcache_*.db keyed by its path, which is
+    // why the icon is named after its content (see `make_icon`).
     notify_shell(root);
     Ok(icon)
 }
@@ -317,13 +316,52 @@ fn make_icon(root: &Path, cover: &Path) -> Option<String> {
         ico_from_image(&bytes)?
     };
 
-    let path = root.join(crate::create::ICON_NAME);
+    // Explorer caches the icon image by file path and keeps it across unplugs,
+    // SHChangeNotify and `ie4uinit -show` alike, so a cartridge rewritten with
+    // new art under the same name kept showing the old picture. A name that
+    // changes with the content is a path the cache has never seen.
+    let name = icon_name(&ico);
+    let path = root.join(&name);
     unprotect(&path);
     std::fs::write(&path, ico).ok()?;
     // Hidden, but not system: Explorer only insists on that for autorun.inf,
     // and the icon is just a file the cartridge would rather not show.
     protect(&path, false);
-    Some(crate::create::ICON_NAME.to_string())
+    Some(name)
+}
+
+/// `icon-<hash>.ico`, so different art always lands at a different path.
+fn icon_name(ico: &[u8]) -> String {
+    use std::hash::{DefaultHasher, Hasher};
+    let mut hasher = DefaultHasher::new();
+    hasher.write(ico);
+    format!("icon-{:08x}.ico", hasher.finish() as u32)
+}
+
+/// Is this a drive icon some build of the writer put at the root?
+fn is_drive_icon(name: &str) -> bool {
+    let name = name.to_lowercase();
+    name == crate::create::ICON_NAME
+        || name == "cover.ico"
+        || name
+            .strip_prefix("icon-")
+            .and_then(|rest| rest.strip_suffix(".ico"))
+            .is_some_and(|hash| !hash.is_empty() && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// Delete every earlier drive icon but the one autorun.inf is about to name.
+fn remove_stale_icons(root: &Path, keep: Option<&str>) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if is_drive_icon(&name) && Some(name.as_str()) != keep {
+            let path = entry.path();
+            unprotect(&path);
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 /// Does this start with an ICONDIR: reserved 0, type 1 (icon), one image or more?
@@ -519,11 +557,53 @@ mod tests {
         let misnamed = scratch.join("icon.jpg");
         std::fs::write(&misnamed, &source).unwrap();
 
+        let name = write_autorun(scratch.path(), "ICO", Some(&misnamed))
+            .unwrap()
+            .expect("an icon");
+        assert_eq!(std::fs::read(scratch.join(&name)).unwrap(), source);
+    }
+
+    #[test]
+    fn new_art_gets_a_new_icon_path_and_the_old_icon_goes() {
+        // Explorer's icon cache is keyed by path, so the same name for new
+        // art keeps showing the old picture until the cache is deleted by hand.
+        let scratch = crate::testutil::Scratch::new("icon-rename");
+        // Left by builds that used a fixed name.
+        std::fs::write(scratch.join("icon.ico"), b"old").unwrap();
+        std::fs::write(scratch.join("cover.ico"), b"older").unwrap();
+        // Not ours.
+        std::fs::write(scratch.join("icon-mine.ico"), b"x").unwrap();
+
+        let first_art = scratch.join("a.png");
+        std::fs::write(&first_art, real_png(64, 64)).unwrap();
+        let first = write_autorun(scratch.path(), "A", Some(&first_art))
+            .unwrap()
+            .unwrap();
+
+        let second_art = scratch.join("b.png");
+        std::fs::write(&second_art, real_png(96, 96)).unwrap();
+        let second = write_autorun(scratch.path(), "B", Some(&second_art))
+            .unwrap()
+            .unwrap();
+
+        assert_ne!(first, second);
+        assert!(scratch.join(&second).is_file());
+        for gone in [first.as_str(), "icon.ico", "cover.ico"] {
+            assert!(!scratch.join(gone).exists(), "{gone} survived");
+        }
+        assert!(scratch.join("icon-mine.ico").is_file());
+
+        // The same art again is the same path, so nothing churns needlessly.
         assert_eq!(
-            write_autorun(scratch.path(), "ICO", Some(&misnamed)).unwrap(),
-            Some("icon.ico".to_string())
+            write_autorun(scratch.path(), "B", Some(&second_art))
+                .unwrap()
+                .unwrap(),
+            second
         );
-        assert_eq!(std::fs::read(scratch.join("icon.ico")).unwrap(), source);
+
+        // Art dropped: no icon key and no icon file left behind.
+        write_autorun(scratch.path(), "C", None).unwrap();
+        assert!(!scratch.join(&second).exists());
     }
 
     #[test]
@@ -581,23 +661,21 @@ mod tests {
         // A PNG cover.
         let png_path = scratch.join("art.png");
         std::fs::write(&png_path, real_png(512, 512)).unwrap();
-        assert_eq!(
-            write_autorun(scratch.path(), "CONVERTED", Some(&png_path)).unwrap(),
-            Some("icon.ico".to_string())
-        );
-        assert!(scratch.join("icon.ico").is_file());
+        let icon = write_autorun(scratch.path(), "CONVERTED", Some(&png_path))
+            .unwrap()
+            .expect("a PNG converts");
+        assert!(scratch.join(&icon).is_file());
 
         // A JPEG cover converts as well; this is the case that used to leave
         // the cartridge with Explorer's default icon.
         let jpg_path = scratch.join("art.jpg");
         std::fs::write(&jpg_path, real_jpeg(600, 900)).unwrap();
-        assert_eq!(
-            write_autorun(scratch.path(), "JPEG", Some(&jpg_path)).unwrap(),
-            Some("icon.ico".to_string())
-        );
+        let icon = write_autorun(scratch.path(), "JPEG", Some(&jpg_path))
+            .unwrap()
+            .expect("a JPEG converts");
         let text = std::fs::read_to_string(scratch.join("autorun.inf")).unwrap();
         assert!(text.contains("label=JPEG"));
-        assert!(text.contains("icon=icon.ico"));
+        assert!(text.contains(&format!("icon={icon}")));
 
         // Art that is not an image at all: autorun still written, no icon key.
         let junk_path = scratch.join("art.bin");
