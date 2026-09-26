@@ -1998,7 +1998,75 @@ dialog form {
 #sgdb-preview {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
+  padding: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pv {
+  cursor: pointer;
+}
+
+.pv .field__label {
+  margin-bottom: 5px;
+  transition: color 160ms linear;
+}
+
+.pv__frame {
+  border-radius: 6px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 160ms linear;
+}
+
+.pv:hover .pv__frame {
+  outline-color: oklch(1 0 0 / 0.18);
+}
+
+/* The one the open tab is choosing. */
+.pv.is-active .pv__frame {
+  outline-color: var(--accent);
+}
+
+.pv.is-active .field__label {
+  color: color-mix(in oklch, var(--accent) 80%, var(--ink));
+}
+
+/* SteamGridDB heroes are 1920×620. */
+#preview-hero {
+  position: relative;
+  aspect-ratio: 96 / 31;
+  width: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: repeating-linear-gradient(
+    135deg,
+    oklch(0.185 0.005 65) 0 7px,
+    oklch(0.16 0.005 65) 7px 14px
+  );
+}
+
+#preview-hero img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#preview-hero img[hidden] {
+  display: none;
+}
+
+.pv__empty {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }
 
 #preview-art {
@@ -2109,10 +2177,20 @@ dialog form {
   width: 26px;
 }
 
+/* The launcher and the icon side by side, so all four fit without scrolling. */
+.pv-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
 #preview-icon-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px;
 }
 
 #preview-icon-row .hint {

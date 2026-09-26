@@ -763,24 +763,41 @@
           </label>
         </div>
 
-        <!-- Where it lands -->
+        <!-- Where it lands: all four at once, each in its own shape, with the
+             one being chosen marked. Clicking one switches to its tab. -->
         <div id="sgdb-preview">
-          <p class="field__label">On the launcher</p>
-          <div id="preview-art">
-            <img id="preview-grid" alt="" hidden />
-            <div id="preview-empty" aria-hidden="true"><span>NO&nbsp;ART</span></div>
-            <div id="preview-stage">
-              <img id="preview-logo" alt="" hidden />
-              <h3 id="preview-title">Nothing yet</h3>
-              <div id="preview-actions" aria-hidden="true">
-                <span>Play</span>
-                <span>⏏</span>
+          <div class="pv" data-type="hero">
+            <p class="field__label">Hero</p>
+            <div id="preview-hero" class="pv__frame">
+              <img id="preview-hero-img" alt="" hidden />
+              <span class="pv__empty">No hero</span>
+            </div>
+          </div>
+
+          <div class="pv-row">
+          <div class="pv" data-type="grid logo">
+            <p class="field__label">Cover and logo</p>
+            <div id="preview-art" class="pv__frame">
+              <img id="preview-grid" alt="" hidden />
+              <div id="preview-empty" aria-hidden="true"><span>NO&nbsp;COVER</span></div>
+              <div id="preview-stage">
+                <img id="preview-logo" alt="" hidden />
+                <h3 id="preview-title">Nothing yet</h3>
+                <div id="preview-actions" aria-hidden="true">
+                  <span>Play</span>
+                  <span>⏏</span>
+                </div>
               </div>
             </div>
           </div>
-          <div id="preview-icon-row">
-            <div id="preview-icon" class="plate plate--empty" aria-hidden="true"></div>
-            <p class="hint">In Explorer</p>
+
+          <div class="pv" data-type="icon">
+            <p class="field__label">Icon</p>
+            <div id="preview-icon-row" class="pv__frame">
+              <div id="preview-icon" class="plate plate--empty" aria-hidden="true"></div>
+              <p id="preview-icon-label" class="hint">In Explorer</p>
+            </div>
+          </div>
           </div>
         </div>
       </div>

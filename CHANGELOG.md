@@ -173,6 +173,10 @@ Fixed along the way:
   so on. A pick now belongs to the tab it was clicked on, and Write waits for
   downloads still in flight.
 - Picking a logo, hero or icon no longer becomes the game's remembered cover.
+- The artwork picker's preview shows all four pictures at once, each in its own
+  shape — the hero as a banner, the cover with the logo over it, and the drive
+  icon — with the one being chosen outlined. The Hero tab used to put the hero
+  where the cover goes, which read as the hero replacing the cover.
 - Ctrl+Enter on the Edit tab started a Create write.
 - The collection name and the Edit tab's name were plain white boxes.
 

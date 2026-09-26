@@ -237,6 +237,9 @@ const el = {
   previewLogo: $("preview-logo"),
   previewTitle: $("preview-title"),
   previewIcon: $("preview-icon"),
+  previewIconLabel: $("preview-icon-label"),
+  previewHeroImg: $("preview-hero-img"),
+  sgdbPreview: $("sgdb-preview"),
 };
 
 /* ==========================================================================
@@ -2193,7 +2196,7 @@ function openArtwork(target, gameIndex = null) {
     tab.setAttribute("aria-selected", String(tab.dataset.type === kindFor(artTarget)));
   }
   el.sgdbTitle.textContent = game ? `Artwork — ${game.name ?? game.title}` : "Artwork";
-  el.sgdbSearch.value = game ? (game.name ?? game.title) : cartridgeTitle();
+  el.sgdbSearch.value = artTitle();
   el.icoReceipt.hidden = true;
   refreshPreview();
   el.sgdbDialog.showModal();
@@ -2202,6 +2205,14 @@ function openArtwork(target, gameIndex = null) {
     el.sgdbStatus.textContent = "SteamGridDB search is off in Settings.";
     el.sgdbResults.replaceChildren();
   }
+}
+
+/** The name the artwork is for: the game, or whichever cartridge is open. */
+function artTitle() {
+  const game = artGameOf();
+  if (game) return game.name ?? game.title ?? "";
+  if (activeTab === "edit") return el.editTitle.value.trim() || editing?.title || "";
+  return cartridgeTitle();
 }
 
 function kindFor(target) {
@@ -2219,7 +2230,7 @@ function kindFor(target) {
  */
 function artworkKeys(target = artTarget) {
   const owner = artGameOf() ?? (isCollection() || manual ? null : picked[0]);
-  const name = owner?.name ?? owner?.title ?? cartridgeTitle() ?? "";
+  const name = owner?.name ?? owner?.title ?? artTitle() ?? "";
   const game = name || "untitled";
   const keys = { cacheKey: `${game}-${kindFor(target)}` };
   // Only a cover is remembered as "this game's picture": the backend falls
@@ -2293,6 +2304,14 @@ function targetFor(kind) {
   return { grid: "cover", hero: "background", logo: "logo", icon: "icon" }[kind] ?? "cover";
 }
 
+// Clicking a picture in the preview is the same as clicking its tab.
+el.sgdbPreview.addEventListener("click", (event) => {
+  const pv = event.target.closest(".pv");
+  if (!pv) return;
+  const type = pv.dataset.type.split(" ")[0];
+  el.sgdbTabs.querySelector(`[data-type="${type}"]`)?.click();
+});
+
 el.sgdbTabs.addEventListener("click", (event) => {
   const tab = event.target.closest(".tab");
   if (!tab) return;
@@ -2301,6 +2320,7 @@ el.sgdbTabs.addEventListener("click", (event) => {
     other.setAttribute("aria-selected", String(other === tab));
   }
   el.icoReceipt.hidden = true;
+  refreshPreview();
   if (settings.steamgriddbEnabled) searchArtwork();
 });
 
@@ -2383,24 +2403,39 @@ function refreshPreview() {
   // the row the picture will land on, not the cartridge's own face.
   const targeted = artGameOf();
   // Each kind comes from the game when one is targeted, and from the cartridge
-  // otherwise — a game carries all four of its own now.
-  const of = (kind) => (targeted ? targeted[kind] : art[kind]?.preview);
+  // otherwise — a game carries all four of its own now. On the Edit tab what
+  // the cartridge already has stands in until something new is chosen.
+  const of = (kind) => {
+    if (targeted) return targeted[kind];
+    return art[kind]?.preview ?? (activeTab === "edit" ? editing?.[kind] : null);
+  };
 
-  const grid = of("cover") ?? (targeted || isCollection() ? null : picked[0]?.cover);
+  const grid = of("cover") ?? (targeted || isCollection() || activeTab === "edit"
+    ? null
+    : picked[0]?.cover);
 
-  // Picking a hero previews the hero. It is the picture being chosen, and
-  // showing the cover instead reads as though nothing had happened.
-  const fill = artTarget === "background" ? of("background") ?? grid : grid;
+  // All four at once, each where it lands: the hero is its own banner rather
+  // than standing in for the cover, which read as the hero being the cover.
+  el.previewGrid.hidden = !safeSrc(grid);
+  if (safeSrc(grid)) el.previewGrid.src = safeSrc(grid);
+  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(grid)));
 
-  el.previewGrid.hidden = !safeSrc(fill);
-  if (safeSrc(fill)) el.previewGrid.src = safeSrc(fill);
-  el.previewArt.classList.toggle("has-art", Boolean(safeSrc(fill)));
+  const hero = safeSrc(of("background"));
+  el.previewHeroImg.hidden = !hero;
+  if (hero) el.previewHeroImg.src = hero;
+
+  // Mark the one the open tab is choosing.
+  const kind = kindFor(artTarget);
+  for (const pv of el.sgdbPreview.querySelectorAll(".pv")) {
+    pv.classList.toggle("is-active", pv.dataset.type.split(" ").includes(kind));
+  }
+  el.previewIconLabel.textContent = platform === "windows" ? "In Explorer" : "In the file manager";
 
   const logo = of("logo");
   el.previewLogo.hidden = !safeSrc(logo);
   if (safeSrc(logo)) el.previewLogo.src = safeSrc(logo);
   el.previewStage.classList.toggle("has-logo", Boolean(safeSrc(logo)));
-  el.previewTitle.textContent = targeted?.name ?? targeted?.title ?? (cartridgeTitle() || "Nothing yet");
+  el.previewTitle.textContent = artTitle() || "Nothing yet";
 
   const icon = of("icon") ?? grid;
   el.previewIcon.style.backgroundImage = safeSrc(icon) ? `url("${safeSrc(icon)}")` : "";
@@ -3357,7 +3392,9 @@ async function demoInvoke(command, args) {
     case "sgdb_download_artwork":
       await new Promise((r) => setTimeout(r, Number(new URLSearchParams(location.search).get("slow") || 0)));
       return { path: `/tmp/sgdb-cache/${args.cacheKey}-${args.url.split("/").pop()}`,
-               dataUri: "src/demo/cover.jpg" };
+               dataUri: { grid: "src/demo/cover.jpg", hero: "src/demo/gow-collection.jpg",
+                          logo: "src/demo/gow-2.jpg", icon: "src/demo/gow-1.jpg" }[
+                 args.cacheKey.split("-").pop()] ?? "src/demo/cover.jpg" };
     case "list_target_drives":
       return [
         { path: "/run/media/harry/CINDER", label: "CINDER",
