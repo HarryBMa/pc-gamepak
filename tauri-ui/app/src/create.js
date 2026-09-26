@@ -216,6 +216,9 @@ const el = {
   setOnInsert: $("set-on-insert"),
   onInsertHint: $("on-insert-hint"),
   setPlaytime: $("set-playtime"),
+  setIdle: $("set-idle"),
+  setIdleRow: $("set-idle-row"),
+  setHltb: $("set-hltb"),
   setSaveSync: $("set-save-sync"),
   settingsSave: $("settings-save"),
   settingsStatus: $("settings-status"),
@@ -1311,6 +1314,9 @@ function planSteps() {
   if (on.verify && size) {
     steps.push({ what: "Verify the copy", detail: formatDuration(size / readRate()) });
   }
+  if (settings.hltbEnabled) {
+    steps.push({ what: "Look up how long to beat", detail: "HowLongToBeat" });
+  }
   steps.push({
     what: on.icon
       ? "Write launcher, icon and manifest"
@@ -2146,6 +2152,7 @@ function stepKeyFor(what) {
   if (text.startsWith("copy")) return "copy";
   if (text.startsWith("verify")) return "verify";
   if (text.startsWith("write")) return "autorun";
+  if (text.startsWith("look up")) return "hltb";
   if (text.startsWith("tune")) return "tune";
   if (text.startsWith("release")) return "trim";
   if (text.startsWith("eject")) return "eject";
@@ -2528,6 +2535,9 @@ function applySettings() {
   // On unless it has been switched off: it writes to the cartridge only, and
   // only because Play was pressed.
   el.setPlaytime.checked = settings.trackPlaytime !== false;
+  el.setIdle.value = String(settings.idlePauseMinutes ?? 10);
+  el.setIdleRow.hidden = !el.setPlaytime.checked;
+  el.setHltb.checked = Boolean(settings.hltbEnabled);
   // Off unless it has been switched on: it writes to the user's home.
   el.setSaveSync.checked = Boolean(settings.saveSync);
   // Tuning edits Defender and Search, which exist on one platform.
@@ -2700,6 +2710,8 @@ async function saveSettings() {
         defaultFormat: false,
         onCartridgeInsert: el.setOnInsert.value,
         trackPlaytime: el.setPlaytime.checked,
+        idlePauseMinutes: Number(el.setIdle.value) || 0,
+        hltbEnabled: el.setHltb.checked,
         saveSync: el.setSaveSync.checked,
       },
     });
@@ -3196,6 +3208,9 @@ function frontendHint(front) {
 }
 
 el.setOnInsert.addEventListener("change", describeOnInsert);
+el.setPlaytime.addEventListener("change", () => {
+  el.setIdleRow.hidden = !el.setPlaytime.checked;
+});
 
 el.setSgdb.addEventListener("change", () => {
   el.sgdbKeyField.hidden = !el.setSgdb.checked;

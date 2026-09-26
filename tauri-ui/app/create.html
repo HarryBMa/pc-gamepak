@@ -562,7 +562,7 @@
           <p id="scan-age" class="hint"></p>
         </div>
 
-        <p class="group">Artwork</p>
+        <p class="group">Online lookups</p>
         <div class="group__body">
           <label class="opt">
             <input id="set-sgdb" type="checkbox" />
@@ -577,6 +577,13 @@
                      placeholder="From steamgriddb.com → Preferences → API" />
             </label>
           </div>
+          <label class="opt">
+            <input id="set-hltb" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Look up how long games take to beat</span>
+              <span class="opt__hint">From HowLongToBeat, once, when a cartridge is written.</span>
+            </span>
+          </label>
         </div>
 
         <p class="group">When a cartridge is plugged in</p>
@@ -604,7 +611,18 @@
             <input id="set-playtime" type="checkbox" />
             <span class="opt__body">
               <span class="opt__label">Track playtime</span>
+              <span class="opt__hint">Counts while the game is running, kept in cartridge.conf.</span>
             </span>
+          </label>
+          <label class="field" id="set-idle-row">
+            <span class="field__label">Pause when nobody is playing for</span>
+            <select id="set-idle">
+              <option value="5">5 minutes</option>
+              <option value="10">10 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="0">Never pause</option>
+            </select>
           </label>
           <label class="opt">
             <input id="set-save-sync" type="checkbox" />

@@ -107,6 +107,18 @@
         <img id="title-logo" alt="" hidden />
         <h1 id="game-title">Reading cartridge…</h1>
 
+        <!-- How much this game has been played, and how long it takes to beat.
+             Hidden in the stock window — the details sheet says it there — and
+             here for a skin that wants it on the face: set `display` on
+             #play-stats. The same numbers are on #card as CSS variables and
+             data attributes; see docs/SKINNING.md. -->
+        <p id="play-stats" class="play-stats" aria-hidden="true">
+          <span id="play-stats-time" class="play-stats__time"></span>
+          <span id="play-stats-beat" class="play-stats__beat"></span>
+          <span id="play-stats-last" class="play-stats__last"></span>
+          <span class="play-stats__bar"><span class="play-stats__fill"></span></span>
+        </p>
+
         <!-- The only explanation of why Play is disabled, so it is announced. -->
         <p id="notice" role="status" hidden></p>
 

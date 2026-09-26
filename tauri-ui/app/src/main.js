@@ -71,6 +71,9 @@ const el = {
   pathsLabel: document.getElementById("paths-label"),
   toast: document.getElementById("toast"),
   gameList: document.getElementById("game-list"),
+  playStatsTime: document.getElementById("play-stats-time"),
+  playStatsBeat: document.getElementById("play-stats-beat"),
+  playStatsLast: document.getElementById("play-stats-last"),
 };
 
 let cartridge = null;
@@ -663,6 +666,7 @@ function select(index) {
   // The sheet's Played row is about the selected game, so it moves with the
   // rail rather than staying on whatever was picked when the sheet was drawn.
   if (cartridge) renderSpecs(cartridge);
+  exposePlay(el.card, list[index]);
 
   // Focus follows the selection whenever it is already in the list. A row
   // clicked with the mouse keeps the focus ring, so arrowing away from it left
@@ -869,6 +873,7 @@ function renderRail(list) {
     row.tabIndex = 0;
     row.dataset.index = String(index);
     row.dataset.size = sizeBand(game.sizeBytes);
+    exposePlay(row, game);
 
     // A row is that game, so it shows that game's picture of whichever kind the
     // skin asked for and stops there — falling through to the cartridge's would
@@ -1087,6 +1092,7 @@ async function init() {
   }
   renderSpecs(cartridge);
   renderPaths(cartridge);
+  exposePlay(el.card, currentGame());
 
   // A collection: the cartridge's own name goes above, the rail picks which
   // game the one Play acts on, and the title becomes the selected game.
@@ -1133,6 +1139,7 @@ function renderSpecs(info) {
   el.specs.replaceChildren();
   const list = info.games ?? [];
   if (list.length > 1) specRow(el.specs, "Games", String(list.length));
+  renderBeat(currentGame() ?? info);
   renderPlayed(info);
   if (saveNote) specRow(el.specs, "Saves", saveNote);
 }
@@ -1157,6 +1164,95 @@ function renderPlayed(info) {
   if (entry.lastPlayed) {
     const where = entry.lastHost ? ` on ${entry.lastHost}` : "";
     specRow(el.specs, "Last played", `${since(entry.lastPlayed)}${where}`, true);
+  }
+
+  // The last few sittings, newest first: when, how long, and where.
+  const recent = [...(entry.sessions ?? [])].reverse().slice(0, 3);
+  recent.forEach((session, index) => {
+    const when = new Date(session.started * 1000).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    const where = session.host ? ` · ${session.host}` : "";
+    specRow(el.specs, index === 0 ? "Recent" : "", `${when} · ${duration(session.seconds)}${where}`, true);
+  });
+}
+
+/** HowLongToBeat's figures, when the cartridge was written with them. */
+function renderBeat(game) {
+  const beat = game?.how_long ?? {};
+  const parts = [];
+  if (beat.main) parts.push(`Story ${hoursOf(beat.main)}`);
+  if (beat.extra) parts.push(`+Extras ${hoursOf(beat.extra)}`);
+  if (beat.complete) parts.push(`100% ${hoursOf(beat.complete)}`);
+  if (parts.length) specRow(el.specs, "To beat", parts.join(" · "));
+}
+
+/** "27 h", or "40 min" for something short. HowLongToBeat's own rounding. */
+function hoursOf(seconds) {
+  if (!seconds) return "";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  const hours = seconds / 3600;
+  return `${hours < 10 ? Math.round(hours * 2) / 2 : Math.round(hours)} h`;
+}
+
+/**
+ * The play numbers for one game, as a skin can reach them.
+ *
+ * A skin is CSS, and CSS cannot read cartridge.conf, so the launcher reads it
+ * and hands every figure over twice: as a custom property (a quoted string for
+ * `content:`, a bare number for `calc()`) and, where a skin wants cases rather
+ * than a scale, as a data attribute. Set on #card for the game Play will
+ * start, and on each .game-row for its own game.
+ */
+function playFacts(game) {
+  const entry = played[keyFor(game?.executable ?? "")] ?? {};
+  const beat = game?.how_long ?? {};
+  const seconds = entry.seconds ?? 0;
+  const progress = beat.main ? Math.min(seconds / beat.main, 1) : null;
+  return {
+    seconds,
+    launches: entry.launches ?? 0,
+    lastPlayed: entry.lastPlayed ?? 0,
+    beat,
+    progress,
+  };
+}
+
+function progressBand(facts) {
+  if (!facts.seconds) return "new";
+  if (facts.progress === null) return "unknown";
+  if (facts.progress < 0.5) return "started";
+  if (facts.progress < 0.9) return "halfway";
+  if (facts.progress < 1) return "nearly";
+  return "beaten";
+}
+
+function exposePlay(node, game) {
+  if (!node || !game) return;
+  const facts = playFacts(game);
+  const quoted = (text) => JSON.stringify(String(text ?? ""));
+  const vars = {
+    "--playtime": quoted(facts.seconds >= 60 ? duration(facts.seconds) : ""),
+    "--playtime-hours": (facts.seconds / 3600).toFixed(2),
+    "--launches": String(facts.launches),
+    "--last-played": quoted(facts.lastPlayed ? since(facts.lastPlayed) : ""),
+    "--hltb-main": quoted(hoursOf(facts.beat.main)),
+    "--hltb-extra": quoted(hoursOf(facts.beat.extra)),
+    "--hltb-complete": quoted(hoursOf(facts.beat.complete)),
+    "--hltb-main-hours": ((facts.beat.main ?? 0) / 3600).toFixed(2),
+    "--progress": (facts.progress ?? 0).toFixed(3),
+  };
+  for (const [name, value] of Object.entries(vars)) node.style.setProperty(name, value);
+  node.dataset.played = facts.seconds ? "yes" : "no";
+  node.dataset.progress = progressBand(facts);
+  node.dataset.hltb = facts.beat.main ? "yes" : "no";
+
+  // The face's own stats line, for the game Play will start.
+  if (node === el.card) {
+    el.playStatsTime.textContent = facts.seconds >= 60 ? duration(facts.seconds) : "Not played yet";
+    el.playStatsBeat.textContent = facts.beat.main ? `of ~${hoursOf(facts.beat.main)}` : "";
+    el.playStatsLast.textContent = facts.lastPlayed ? since(facts.lastPlayed) : "";
   }
 }
 
@@ -1641,6 +1737,7 @@ async function demoInvoke(command, args) {
               icon: "src/demo/cover.jpg",
               cover_path: "",
               sizeBytes: 64_200_000_000,
+              how_long: { main: 75_600, extra: 118_800, complete: 183_600 },
             },
             {
               title: "God of War: Ragnarök",
@@ -1685,6 +1782,11 @@ async function demoInvoke(command, args) {
             firstPlayed: Math.floor(Date.now() / 1000) - 86_400 * 40,
             lastPlayed: Math.floor(Date.now() / 1000) - 86_400 * 2,
             lastHost: "deck",
+            sessions: [
+              { started: Math.floor(Date.now() / 1000) - 86_400 * 9, seconds: 7_200, host: "workshop" },
+              { started: Math.floor(Date.now() / 1000) - 86_400 * 5, seconds: 5_400, host: "deck" },
+              { started: Math.floor(Date.now() / 1000) - 86_400 * 2, seconds: 3_900, host: "deck" },
+            ],
           },
           "steam://rungameid/1091500": {
             title: "Cyberpunk 2077",

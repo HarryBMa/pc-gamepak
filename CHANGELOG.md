@@ -143,6 +143,30 @@ the digest answers "is this the same cartridge somebody else built", which no
 amount of local verifying can. Put it in a `build-cart` request as
 `expectDigest` and the build fails if it does not match.
 
+### Playtime counts the game, not the window, and lives in the conf
+
+The launcher used to count from Play until its window closed. It now watches
+for the game itself — a program running from the game's folder, on the
+cartridge or wherever Steam installed it — and keeps counting after the window
+is closed, leaving when the game does. The way GameplayTimeTracker and
+GamingGaiden count.
+
+It pauses when nobody is there: ten minutes (adjustable, or off) without
+keyboard, mouse or controller input, and the idle stretch is taken back out.
+Controllers count, which the desktop's own idle clock does not.
+
+Every session is kept, and each game's figures — playtime, launches, first and
+last played, the machine, and the last thirty sessions — are written into
+`cartridge.conf` under that game, touching nothing else in the file.
+
+**How long to beat**, optional and off: the wizard can look each game up on
+HowLongToBeat while it writes the cartridge, once, and puts the figures in the
+conf beside the playtime. The launcher's ⓘ shows both, and a skin can draw
+progress through the main story from them — see
+[SKINNING.md](docs/SKINNING.md#play-stats). HowLongToBeat has no official API,
+so this may stop finding anything when the site changes; that is a warning,
+never a failed write.
+
 ### The wizard asks less and gets more right
 
 One screen, in the order the questions come: **Games**, **Drive**, **Options**,

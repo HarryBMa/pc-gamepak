@@ -196,3 +196,21 @@ save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
 #
 # Steam games are stored under steamapps/ as usual.
 # GOG / other games are stored under Games/<Title>/ for organisation.
+#
+# ----- Written for you -----
+#
+# The launcher keeps each game's play history here, beside its title, and
+# rewrites these keys after every session. HowLongToBeat's estimate is added
+# when the cartridge is written, if that lookup is switched on. Times are
+# seconds, dates are UTC. Everything else in this file is left alone.
+#
+# playtime=154800
+# launches=31
+# first_played=2026-03-02T19:04:11Z
+# last_played=2026-09-26T18:00:00Z
+# last_host=DESKTOP-7Q2
+# session=2026-09-26T18:00:00Z|5400|DESKTOP-7Q2
+# hltb_id=10270
+# hltb_main=97200
+# hltb_extra=154800
+# hltb_complete=226800

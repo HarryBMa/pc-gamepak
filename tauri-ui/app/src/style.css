@@ -1329,3 +1329,55 @@ body.is-gamepad :focus {
   color: color-mix(in oklch, var(--accent) 60%, var(--ink-3));
   background: oklch(0.24 0.006 65);
 }
+
+/* ==========================================================================
+   Play stats — off in the stock window, on in any skin that shows them
+   --------------------------------------------------------------------------
+   The details sheet already says all of this. A skin that wants it on the
+   face sets `display` on #play-stats; the numbers are also on #card as custom
+   properties and data attributes (see docs/SKINNING.md), for a skin that would
+   rather draw them itself.
+   ========================================================================== */
+
+.play-stats {
+  display: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.play-stats__time {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.play-stats__last {
+  color: var(--ink-3);
+}
+
+.play-stats__last:not(:empty)::before {
+  content: "· ";
+}
+
+/* How far through the main story, from playtime and HowLongToBeat. */
+.play-stats__bar {
+  flex-basis: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--ink) 16%, transparent);
+  overflow: hidden;
+}
+
+#card[data-hltb="no"] .play-stats__bar {
+  display: none;
+}
+
+.play-stats__fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--progress, 0) * 100%);
+  background: var(--accent);
+}

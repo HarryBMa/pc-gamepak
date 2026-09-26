@@ -208,12 +208,19 @@ pub fn watch_dirs(root: &Path, executable: &str, steam_root: Option<&Path>) -> V
     if executable.contains("://") {
         return vec![root.to_path_buf()];
     }
-    let relative = Path::new(executable);
-    let mut parts = relative.components();
-    match (parts.next(), parts.next()) {
-        (Some(first), Some(_)) => vec![root.join(first.as_os_str())],
-        _ => vec![root.to_path_buf()],
+    // The game's own folder: `Games/Tunic` for `Games/Tunic/Tunic.exe`, so two
+    // carried games under one `Games` folder are not mistaken for each other,
+    // and `Tunic` for `Tunic/Tunic.exe`.
+    let folders: Vec<_> = Path::new(executable)
+        .parent()
+        .map(|parent| parent.components().take(2).collect())
+        .unwrap_or_default();
+    if folders.is_empty() {
+        return vec![root.to_path_buf()];
     }
+    vec![folders
+        .iter()
+        .fold(root.to_path_buf(), |path, part| path.join(part.as_os_str()))]
 }
 
 /// The app id in a `steam://rungameid/<id>` or `steam://run/<id>` target.
@@ -395,11 +402,19 @@ mod tests {
     }
 
     #[test]
-    fn a_program_on_the_cartridge_is_watched_by_its_top_folder() {
+    fn a_program_on_the_cartridge_is_watched_by_its_own_folder() {
         let root = Path::new("/run/media/you/CART");
         assert_eq!(
             watch_dirs(root, "Games/Tunic/Tunic.exe", None),
-            vec![root.join("Games")]
+            vec![root.join("Games").join("Tunic")]
+        );
+        assert_eq!(
+            watch_dirs(root, "Games/Tunic/bin/x64/Tunic.exe", None),
+            vec![root.join("Games").join("Tunic")]
+        );
+        assert_eq!(
+            watch_dirs(root, "Tunic/Tunic.exe", None),
+            vec![root.join("Tunic")]
         );
         assert_eq!(watch_dirs(root, "start.sh", None), vec![root.to_path_buf()]);
         assert_eq!(

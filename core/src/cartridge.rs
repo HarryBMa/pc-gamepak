@@ -8,6 +8,30 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+/// How long a game takes to beat, as HowLongToBeat said when the cartridge was
+/// written: the `hltb_*` keys, in seconds. Zero where it had no figure.
+#[derive(Serialize, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct HowLong {
+    pub main: u64,
+    pub extra: u64,
+    pub complete: u64,
+}
+
+impl HowLong {
+    fn from_keys(map: Option<&HashMap<String, String>>) -> Self {
+        let seconds = |key: &str| {
+            map.and_then(|m| m.get(key))
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0)
+        };
+        Self {
+            main: seconds("hltb_main"),
+            extra: seconds("hltb_extra"),
+            complete: seconds("hltb_complete"),
+        }
+    }
+}
+
 /// One game entry inside a multi-game bundle cartridge.
 #[derive(Serialize, Clone)]
 pub struct GameEntry {
@@ -30,6 +54,7 @@ pub struct GameEntry {
     pub logo_path: String,
     pub icon: String,
     pub icon_path: String,
+    pub how_long: HowLong,
 }
 
 #[derive(Serialize, Clone)]
@@ -87,6 +112,8 @@ pub struct CartridgeInfo {
     /// over as a `data:` URI — the window never opens a path on the drive, so
     /// there is one place that decides what a cartridge may be read for.
     pub skin_css: String,
+    /// A single game's HowLongToBeat figures. A collection's are per game.
+    pub how_long: HowLong,
 }
 
 /// A stylesheet the cartridge carries, if it has one and it is not absurd.
@@ -284,6 +311,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                         logo_path,
                         icon: cover_as_data_uri(&icon_path),
                         icon_path,
+                        how_long: HowLong::from_keys(Some(g)),
                     }
                 })
                 .collect();
@@ -311,6 +339,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 is_bundle: true,
                 games,
                 skin_css: skin_css(root),
+                how_long: HowLong::default(),
             });
         }
 
@@ -359,6 +388,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             is_bundle: false,
             games: Vec::new(),
             skin_css: skin_css(root),
+            how_long: HowLong::from_keys(ini.get("general")),
         });
     }
 
@@ -403,6 +433,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             holds_game: holds_game(root),
             is_bundle: false,
             skin_css: skin_css(root),
+            how_long: HowLong::default(),
             games: Vec::new(),
         });
     }
@@ -564,6 +595,34 @@ pub fn base64_encode(input: &[u8]) -> String {
 mod tests {
     // Artwork lives under .gamepak now, so the reader has to resolve a path with
     // a separator in it — and still refuse one that climbs out of the drive.
+    #[test]
+    fn how_long_to_beat_is_read_per_game_and_for_a_single_game() {
+        let scratch = crate::testutil::Scratch::new("cart-hltb");
+        std::fs::write(
+            scratch.path().join("cartridge.conf"),
+            "title=Hollow Knight\nexecutable=steam://rungameid/367520\nhltb_main=97200\nhltb_complete=226800\n",
+        )
+        .unwrap();
+        let info = read_cartridge_info(&scratch.path().to_string_lossy()).unwrap();
+        assert_eq!(
+            info.how_long,
+            HowLong {
+                main: 97200,
+                extra: 0,
+                complete: 226800
+            }
+        );
+
+        std::fs::write(
+            scratch.path().join("cartridge.conf"),
+            "[collection]\ntitle=C\n\n[game]\ntitle=A\nexecutable=x://1\nhltb_main=3600\n\n[game]\ntitle=B\nexecutable=x://2\n",
+        )
+        .unwrap();
+        let info = read_cartridge_info(&scratch.path().to_string_lossy()).unwrap();
+        assert_eq!(info.games[0].how_long.main, 3600);
+        assert_eq!(info.games[1].how_long, HowLong::default());
+    }
+
     #[test]
     fn art_in_the_asset_folder_is_found() {
         let scratch = crate::testutil::Scratch::new("asset-dir");

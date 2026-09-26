@@ -2671,3 +2671,8 @@ input.field__input--lead:focus {
   gap: 14px;
   margin-top: 14px;
 }
+
+/* `.field` sets display, which outranks the browser's own [hidden]. */
+.field[hidden] {
+  display: none;
+}

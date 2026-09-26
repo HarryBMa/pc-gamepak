@@ -208,6 +208,52 @@ wins against you, that is a bug in the base, not something to out-specify.
 
 ---
 
+## Play stats
+
+What the cartridge has recorded about each game — playtime, launches, when it
+was last played, and HowLongToBeat's estimate if the cartridge was written with
+one — lives in `cartridge.conf` (see the [manual](MANUAL.md#hours-and-saves-that-travel)).
+A skin cannot read files, so the launcher reads it and hands it over three ways.
+
+**Custom properties**, on `#card` for the game Play will start and on each
+`.game-row` for its own game. Strings are quoted, for `content:`; the `-hours`
+and `--progress` values are bare numbers, for `calc()`:
+
+| Property | Example | |
+|---|---|---|
+| `--playtime` | `"13 h 12 min"` | empty under a minute |
+| `--playtime-hours` | `13.20` | |
+| `--launches` | `9` | a number: `counter-reset: n var(--launches)` prints it |
+| `--last-played` | `"2 days ago"` | empty if never |
+| `--hltb-main` `--hltb-extra` `--hltb-complete` | `"21 h"` | empty without an estimate |
+| `--hltb-main-hours` | `21.00` | `0` without one |
+| `--progress` | `0.629` | playtime ÷ main story, capped at 1; `0` without an estimate |
+
+**Data attributes**, on the same elements, for a skin that wants cases rather
+than a scale:
+
+| Attribute | Values |
+|---|---|
+| `data-progress` | `new` (never played), `unknown` (no estimate), `started` under half, `halfway` under 90%, `nearly`, `beaten` |
+| `data-played` | `yes` `no` |
+| `data-hltb` | `yes` `no` |
+
+**A stats line**, `#play-stats`, under the title — hidden in the stock window,
+because the details sheet already says all of it. Show it and style it:
+
+```css
+#play-stats { display: flex }             /* 13 h 12 min  of ~21 h  · 2 days ago */
+.play-stats__fill { background: gold }    /* the progress bar, sized by --progress */
+.game-row::after { content: var(--playtime) }        /* each row's own hours */
+.game-row[data-progress="beaten"] .game-row__title::after { content: " ✓" }
+```
+
+Its parts are `.play-stats__time`, `.play-stats__beat`, `.play-stats__last` and
+`.play-stats__bar` holding `.play-stats__fill`. The bar hides itself when there
+is no estimate.
+
+---
+
 ## Tokens worth overriding
 
 Defined in `tokens.css`. Redefine on `:root`.

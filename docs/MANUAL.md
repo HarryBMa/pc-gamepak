@@ -206,6 +206,62 @@ machines: a cartridge yanked out of one PC mid-game has those hours settled by
 whichever machine sees it next. Borrowed from Kazeta, which does the same thing
 with the same sixty seconds.
 
+**What counts as playing.** The launcher watches for the game itself: a
+program running from the game's folder — on the cartridge, or for a Steam game
+wherever Steam installed it. (Under Proton the program is Wine, so a process
+whose working folder is the game's counts too.) Time only counts while it is
+running, and closing the launcher does not stop the count: the window hides,
+and the launcher leaves when the game does. A game it cannot see at all — a
+cartridge pointing at a game installed somewhere it cannot name — is counted
+while the launcher is open, as before.
+
+It also stops counting when nobody is there. After ten minutes with no
+keyboard, mouse **or controller** input (Settings → *Pause when nobody is
+playing for*), the time since the last input is taken back out and nothing more
+is counted until someone touches something. Controllers are read directly —
+XInput on Windows, `/dev/input/js*` on Linux — because the desktop's own idle
+clock does not see them, and a game played on a pad would otherwise look idle
+from the first minute. On Linux the keyboard and mouse come from logind's idle
+hint; a desktop that never sets it means nothing pauses.
+
+**Every figure is in `cartridge.conf`,** under each game, after every session:
+
+```ini
+[game]
+title=Hollow Knight
+executable=steam://rungameid/367520
+playtime=154800
+launches=31
+first_played=2026-03-02T19:04:11Z
+last_played=2026-09-26T18:00:00Z
+last_host=DESKTOP-7Q2
+session=2026-09-26T18:00:00Z|5400|DESKTOP-7Q2
+hltb_id=10270
+hltb_main=97200
+hltb_extra=154800
+hltb_complete=226800
+```
+
+Times are seconds and dates are UTC. `session` is start, seconds and machine,
+newest first, the last thirty. The `hltb_` keys are HowLongToBeat's main story,
+main plus extras, and completionist figures.
+
+A single-game cartridge carries the same keys at the top. `stats.json` stays
+the working copy — the open session and the minute-by-minute heartbeat live
+there — and the conf is rewritten from it when a session ends; only those keys
+are touched, and everything else in the file stays as it was. A skin reads the
+same numbers through CSS variables; see [SKINNING.md](SKINNING.md#play-stats).
+
+**How long to beat** comes from [HowLongToBeat](https://howlongtobeat.com),
+looked up once per game while the cartridge is written, and only with Settings →
+*Look up how long games take to beat* switched on — it is off by default, like
+SteamGridDB. HowLongToBeat has no official API: the wizard asks the way the
+site's own search page does, as the `howlongtobeatpy` project worked out, and
+when the site changes that, the lookup finds nothing until this is updated. A
+failed lookup is a warning in the write log and a cartridge without an estimate,
+never a failed write. The launcher shows the figures under the ⓘ, and — with a
+skin that asks for it — a bar of how far through the main story you are.
+
 The save is the harder half, and the one that makes a second machine feel like
 starting over. Steam Cloud covers the games that are in it and nothing covers a
 GOG game, an emulator, or a folder copied onto a drive by hand. A cartridge can

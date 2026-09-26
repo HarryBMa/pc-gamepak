@@ -73,14 +73,15 @@
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, drives, edit, format, frontend, health, home, insert, saves, settings, sgdb,
-    shaders, stats, tuning,
+    busy, create, drives, edit, format, frontend, health, home, idle, insert, playlog, playtrack,
+    saves, settings, sgdb, shaders, stats, tuning,
 };
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
@@ -197,58 +198,19 @@ fn launch_game(
     Ok(())
 }
 
-/// Wait for a carried game to exit, then close its session and put its save
-/// back on the cartridge.
+/// Reap a carried game when it exits.
 ///
-/// Both of those used to wait for an eject, and waiting is wrong for both.
-///
-/// A save copied back only on eject is a save lost by quitting the game and
-/// pulling the drive out — which is exactly what somebody who has finished
-/// playing does. This pushes as soon as the game is gone, while the cartridge is
-/// still sitting in the port and nothing is reaching for it. `push_all` rather
-/// than the eject path: it copies to the cartridge and leaves the arrangement
-/// alone, so a linked save stays linked and the user can play again.
-///
-/// And a session closed only when the window closes counts the hours the
-/// launcher sat idle afterwards as playtime. `end_every_session` says the
-/// window's lifetime is "the honest bound on what can be measured here" —
-/// true for a `steam://` game, which is Steam's child and not ours, and not
-/// true for this one. This launcher started it, so it can watch it, and the
-/// end of the process is the end of the session.
-///
-/// One thread, asleep in `wait` until then.
-fn settle_when_it_exits(mut child: std::process::Child, drive_path: String, key: String) {
+/// The session is not closed here any more. The tracker watches the game's
+/// folder rather than this one process, because a carried game is often a
+/// launcher stub or a shell script that starts the real executable and exits —
+/// and the session, and the save push that follows it, belong to the game, not
+/// to the stub.
+fn settle_when_it_exits(mut child: std::process::Child, _drive_path: String, _key: String) {
     std::thread::spawn(move || {
         if let Err(why) = child.wait() {
-            // Nothing to settle on: without an exit there is no end to record,
-            // and the eject path is still there to catch the save.
             debug_log(format!("could not wait for the game to exit: {why}"));
-            return;
-        }
-        end_session_for(&key);
-        if settings::load().save_sync {
-            let results = saves::push_all(Path::new(&drive_path));
-            let pushed = results.iter().filter(|result| result.is_ok()).count();
-            debug_log(format!("game exited; pushed {pushed} save slot(s)"));
-            for why in results.into_iter().filter_map(Result::err) {
-                debug_log(format!("save push after play: {why}"));
-            }
         }
     });
-}
-
-/// Close one open session and add its hours, leaving any other alone.
-///
-/// The per-game counterpart of [`end_every_session`], for the case where one
-/// game has stopped and the launcher is still up.
-fn end_session_for(key: &str) {
-    // The guard is dropped before the write below, which touches the drive.
-    let session = playing().lock().ok().and_then(|mut open| open.remove(key));
-    if let Some(session) = session {
-        if let Err(why) = stats::record_session_end(&session) {
-            debug_log(format!("stats: {why}"));
-        }
-    }
 }
 
 fn open_uri(uri: &str) -> Result<(), String> {
@@ -282,18 +244,69 @@ fn open_uri(uri: &str) -> Result<(), String> {
 // What the cartridge remembers: hours played, and saves
 // --------------------------------------------------------------------------
 
-/// Sessions opened by `launch_game` and not yet closed.
-///
-/// Keyed the way the stats file is keyed, so the window can close a session by
-/// naming the game it started rather than holding a handle it would have to
-/// serialise. At most a handful of entries — one per Play — and they live
-/// only as long as the launcher window does.
-fn playing() -> &'static Mutex<HashMap<String, stats::Session>> {
-    static PLAYING: OnceLock<Mutex<HashMap<String, stats::Session>>> = OnceLock::new();
+/// A session being counted, and the tracker counting it.
+struct Tracked {
+    session: stats::Session,
+    root: PathBuf,
+    /// A program the cartridge carries, as opposed to a URI handed to another
+    /// launcher — only those have their saves pushed when they end.
+    carried: bool,
+    dirs: Vec<PathBuf>,
+    tracker: Mutex<playtrack::Tracker>,
+    /// Set when the session has been closed from outside: Eject, a second
+    /// game, the window going away. The thread sees it and stops.
+    closed: AtomicBool,
+}
+
+impl Tracked {
+    fn active_seconds(&self) -> u64 {
+        self.tracker
+            .lock()
+            .map(|tracker| tracker.active_seconds())
+            .unwrap_or(0)
+    }
+
+    fn mode(&self) -> playtrack::Mode {
+        self.tracker
+            .lock()
+            .map(|tracker| tracker.mode())
+            .unwrap_or(playtrack::Mode::Window)
+    }
+
+    /// Close the session with what was counted, once.
+    fn close(&self) {
+        if self.closed.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let played = self.active_seconds();
+        match stats::record_session_played(&self.session, played) {
+            Ok(seconds) => debug_log(format!("stats: session closed, {seconds}s played")),
+            Err(why) => debug_log(format!("stats: {why}")),
+        }
+        if let Err(why) = playlog::mirror(&self.root) {
+            debug_log(format!("playlog: {why}"));
+        }
+    }
+}
+
+/// Every session being counted, by game.
+fn playing() -> &'static Mutex<HashMap<String, Arc<Tracked>>> {
+    static PLAYING: OnceLock<Mutex<HashMap<String, Arc<Tracked>>>> = OnceLock::new();
     PLAYING.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Count a launch, if the user has left that switched on.
+/// The app, once Tauri has built it, so a tracker can end the process after
+/// the window has been closed and the last game has too.
+static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// The window has been closed while a game was still being watched.
+static WINDOW_GONE: AtomicBool = AtomicBool::new(false);
+
+/// No window will ever exist: the game was started straight from an insert.
+static HEADLESS: AtomicBool = AtomicBool::new(false);
+
+/// Count a launch, if the user has left that switched on, and start watching
+/// the game.
 ///
 /// The title comes from the window rather than being re-read here. It is only
 /// decoration inside the stats file — the `executable` is what keys a row —
@@ -305,55 +318,145 @@ fn playing() -> &'static Mutex<HashMap<String, stats::Session>> {
 /// are all reasons not to have a count, and none of them is a reason not to
 /// play the game.
 fn count_the_launch(drive_path: &str, executable: &str, title: String) {
-    if !settings::load().track_playtime {
+    let settings = settings::load();
+    if !settings.track_playtime {
         return;
     }
 
     // Pressing Play on a second game means the first one is over. Without
-    // this both sessions stay open until the window closes and both are
-    // credited with the whole evening, which is worse than counting nothing.
+    // this both sessions stay open and both are credited with the evening.
     end_every_session();
 
-    match stats::record_launch(Path::new(drive_path), executable, &title) {
-        Ok(session) => {
-            if let Ok(mut open) = playing().lock() {
-                open.insert(stats::key_for(executable), session.clone());
+    let root = PathBuf::from(drive_path);
+    let session = match stats::record_launch(&root, executable, &title) {
+        Ok(session) => session,
+        Err(why) => return debug_log(format!("stats: {why}")),
+    };
+    if let Err(why) = playlog::mirror(&root) {
+        debug_log(format!("playlog: {why}"));
+    }
+
+    let steam_root = gamepak_core::steam::steam_root();
+    let dirs = playtrack::watch_dirs(&root, executable, steam_root.as_deref());
+    debug_log(format!("tracking {executable} in {dirs:?}"));
+    let tracked = Arc::new(Tracked {
+        session,
+        carried: !executable.contains("://"),
+        root,
+        dirs,
+        tracker: Mutex::new(playtrack::Tracker::new(
+            playtrack::Mode::Process,
+            stats::now_unix(),
+            settings.idle_pause_minutes,
+        )),
+        closed: AtomicBool::new(false),
+    });
+    if let Ok(mut open) = playing().lock() {
+        open.insert(stats::key_for(executable), tracked.clone());
+    }
+    track(tracked);
+}
+
+/// Watch one session until it ends, on its own thread.
+///
+/// Every tick: is the game running, and is anybody there. Every minute: write
+/// what has been counted to the drive, so a crash or a yanked cartridge costs
+/// at most a minute — the heartbeat Kazeta uses, now carrying the played
+/// seconds rather than the time since Play.
+fn track(tracked: Arc<Tracked>) {
+    std::thread::spawn(move || {
+        let mut probe = idle::IdleProbe::new();
+        let mut last_beat = stats::now_unix();
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(playtrack::TICK_SECONDS));
+            if tracked.closed.load(Ordering::SeqCst) {
+                return;
             }
-            beat(session);
+            let now = stats::now_unix();
+            let running = busy::running_within(&tracked.dirs);
+            let away = probe.idle_seconds();
+            let tick = tracked
+                .tracker
+                .lock()
+                .map(|mut tracker| tracker.tick(now, running, away))
+                .unwrap_or(playtrack::Tick::Ended);
+
+            match tick {
+                playtrack::Tick::Running => {}
+                playtrack::Tick::Ended => break,
+                playtrack::Tick::NeverSeen => {
+                    // Nothing to see: count the window instead, if there is
+                    // one. With no window there is nothing left to measure.
+                    if HEADLESS.load(Ordering::SeqCst) || WINDOW_GONE.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    debug_log("game not seen; counting while the launcher is open".to_string());
+                    if let Ok(mut tracker) = tracked.tracker.lock() {
+                        tracker.fall_back_to_window(now);
+                    }
+                }
+            }
+
+            if now.saturating_sub(last_beat) >= stats::HEARTBEAT_SECONDS {
+                last_beat = now;
+                if let Err(why) =
+                    stats::touch_session_played(&tracked.session, tracked.active_seconds())
+                {
+                    // A cartridge that has gone is the ordinary way for this
+                    // to end.
+                    debug_log(format!("stats heartbeat: {why}"));
+                    tracked.closed.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
         }
-        Err(why) => debug_log(format!("stats: {why}")),
+        finish(&tracked);
+    });
+}
+
+/// A game has stopped: close its session, put its save back, and leave if the
+/// window was only being kept for this.
+fn finish(tracked: &Arc<Tracked>) {
+    tracked.close();
+    if let Ok(mut open) = playing().lock() {
+        open.retain(|_, other| !Arc::ptr_eq(other, tracked));
+    }
+    if tracked.carried && settings::load().save_sync {
+        let results = saves::push_all(&tracked.root);
+        let pushed = results.iter().filter(|result| result.is_ok()).count();
+        debug_log(format!("game exited; pushed {pushed} save slot(s)"));
+        for why in results.into_iter().filter_map(Result::err) {
+            debug_log(format!("save push after play: {why}"));
+        }
+    }
+    if WINDOW_GONE.load(Ordering::SeqCst) && !still_watching() {
+        if let Some(app) = APP.get() {
+            app.exit(0);
+        }
     }
 }
 
-/// Re-stamp an open session on the drive, once a minute, until it is closed.
-///
-/// One thread per session, which sounds worse than it is: there is one session
-/// at a time in practice, the thread is asleep for all but a few milliseconds
-/// of each minute, and it ends itself as soon as the session leaves the table.
-/// The alternative — a timer owned by the window — would stop ticking in
-/// exactly the case this exists for, which is the window not getting to finish.
-///
-/// Without this, a crash or a power cut costs the whole session's hours. With
-/// it, the cost is whatever happened since the last beat. Kazeta does the same
-/// thing, and the sixty seconds is its number too.
-fn beat(session: stats::Session) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(stats::HEARTBEAT_SECONDS));
-        // Still the session the launcher thinks is running? If Eject or the
-        // window closing has drained the table, this thread's work is done.
-        let still_open = playing()
-            .lock()
-            .map(|open| open.contains_key(session.key()))
-            .unwrap_or(false);
-        if !still_open {
-            return;
-        }
-        if let Err(why) = stats::touch_session(&session) {
-            // A cartridge that has gone is the ordinary way for this to end.
-            debug_log(format!("stats heartbeat: {why}"));
-            return;
-        }
-    });
+/// Whether a game is being watched that outlives the window.
+fn still_watching() -> bool {
+    playing()
+        .lock()
+        .map(|open| {
+            open.values()
+                .any(|tracked| tracked.mode() == playtrack::Mode::Process)
+        })
+        .unwrap_or(false)
+}
+
+/// Block until every session has ended. For a game started straight from an
+/// insert, where this process has no window to keep it alive.
+fn wait_for_sessions() {
+    while playing()
+        .lock()
+        .map(|open| !open.is_empty())
+        .unwrap_or(false)
+    {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 }
 
 /// Everything this cartridge has recorded, for the details sheet.
@@ -368,6 +471,9 @@ fn cartridge_stats(drive_path: String) -> stats::Stats {
     let root = Path::new(&drive_path);
     if settings::load().track_playtime {
         if let Some(seconds) = stats::recover(root) {
+            if let Err(why) = playlog::mirror(root) {
+                debug_log(format!("playlog: {why}"));
+            }
             if seconds > 0 {
                 debug_log(format!(
                     "stats: recovered {seconds}s from a session that did not close"
@@ -378,21 +484,39 @@ fn cartridge_stats(drive_path: String) -> stats::Stats {
     stats::read(root)
 }
 
-/// Close every open session and add its hours.
+/// Close every open session with what it has counted.
 ///
-/// Called when the launcher window goes away, when the cartridge is ejected,
-/// and when a second game is started. The launcher does not own the game's
-/// process — on Steam it is not even a descendant of ours — so the window's
-/// own lifetime is the honest bound on what can be measured here. Watching
-/// the process itself is Phase 4's job.
-fn end_every_session() {
-    let Ok(mut open) = playing().lock() else {
-        return;
-    };
-    for (_, session) in open.drain() {
-        if let Err(why) = stats::record_session_end(&session) {
-            debug_log(format!("stats: {why}"));
+/// Called when the cartridge is ejected and when a second game is started.
+/// The window closing only calls it when nothing outlives the window — see
+/// the window's close handler.
+/// Close the sessions only the window was measuring, and leave the watched
+/// ones running.
+fn end_window_sessions() {
+    let window_only: Vec<Arc<Tracked>> = match playing().lock() {
+        Ok(mut open) => {
+            let keys: Vec<String> = open
+                .iter()
+                .filter(|(_, tracked)| tracked.mode() == playtrack::Mode::Window)
+                .map(|(key, _)| key.clone())
+                .collect();
+            keys.into_iter()
+                .filter_map(|key| open.remove(&key))
+                .collect()
         }
+        Err(_) => return,
+    };
+    for tracked in window_only {
+        tracked.close();
+    }
+}
+
+fn end_every_session() {
+    let open: Vec<Arc<Tracked>> = match playing().lock() {
+        Ok(mut open) => open.drain().map(|(_, tracked)| tracked).collect(),
+        Err(_) => return,
+    };
+    for tracked in open {
+        tracked.close();
     }
 }
 
@@ -612,16 +736,13 @@ fn act_on_insert(reaction: insert::Reaction) -> bool {
             let drive = cartridge::drive_from_args(std::env::args().skip(1));
             // The same call the Play button makes, counting included, so an
             // auto-launched game is not missing from the cartridge's history.
+            HEADLESS.store(true, Ordering::SeqCst);
             if let Err(why) = launch_game(executable, drive, Some(title)) {
                 eprintln!("could not start the game: {why}");
             }
-            // And closed again at once. This process is about to exit, so
-            // nothing here can measure how long the game runs — the heartbeat
-            // needs a launcher that stays up, which is what the window is. The
-            // session is closed rather than abandoned so the cartridge is not
-            // left carrying an open record that never advances and gets settled
-            // as zero on some later insert.
-            end_every_session();
+            // No window, so this process stays up only to watch the game, and
+            // exits when it does — or when it never turns up.
+            wait_for_sessions();
         }
         insert::Reaction::Notify { title, body } => return notify(&title, &body),
     }
@@ -2176,6 +2297,7 @@ fn main() {
             open_wizard_window,
         ])
         .setup(move |app| {
+            let _ = APP.set(app.handle().clone());
             if wizard {
                 // The same door the launcher's Settings link uses, rather than
                 // a second builder that had drifted to a fixed size the
@@ -2195,18 +2317,22 @@ fn main() {
                         .visible(false)
                         .build()?;
                 round_dwm_corners(&launcher);
-                // The window closing is the last chance to add the hours to
-                // the drive. Play does not block — the game is a process we do
-                // not own — so the session is open from the click until the
-                // launcher goes away, which is the honest bound on what this
-                // can measure without watching processes.
-                launcher.on_window_event(|event| {
-                    if matches!(
-                        event,
-                        tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. }
-                    ) {
+                // Closing the window while a game it can see is running only
+                // hides it: the process stays to watch the game, and exits when
+                // the game does (see `finish`). A session counted by the window
+                // alone ends with the window, as it always has.
+                let hideable = launcher.clone();
+                launcher.on_window_event(move |event| match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } if still_watching() => {
+                        api.prevent_close();
+                        WINDOW_GONE.store(true, Ordering::SeqCst);
+                        let _ = hideable.hide();
+                        end_window_sessions();
+                    }
+                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
                         end_every_session();
                     }
+                    _ => {}
                 });
             }
             Ok(())
