@@ -198,6 +198,32 @@ pub fn holders(root: &Path) -> Holders {
     }
 }
 
+/// Whether any process is running from one of these folders.
+///
+/// Its executable inside one, or — Linux only — its working directory. The
+/// second is what finds a Windows game under Proton, whose process is a Wine
+/// binary from outside the game folder with the game folder as its working
+/// directory. Used by the play tracker once a tick, so it reads two links per
+/// process and nothing else: no file-descriptor walk, which is the part of
+/// [`holders`] that costs.
+pub fn running_within(dirs: &[PathBuf]) -> bool {
+    if dirs.is_empty() {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::running_within(dirs)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows::running_within(dirs)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        false
+    }
+}
+
 /// Whether `path` is the root itself or inside it.
 ///
 /// Component-wise, not a string prefix: `/run/media/you/CART` must not match
@@ -390,6 +416,28 @@ mod linux {
         found
     }
 
+    pub fn running_within(dirs: &[PathBuf]) -> bool {
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return false;
+        };
+        let own = std::process::id();
+        entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
+                return false;
+            };
+            // The launcher's own working directory may well be the cartridge.
+            if pid == own {
+                return false;
+            }
+            let dir = entry.path();
+            ["exe", "cwd"].iter().any(|link| {
+                std::fs::read_link(dir.join(link))
+                    .is_ok_and(|target| dirs.iter().any(|d| is_within(&target, d)))
+            })
+        })
+    }
+
     enum Inspected {
         Holding(Holder),
         Idle,
@@ -556,6 +604,41 @@ mod windows {
         found
     }
 
+    pub fn running_within(dirs: &[PathBuf]) -> bool {
+        // Windows paths compare without regard to case, and the image path and
+        // the drive root can disagree about the letter's.
+        let dirs: Vec<PathBuf> = dirs.iter().map(|d| lowercase(d)).collect();
+        let own = std::process::id();
+        // SAFETY: as in `holders` — one snapshot, walked and closed.
+        unsafe {
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snapshot == INVALID_HANDLE_VALUE {
+                return false;
+            }
+            let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            let mut found = false;
+            while Process32NextW(snapshot, &mut entry) != 0 {
+                if entry.th32ProcessID == own {
+                    continue;
+                }
+                if let Some(path) = image_path(entry.th32ProcessID) {
+                    let path = lowercase(&path);
+                    if dirs.iter().any(|d| is_within(&path, d)) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            CloseHandle(snapshot);
+            found
+        }
+    }
+
+    fn lowercase(path: &Path) -> PathBuf {
+        PathBuf::from(path.to_string_lossy().to_lowercase())
+    }
+
     /// The full path of a process's executable, if it can be asked for.
     unsafe fn image_path(pid: u32) -> Option<PathBuf> {
         // The limited variant is the one an unprivileged process is allowed to
@@ -591,6 +674,31 @@ mod tests {
     // `-D warnings` turns into a failed build.
     #[cfg(target_os = "linux")]
     use crate::testutil::Scratch;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_working_inside_a_folder_is_running_from_it() {
+        let scratch = Scratch::new("busy-running");
+        let game = scratch.path().join("Game");
+        std::fs::create_dir_all(&game).unwrap();
+        let other = scratch.path().join("Other");
+        std::fs::create_dir_all(&other).unwrap();
+
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .current_dir(&game)
+            .spawn()
+            .expect("sleep");
+        // /proc/<pid>/cwd is set by the time spawn returns.
+        let seen = running_within(&[game.clone()]);
+        let elsewhere = running_within(&[other]);
+        child.kill().ok();
+        child.wait().ok();
+
+        assert!(seen, "a process with its working directory in the folder");
+        assert!(!elsewhere);
+        assert!(!running_within(&[game]), "and not once it has gone");
+    }
 
     #[test]
     fn a_sibling_directory_with_a_shared_prefix_is_not_inside() {

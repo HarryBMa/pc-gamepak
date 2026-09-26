@@ -599,7 +599,15 @@ fn declaration_lines(conf: &str) -> Vec<(String, String)> {
             owner_of_section.insert(index, crate::stats::key_for(line[eq + 1..].trim()));
             continue;
         }
-        if key == "savemode" || key == "save" || key.starts_with("save.") {
+        // HowLongToBeat's figures ride along too: they were looked up once,
+        // when the cartridge was made, and a rename is no reason to lose them.
+        // (The play history needs no carrying — `playlog` rewrites it from
+        // the stats file after every write.)
+        if key == "savemode"
+            || key == "save"
+            || key.starts_with("save.")
+            || key.starts_with("hltb_")
+        {
             // A cartridge-wide key even when it is written inside a section.
             let index = if key == "savemode" { 0 } else { index };
             found.push((index, raw.trim_end().to_string()));

@@ -1087,10 +1087,16 @@ pub fn create_cartridge(
             collection_logo.as_deref(),
             &tuples,
         );
+        let looked_up: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|game| (game.title.as_str(), game.executable.as_str()))
+            .collect();
+        let conf = with_estimates(conf, &looked_up, progress, &mut warnings);
         let conf_path = root.join("cartridge.conf");
         std::fs::write(&conf_path, conf)
             .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
         result.conf_path = conf_path.to_string_lossy().into_owned();
+        mirror_history(&root, &mut warnings);
 
         // ---- autorun.inf ---------------------------------------------------
         if request.write_icon {
@@ -1245,10 +1251,12 @@ pub fn create_cartridge(
         background_destination.as_deref(),
         logo_destination.as_deref(),
     );
+    let conf = with_estimates(conf, &[(&title, &executable)], progress, &mut warnings);
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
+    mirror_history(&root, &mut warnings);
 
     // ---- 6. autorun.inf --------------------------------------------------
     if request.write_icon {
@@ -2117,6 +2125,56 @@ pub(crate) fn resolve_target(requested: &str) -> Result<PathBuf, String> {
         return Err(format!("{requested} is not there any more."));
     }
     Ok(requested_path.to_path_buf())
+}
+
+/// Ask HowLongToBeat about each game and put its figures under that game.
+///
+/// Only when the user has switched the lookup on, and never fatal: a game it
+/// cannot find, or a site that has changed under it, is a warning and a
+/// cartridge without an estimate. The first network failure stops the rest,
+/// because the next nine requests would fail the same way, slowly.
+fn with_estimates(
+    conf: String,
+    games: &[(&str, &str)],
+    progress: &mut dyn FnMut(Progress),
+    warnings: &mut Vec<String>,
+) -> String {
+    if !crate::settings::load().hltb_enabled || games.is_empty() {
+        return conf;
+    }
+    progress(Progress {
+        step: "hltb",
+        message: "Looking up how long it takes to beat…".to_string(),
+        done_bytes: 0,
+        total_bytes: 0,
+    });
+    let mut found: std::collections::HashMap<String, Vec<String>> = Default::default();
+    for (title, executable) in games {
+        match crate::hltb::lookup(title) {
+            Ok(Some(estimate)) => {
+                found.insert(crate::stats::key_for(executable), estimate.conf_lines());
+            }
+            Ok(None) => warnings.push(format!("HowLongToBeat has no match for {title}.")),
+            Err(e) => {
+                warnings.push(format!("No HowLongToBeat figures: {e}"));
+                break;
+            }
+        }
+    }
+    crate::playlog::rewrite(&conf, &|key| key.starts_with("hltb_"), &|owner| {
+        found.get(owner).cloned()
+    })
+}
+
+/// Put back whatever play history the stats file has for the games now on the
+/// cartridge. The conf was just written from scratch, and a game played before
+/// under the same executable keeps its hours.
+fn mirror_history(root: &Path, warnings: &mut Vec<String>) {
+    if let Err(e) = crate::playlog::mirror(root) {
+        warnings.push(format!(
+            "Play history was not copied into cartridge.conf: {e}"
+        ));
+    }
 }
 
 /// Copy the chosen art to the cartridge. Returns where it landed.

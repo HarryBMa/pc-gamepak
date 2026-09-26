@@ -47,4 +47,10 @@ windows-sys = { version = "0.52", features = [
     # message-only window the notification area's icon belongs to, and the
     # message pump that has to run while the balloon is up.
     "Win32_UI_WindowsAndMessaging",
+    # How long since the last input, for the playtime tracker's idle pause:
+    # GetLastInputInfo against GetTickCount for the keyboard and mouse, and
+    # XInput for pads, which the first cannot see.
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Input_XboxController",
 ] }

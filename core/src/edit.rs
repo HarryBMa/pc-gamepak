@@ -461,6 +461,13 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
+    // And the play history, which the stats file holds and the render above
+    // knows nothing about.
+    if let Err(e) = crate::playlog::mirror(root) {
+        warnings.push(format!(
+            "Play history was not copied into cartridge.conf: {e}"
+        ));
+    }
 
     // ---- autorun.inf ------------------------------------------------------
     //
@@ -824,6 +831,30 @@ mod tests {
         // None of that touched the cartridge.
         let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
         assert!(conf.contains("title=Hollow Knight"), "{conf}");
+    }
+
+    #[test]
+    fn a_rename_keeps_the_estimate_and_the_play_history() {
+        let scratch = Scratch::new("edit-keeps-play");
+        scratch.write(
+            "cartridge.conf",
+            b"title=Hollow Knight\nexecutable=steam://rungameid/367520\nhltb_id=9\nhltb_main=97200\n",
+        );
+        let session =
+            crate::stats::record_launch(scratch.path(), "steam://rungameid/367520", "HK").unwrap();
+        crate::stats::record_session_played(&session, 1800).unwrap();
+
+        update_at(
+            scratch.path(),
+            &request("HK", &[("HK", "steam://rungameid/367520")]),
+        )
+        .unwrap();
+
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(conf.contains("title=HK"), "{conf}");
+        assert!(conf.contains("hltb_main=97200"), "{conf}");
+        assert!(conf.contains("playtime=1800"), "{conf}");
+        assert!(conf.contains("launches=1"), "{conf}");
     }
 
     #[test]

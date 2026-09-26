@@ -115,6 +115,14 @@ pub struct Settings {
     /// survives being carried to another machine, which a default of off would
     /// quietly undo for everybody who never found the switch.
     pub track_playtime: bool,
+    /// Stop counting playtime after this many minutes without any input —
+    /// keyboard, mouse or controller. Zero counts through. See
+    /// [`crate::playtrack`].
+    pub idle_pause_minutes: u64,
+    /// Look each game up on HowLongToBeat while a cartridge is written. **Off**:
+    /// it is a network request to a site with no official API. See
+    /// [`crate::hltb`].
+    pub hltb_enabled: bool,
 }
 
 impl Default for Settings {
@@ -142,6 +150,8 @@ impl Default for Settings {
             default_format: false,
             save_sync: false,
             track_playtime: true,
+            idle_pause_minutes: crate::playtrack::DEFAULT_IDLE_MINUTES,
+            hltb_enabled: false,
             frontends: crate::frontend::Frontends::default(),
             on_cartridge_insert: crate::insert::InsertAction::default(),
         }
@@ -268,6 +278,8 @@ mod tests {
             default_format: true,
             save_sync: true,
             track_playtime: false,
+            idle_pause_minutes: 3,
+            hltb_enabled: true,
             on_cartridge_insert: crate::insert::InsertAction::AutoLaunchGame,
             ..Settings::default()
         };
