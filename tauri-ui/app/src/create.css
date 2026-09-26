@@ -1198,7 +1198,7 @@
    is the whole job. */
 #rail-launcher-frame {
   width: 100%;
-  max-width: 160px;
+  max-width: 128px;
   aspect-ratio: 420 / 560;
   overflow: hidden;
   border-radius: 11px;
@@ -1450,8 +1450,8 @@
 /* --- What it costs on the drive ----------------------------------------- */
 
 #rail-space {
-  margin-top: 17px;
-  padding-top: 15px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid oklch(1 0 0 / 0.07);
 }
 
@@ -1568,8 +1568,8 @@
 
 #rail-plan,
 #rail-forced {
-  margin-top: 17px;
-  padding-top: 15px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid oklch(1 0 0 / 0.07);
 }
 
@@ -2231,8 +2231,8 @@ dialog form {
 
 .art-slots {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 9px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 
 .art-slot {
@@ -2355,9 +2355,9 @@ dialog form {
   gap: 18px;
 }
 
-/* The grid keeps its shape when a slot goes: two slots, two columns. */
+/* The grid keeps its shape when a slot goes: three slots, three columns. */
 .art-slots:has(.art-slot[hidden]) {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .art-slot[hidden] {
@@ -2403,12 +2403,6 @@ dialog form {
   margin: -4px 0 4px 30px;
 }
 
-/* A hero is a banner, so its slot is one — showing it in the same portrait
-   frame as the cover would misreport what shape the picture has to be. */
-.art-slot__art--wide {
-  aspect-ratio: 16 / 6;
-  width: 100%;
-}
 
 /* --- Front-ends -----------------------------------------------------------
    One switch per place a cartridge can open. Built at runtime from what the
@@ -2422,4 +2416,180 @@ dialog form {
 
 .frontends .opt input:disabled + .opt__body .opt__label {
   opacity: 0.55;
+}
+
+/* --- Fields that are not inside a .field ---------------------------------
+   The collection name and the Edit tab's name sit on their own, and without
+   this they fell through to the browser's white text box. */
+input.field__input--lead {
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 6px;
+  width: 100%;
+  outline: none;
+  transition: border-color 130ms linear;
+}
+
+input.field__input--lead:focus {
+  border-color: var(--accent) !important;
+}
+
+/* --- Options: this cartridge's switches -------------------------------- */
+
+.toggles {
+  display: flex;
+  flex-direction: column;
+  border-radius: 11px;
+  border: 1px solid oklch(1 0 0 / 0.09);
+  background: oklch(0 0 0 / 0.26);
+  overflow: hidden;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.toggle + .toggle {
+  border-top: 1px solid oklch(1 0 0 / 0.06);
+}
+
+.toggle[hidden] {
+  display: none;
+}
+
+.toggle__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  align-self: stretch;
+  cursor: pointer;
+}
+
+.toggle__label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.toggle__meta {
+  flex: none;
+  font-size: 10px;
+  color: oklch(0.62 0.008 75);
+}
+
+.toggle.is-off .toggle__main {
+  cursor: default;
+}
+
+.toggle.is-off .toggle__label {
+  color: var(--ink-3);
+}
+
+/* A switch, drawn from the checkbox so it stays a checkbox to a screen
+   reader, a keyboard and the form. */
+.toggle input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  border-radius: 999px;
+  background: oklch(1 0 0 / 0.14);
+  cursor: pointer;
+  transition: background 140ms linear;
+}
+
+.toggle input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: oklch(0.92 0.006 75);
+  transition: transform 160ms var(--ease, ease);
+}
+
+.toggle input[type="checkbox"]:checked {
+  background: var(--accent);
+}
+
+.toggle input[type="checkbox"]:checked::after {
+  transform: translateX(12px);
+  background: oklch(0.16 0.006 65);
+}
+
+.toggle input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toggle input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toggle--danger input[type="checkbox"]:checked {
+  background: var(--danger);
+}
+
+.toggle--danger.is-on {
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+}
+
+.toggle--danger.is-on .toggle__label {
+  color: color-mix(in oklch, var(--danger) 70%, var(--ink));
+}
+
+.toggle__select {
+  flex: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid oklch(1 0 0 / 0.12);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.toggle__select[hidden] {
+  display: none;
+}
+
+/* --- Erase confirmation ------------------------------------------------ */
+
+#confirm-dialog {
+  width: min(400px, 92vw);
+}
+
+.confirm-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: oklch(0.86 0.008 75);
+}
+
+.btn--danger {
+  background: var(--danger) !important;
+  color: oklch(0.16 0.006 65) !important;
+}
+
+[hidden].opt__hint {
+  display: none;
+}
+
+.custom-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
 }

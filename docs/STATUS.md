@@ -59,13 +59,15 @@ focus ring that is always drawn. Details behind the ⓘ, leading with link and
 free space and folding the paths away. Nothing on a cartridge runs without a
 click.
 
-**Wizard** — search your library, tick one game or several, pick the drive,
-choose what goes on it, Write. Selection is always multiple: one ticked is a
-cartridge, more is a multicartridge, and the second step for a name and a face
-only exists for the latter. The third step groups the options by what they touch
-and turns them into a numbered plan with a time estimate; the write itself
-happens in the same window, as a log that ticks itself off. Formatting, copying,
-artwork by file picker or SteamGridDB, per-cartridge Windows tuning.
+**Wizard** — one screen: Games, Drive, Options, Artwork, Write. Selection is
+always multiple: one ticked is a cartridge, more is a multicartridge, which adds
+a name and a drag-sortable play order under the Games card. Options are this
+cartridge's switches — copy, verify, eject, erase and to which filesystem —
+starting from the defaults in Settings; erasing always starts off and is
+confirmed by name. The rail previews the launcher and turns the choices into a
+numbered plan with a time estimate; the write happens in the same window, as a
+log that ticks itself off. Artwork by file picker or SteamGridDB, per-cartridge
+Windows tuning.
 
 ### `watcher/` — both platforms, 6 tests
 

@@ -64,6 +64,7 @@ const el = {
   exeHint: $("exe-hint"),
   customExec: $("custom-exec"),
   btnCustomBack: $("btn-custom-back"),
+  btnCustomDone: $("btn-custom-done"),
 
   // Name it
   collectionCover: $("collection-cover"),
@@ -99,6 +100,7 @@ const el = {
   railLauncherLogo: $("rail-launcher-logo"),
   railLauncherTitle: $("rail-launcher-title"),
   railExplorer: $("rail-explorer"),
+  railExplorerLabel: $("rail-explorer-label"),
   railExplorerIcon: $("rail-explorer-icon"),
   railExplorerName: $("rail-explorer-name"),
   railExplorerFree: $("rail-explorer-free"),
@@ -129,8 +131,6 @@ const el = {
   btnChangeCart: $("btn-change-cart"),
   editFormWrap: $("edit-form-wrap"),
   btnRefetchArt: $("btn-refetch-art"),
-  setFormat: $("set-format"),
-  setRegisterSteam: $("set-register-steam"),
   editTitle: $("edit-title"),
   editArtSlots: $("edit-art-slots"),
   editCoverSlot: $("edit-cover-slot"),
@@ -177,6 +177,21 @@ const el = {
   slotHeroImg: $("slot-hero-img"),
   slotIconImg: $("slot-icon-img"),
 
+  optCopy: $("opt-copy"),
+  optCopyRow: $("opt-copy-row"),
+  optCopyMeta: $("opt-copy-meta"),
+  optVerify: $("opt-verify"),
+  optVerifyRow: $("opt-verify-row"),
+  optEject: $("opt-eject"),
+  optFormat: $("opt-format"),
+  optFormatRow: $("opt-format-row"),
+  optFilesystem: $("opt-filesystem"),
+
+  confirmDialog: $("confirm-dialog"),
+  confirmForm: $("confirm-form"),
+  confirmTitle: $("confirm-title"),
+  confirmText: $("confirm-text"),
+
   settingsDialog: $("settings-dialog"),
   sources: $("sources"),
   scanAge: $("scan-age"),
@@ -194,6 +209,7 @@ const el = {
   setTune: $("set-tune"),
   setTuneRow: $("set-tune-row"),
   setTrim: $("set-trim"),
+  setTrimRow: $("set-trim-row"),
   setCopyRate: $("set-copy-rate"),
   frontends: $("frontends"),
   frontendsWarning: $("frontends-warning"),
@@ -264,20 +280,35 @@ let settings = {
 let editing = null;
 let activeTab = "create";
 
-/** Which phase the left column is showing. */
 /**
- * What is switched on.
+ * The choices made for this one cartridge.
  *
- * Every one of these used to be a checkbox on a panel between the wizard and
- * the Write button, duplicating a default that already lived in Settings. There
- * is one copy now and Settings holds it, so the build screen is three questions
- * and nothing else.
- *
- * `copy` is the exception that stays run-state: it is switched off
- * automatically when nothing selected can be copied, which is a fact about the
- * games rather than a preference.
+ * Settings holds the defaults; these start from them and are what the Options
+ * toggles on the build screen change. They used to be Settings and nothing
+ * else, which made "erase this drive" a preference that stayed switched on for
+ * every cartridge after it. Erasing always starts off.
  */
-let copyWanted = true;
+const run = {
+  copy: true,
+  verify: true,
+  eject: true,
+  format: false,
+  filesystem: "ntfs",
+};
+
+/** Put the per-cartridge choices back to what Settings says. */
+function resetRunOptions() {
+  run.copy = settings.defaultCopy !== false;
+  run.verify = settings.defaultVerify !== false;
+  run.eject = settings.defaultEject !== false;
+  run.format = false;
+  run.filesystem = filesystemInfo(settings.defaultFilesystem)
+    ? settings.defaultFilesystem
+    : DEFAULT_FILESYSTEM;
+}
+
+/** Set once a write has finished, until the next cartridge is started. */
+let finished = false;
 
 /** How many of the chosen games came out of Steam. */
 function steamGames() {
@@ -285,11 +316,10 @@ function steamGames() {
 }
 
 const on = {
-  get copy() { return copyWanted && copyable().length > 0; },
-  get verify() { return settings.defaultVerify !== false; },
+  get copy() { return run.copy && copyable().length > 0; },
+  get verify() { return run.verify; },
   get icon() { return settings.defaultIcon !== false; },
-  get eject() { return settings.defaultEject !== false; },
-  get registerSteam() { return settings.defaultRegisterSteam !== false; },
+  get eject() { return run.eject; },
   // Only meaningful when Steam is involved: it exists so Steam does not write
   // its library list back over the cartridge on exit.
   get closeSteam() {
@@ -301,7 +331,7 @@ const on = {
   get trim() {
     return Boolean(settings.defaultTrim) && !this.format && platform !== "windows";
   },
-  get format() { return Boolean(settings.defaultFormat); },
+  get format() { return run.format && Boolean(selectedDrive); },
 };
 
 let phase = "build";
@@ -476,7 +506,7 @@ function renderGames() {
   if (shown.length === 0) {
     el.gamesEmpty.textContent = query
       ? "Nothing in your library matches that."
-      : "No games found. Steam manifests and a Playnite export are what the wizard reads.";
+      : "No games found. Add one by hand below.";
   }
 }
 
@@ -547,6 +577,28 @@ async function suggestName() {
     el.collectionTitle.placeholder = `${picked[0]?.name ?? "Games"} and ${picked.length - 1} more`;
   }
   refreshRail();
+}
+
+/**
+ * Each game's poster, for the play order and the preview.
+ *
+ * Fetched one at a time and drawn as each arrives. A game whose poster was
+ * chosen by hand keeps it.
+ */
+async function fillGameCovers() {
+  for (const game of [...picked]) {
+    if (game.cover || game.coverFetched) continue;
+    game.coverFetched = true;
+    try {
+      game.cover = await invoke("game_cover", { library: game.library, id: game.id });
+    } catch {
+      game.cover = "";
+    }
+    if (picked.includes(game)) {
+      renderOrder();
+      refreshRail();
+    }
+  }
 }
 
 /* ==========================================================================
@@ -764,10 +816,12 @@ function enterManual() {
   manual = manual ?? { title: "", executable: "", folder: null, choices: [], cover: null };
   picked = [];
   showPhase("custom");
+  renderFolder();
+  renderExeChoices();
   renderGames();
   renderTickCount();
   refreshRail();
-  refreshRail();
+  el.customTitle.focus();
 }
 
 async function pickFolder() {
@@ -779,10 +833,14 @@ async function pickFolder() {
     // The folder's own name is the best guess at the title, tidied.
     if (!el.customTitle.value.trim()) {
       el.customTitle.value = tidyFolderName(chosen.name || "");
-      el.titleHint.hidden = false;
-      el.titleHint.textContent = "Taken from the folder name — change it if it is wrong.";
     }
     manual.choices = chosen.choices ?? [];
+    // The backend's best guess, picked already. It is shown first and can be
+    // changed with one click; an uninstaller is never picked for anyone.
+    const best = [...manual.choices].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+    if (best && (best.score ?? 0) > 0 && !el.customExec.value.trim()) {
+      manual.executable = best.relative;
+    }
     renderFolder();
     renderExeChoices();
     refreshRail();
@@ -834,8 +892,8 @@ function renderExeChoices() {
 
   if (choices.length === 0) {
     el.exeHint.textContent = manual?.folder
-      ? "Nothing in that folder looks like a program. Type the launch target below."
-      : "Pick a folder and the programs inside it are listed here.";
+      ? "No programs found. Type a link below."
+      : "";
     return;
   }
 
@@ -959,8 +1017,8 @@ function renderDrives({ onlyCartridges = false, choose = selectDrive } = {}) {
   el.drivesEmpty.hidden = shown.length > 0 || unmounted.length > 0;
   if (shown.length === 0) {
     el.drivesEmpty.textContent = onlyCartridges
-      ? "No cartridge is plugged in. Write one on the Create tab first."
-      : "No removable drive found. Plug a cartridge in, then press Rescan.";
+      ? "No cartridge plugged in."
+      : "No removable drive found. Plug one in.";
   }
 }
 
@@ -1002,7 +1060,8 @@ async function mountVolume(volume, button) {
 
 function openPick(kind) {
   const games = kind === "game";
-  el.pickTitle.textContent = games ? "Choose a game" : "Choose the media";
+  el.pickTitle.textContent = games ? "Choose games" : "Choose a drive";
+  if (!games) renderDrives();
   el.pickGames.hidden = !games;
   el.pickMedia.hidden = games;
   el.pickDialog.showModal();
@@ -1091,9 +1150,9 @@ function filesystemInfo(id) {
   return filesystems.find((f) => f.id === id) ?? null;
 }
 
-/** The filesystem a fresh cartridge is made with. Settings decides. */
+/** The filesystem this cartridge is erased to. Starts from Settings. */
 function filesystem() {
-  const wanted = settings.defaultFilesystem;
+  const wanted = run.filesystem;
   // An id from a newer build, or a hand-edited settings file, must not become
   // a format nobody can make.
   return filesystemInfo(wanted) ? wanted : DEFAULT_FILESYSTEM;
@@ -1112,28 +1171,37 @@ async function loadFilesystems() {
     return;
   }
 
-  el.setFilesystem.replaceChildren();
-  for (const fs of filesystems) {
-    const option = document.createElement("option");
-    option.value = fs.id;
-    // A format this machine cannot create is still shown, disabled, with the
-    // reason — otherwise "why is btrfs missing?" has no answer on screen.
-    option.textContent = fs.canCreateHere ? fs.name : `${fs.name} (needs ${fs.needs})`;
-    option.disabled = !fs.canCreateHere;
-    el.setFilesystem.append(option);
+  // Two pickers, one list: the default in Settings and this cartridge's own.
+  for (const select of [el.setFilesystem, el.optFilesystem]) {
+    select.replaceChildren();
+    for (const fs of filesystems) {
+      const option = document.createElement("option");
+      option.value = fs.id;
+      // A format this machine cannot create is still shown, disabled, with the
+      // reason — otherwise "why is btrfs missing?" has no answer on screen.
+      option.textContent = fs.canCreateHere ? fs.name : `${fs.name} (needs ${fs.needs})`;
+      option.disabled = !fs.canCreateHere;
+      select.append(option);
+    }
   }
-  el.setFilesystem.value = filesystem();
+  el.setFilesystem.value = filesystemInfo(settings.defaultFilesystem)
+    ? settings.defaultFilesystem
+    : DEFAULT_FILESYSTEM;
   describeFilesystem();
 }
 
+/** One line: where it works, and whether Proton does. */
+function filesystemNote(id) {
+  const fs = filesystemInfo(id);
+  if (!fs) return "";
+  const where = (fs.nativeOn ?? []).join(", ");
+  const proton = fs.runsProton ? "Proton works" : "no Proton";
+  return where ? `${where} · ${proton}` : proton;
+}
+
 function describeFilesystem() {
-  const fs = filesystemInfo(el.setFilesystem.value);
-  if (!fs || !el.setFilesystemNote) return;
-  const proton = fs.runsProton
-    ? "Windows games run from it."
-    : "Windows games will not run from it on Linux.";
-  el.setFilesystemNote.textContent =
-    `${fs.summary} Reads on ${fs.nativeOn ? fs.nativeOn.join(", ") : ""}. ${proton}`;
+  if (!el.setFilesystemNote) return;
+  el.setFilesystemNote.textContent = filesystemNote(el.setFilesystem.value);
 }
 
 /** Every game that would actually have its files copied. */
@@ -1222,11 +1290,7 @@ function planSteps() {
     });
   }
   if (on.copy && on.closeSteam) {
-    const steamCount = picked.filter((g) => g.library === "steam").length;
-    steps.push({
-      what: "Close Steam",
-      detail: steamCount ? `${steamCount} of ${picked.length} are Steam games` : "the drive is a Steam library",
-    });
+    steps.push({ what: "Close Steam" });
   }
   if (size) {
     const folders = copyable().length;
@@ -1266,7 +1330,7 @@ function driveLabel() {
 
 function refreshPlan() {
   // The plan is only worth showing once there is a drive for it to happen to.
-  const show = selectedDrive && (picked.length > 0 || manual);
+  const show = !finished && selectedDrive && (picked.length > 0 || manual);
   el.railPlan.hidden = !show;
   if (!show) return;
 
@@ -1357,7 +1421,10 @@ function refreshRail() {
   // The rail shows what the cartridge will look like. What it *is* — the game,
   // the drive, the artwork — is stated by the cards in the left column, so
   // repeating any of it here would be two places to keep in step.
-  const coverSrc = art.cover?.preview ?? (collection ? null : picked[0]?.cover);
+  // A collection's launcher opens on its first game, showing that game's art.
+  const coverSrc = collection
+    ? picked[0]?.cover
+    : art.cover?.preview ?? picked[0]?.cover;
   renderRailLauncher(coverSrc);
 
   renderBuild();
@@ -1438,6 +1505,7 @@ function renderRailLauncher(coverSrc, override = null) {
 
 /** The drive as Explorer will label it — the one thing the icon slot is for. */
 function renderRailExplorer() {
+  el.railExplorerLabel.textContent = platform === "windows" ? "In Explorer" : "In the file manager";
   const drive = drives.find((d) => d.path === selectedDrive);
   const named = on.icon;
   el.railExplorer.hidden = !drive || !named;
@@ -1485,13 +1553,14 @@ function shortPath(path) {
 function renderBuild() {
   const collection = isCollection();
   const first = picked[0];
+  el.phases.build.classList.toggle("has-game", picked.length > 0 || Boolean(manual));
 
   // --- Game -------------------------------------------------------------
   const coverSrc = art.cover?.preview ?? (collection ? null : first?.cover);
   setPlate(el.buildGamePlate, el.buildGameCover, coverSrc);
 
   if (manual) {
-    el.buildGameTitle.textContent = manual.title || "Entered by hand";
+    el.buildGameTitle.textContent = el.customTitle.value.trim() || manual.title || "Entered by hand";
     el.buildGameMeta.textContent = manual.folder
       ? `By hand · ${formatBytes(manual.folder.sizeBytes)}`
       : "By hand";
@@ -1505,9 +1574,10 @@ function renderBuild() {
     bits.push(first.sizeOnDisk ? formatBytes(first.sizeOnDisk) : "not installed");
     el.buildGameMeta.textContent = bits.join(" · ");
   } else {
-    el.buildGameTitle.textContent = "Choose games";
+    el.buildGameTitle.textContent = "No game chosen";
     el.buildGameMeta.textContent = "";
   }
+  el.changeGame.textContent = picked.length || manual ? "Change" : "Choose";
 
   // Naming and ordering only mean anything with more than one game on it.
   el.buildName.hidden = !collection;
@@ -1519,13 +1589,16 @@ function renderBuild() {
   const drive = drives.find((d) => d.path === selectedDrive);
   if (drive) {
     el.buildMediaTitle.textContent = drive.label || drive.path;
-    const bits = [`${formatBytes(drive.freeBytes)} free`, filesystemLabel(filesystem())];
+    const bits = [`${formatBytes(drive.freeBytes)} free of ${formatBytes(drive.totalBytes)}`];
     if (drive.hasCartridge) bits.push("has a cartridge");
     el.buildMediaMeta.textContent = bits.join(" · ");
   } else {
-    el.buildMediaTitle.textContent = "Choose media";
-    el.buildMediaMeta.textContent = "";
+    el.buildMediaTitle.textContent = "No drive chosen";
+    el.buildMediaMeta.textContent = drives.length ? "" : "plug a drive in";
   }
+  el.changeMedia.textContent = drive ? "Change" : "Choose";
+
+  renderOptions();
 
 
   // --- Artwork ----------------------------------------------------------
@@ -1578,30 +1651,83 @@ function refreshSpace() {
 }
 
 /* ==========================================================================
+   Options — this cartridge's choices
+   ========================================================================== */
+
+function renderOptions() {
+  const canCopy = copyable().length > 0;
+  el.optCopy.checked = on.copy;
+  el.optCopy.disabled = !canCopy;
+  el.optCopyRow.classList.toggle("is-off", !canCopy);
+  const size = copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0);
+  el.optCopyMeta.textContent = !(picked.length || manual)
+    ? ""
+    : canCopy
+      ? formatBytes(size)
+      : "not installed";
+
+  // Verifying means reading back a copy, so without one there is nothing to do.
+  el.optVerifyRow.hidden = !on.copy;
+  el.optVerify.checked = run.verify;
+
+  el.optEject.checked = run.eject;
+
+  el.optFormat.checked = run.format;
+  el.optFormat.disabled = !selectedDrive;
+  el.optFormatRow.classList.toggle("is-on", on.format);
+  el.optFilesystem.hidden = !on.format;
+  el.optFilesystem.value = filesystem();
+  el.optFilesystem.title = filesystemNote(filesystem());
+}
+
+el.optCopy.addEventListener("change", () => {
+  run.copy = el.optCopy.checked;
+  refreshRail();
+});
+el.optVerify.addEventListener("change", () => {
+  run.verify = el.optVerify.checked;
+  refreshRail();
+});
+el.optEject.addEventListener("change", () => {
+  run.eject = el.optEject.checked;
+  refreshRail();
+});
+el.optFormat.addEventListener("change", () => {
+  run.format = el.optFormat.checked;
+  refreshRail();
+});
+el.optFilesystem.addEventListener("change", () => {
+  run.filesystem = el.optFilesystem.value;
+  refreshRail();
+});
+
+/* ==========================================================================
    The button, and what it is waiting for
    ========================================================================== */
 
 function blockingReason() {
-  if (picked.length === 0 && !manual) return "tick a game";
+  if (picked.length === 0 && !manual) return "Choose a game";
   if (manual && !manual.executable && !el.customExec.value.trim() && !manual.folder) {
-    return "say what Play should start";
+    return "Choose what Play starts";
   }
-  if (manual && !el.customTitle.value.trim()) return "give it a title";
-  if (!selectedDrive) return "choose a cartridge";
+  if (manual && !el.customTitle.value.trim()) return "Give it a title";
+  if (!selectedDrive) return "Choose a drive";
 
   const drive = drives.find((d) => d.path === selectedDrive);
   const size = on.copy
     ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
     : 0;
   const capacity = on.format ? drive?.totalBytes : drive?.freeBytes;
-  if (size > 0 && drive && size > capacity) return "free enough space";
+  if (size > 0 && drive && size > capacity) {
+    return `Needs ${formatBytes(size - capacity)} more space`;
+  }
 
   if (on.format) {
     // No typed confirmation to wait for — formatting is a setting now. The plan
     // is still required, because it is what states on screen which drive is
     // about to be erased and what is on it.
-    if (!formatPlan) return "load the drive format details";
-    if (!driveLabelFor(cartridgeTitle(), filesystem())) return "name the drive";
+    if (!formatPlan) return "This drive cannot be erased";
+    if (!driveLabelFor(cartridgeTitle(), filesystem())) return "Name the drive";
   }
   return "";
 }
@@ -1624,20 +1750,27 @@ function refreshCreateButton() {
     return;
   }
 
+  if (finished) {
+    el.create.disabled = false;
+    el.createLabel.textContent = "Make another";
+    el.readyMessage.textContent = "Done";
+    el.readyMessage.className = "is-ready";
+    return;
+  }
+
   const collection = isCollection();
   const reason = blockingReason();
   const ready = reason === "";
   el.create.disabled = !ready;
 
   el.createLabel.textContent = on.format
-    ? "Format and write"
+    ? "Erase and write"
     : collection
       ? "Write multicartridge"
       : "Write cartridge";
 
   if (!ready) {
-    el.readyMessage.textContent =
-      picked.length === 0 && !manual ? "Nothing to write yet" : `Ready when: ${reason}`;
+    el.readyMessage.textContent = reason;
     el.readyMessage.className = "";
     return;
   }
@@ -1648,12 +1781,13 @@ function refreshCreateButton() {
     : 0;
 
   if (on.format && formatPlan) {
-    el.readyMessage.textContent = `Erases ${formatPlan.currentLabel} · ${formatDuration(seconds)}`;
+    el.readyMessage.textContent =
+      `Erases ${formatPlan.currentLabel} · ${size ? `${formatBytes(size)}, ` : ""}${formatDuration(seconds)}`;
     el.readyMessage.className = "is-destructive";
   } else {
     el.readyMessage.textContent = size
-      ? `Ready — ${formatBytes(size)}, ${formatDuration(seconds)}`
-      : `Ready — ${formatDuration(seconds)}`;
+      ? `${formatBytes(size)}, ${formatDuration(seconds)}`
+      : formatDuration(seconds);
     el.readyMessage.className = "is-ready";
   }
 }
@@ -1778,6 +1912,7 @@ function buildRequest() {
       collectionCoverSource: art.cover?.path ?? null,
       collectionLogoSource: art.logo?.path ?? null,
       collectionIconSource: art.icon?.path ?? null,
+      collectionBackgroundSource: art.background?.path ?? null,
       games: picked.map((g) => ({
         title: g.name,
         executable: g.executable,
@@ -1806,6 +1941,7 @@ function buildRequest() {
       coverSource: art.cover?.path ?? null,
       iconSource: art.icon?.path ?? null,
       logoSource: art.logo?.path ?? null,
+      backgroundSource: art.background?.path ?? null,
     };
   }
 
@@ -1820,11 +1956,62 @@ function buildRequest() {
     coverSource: art.cover?.path ?? null,
     iconSource: art.icon?.path ?? null,
     logoSource: art.logo?.path ?? null,
+    backgroundSource: art.background?.path ?? null,
   };
+}
+
+/**
+ * Ask before erasing, naming the drive and what it holds.
+ *
+ * Resolves true only for the button that says it will erase. Escape, the
+ * cancel button and a click on the backdrop all mean no.
+ */
+function confirmErase() {
+  const name = formatPlan?.currentLabel || driveLabel();
+  el.confirmTitle.textContent = `Erase ${name}?`;
+  el.confirmText.textContent = formatPlan?.warning ||
+    `Everything on ${name} will be deleted.`;
+  el.confirmDialog.returnValue = "";
+  el.confirmDialog.showModal();
+  return new Promise((resolve) => {
+    el.confirmDialog.addEventListener(
+      "close",
+      () => resolve(el.confirmDialog.returnValue === "go"),
+      { once: true },
+    );
+  });
+}
+
+/** Back to an empty build screen, keeping the drive. */
+function startAnother() {
+  finished = false;
+  picked = [];
+  manual = null;
+  art.cover = null;
+  art.logo = null;
+  art.icon = null;
+  art.background = null;
+  el.collectionTitle.value = "";
+  el.customTitle.value = "";
+  el.customExec.value = "";
+  el.search.value = "";
+  resetRunOptions();
+  status("");
+  renderGames();
+  renderTickCount();
+  showPhase("build");
+}
+
+/** The one button: write, update, or start again, depending on the tab. */
+function primaryAction() {
+  if (activeTab === "edit") return saveEdits();
+  if (finished) return startAnother();
+  return write();
 }
 
 async function write() {
   if (building || el.create.disabled) return;
+  if (on.format && !(await confirmErase())) return;
 
   building = true;
   measuredRate = null;
@@ -1915,6 +2102,12 @@ async function write() {
 
     status(parts.join(" "), (result.warnings ?? []).length ? "" : "good");
     el.runningPhase.textContent = "Done";
+    if (result.bytesCopied) {
+      el.writtenDone.textContent = formatBytes(result.bytesCopied);
+      el.writtenTotal.textContent = "";
+    }
+    el.remaining.textContent = "0:00";
+    finished = true;
   } catch (error) {
     status(String(error), "error");
     el.runningPhase.textContent = "Stopped";
@@ -2000,8 +2193,7 @@ function openArtwork(target, gameIndex = null) {
   el.sgdbDialog.showModal();
   if (settings.steamgriddbEnabled) searchArtwork();
   else {
-    el.sgdbStatus.textContent =
-      "SteamGridDB lookup is off. Turn it on in Settings, or paste a URL below.";
+    el.sgdbStatus.textContent = "SteamGridDB search is off in Settings.";
     el.sgdbResults.replaceChildren();
   }
 }
@@ -2126,8 +2318,7 @@ async function chooseArtwork(item, btn) {
     if (artTarget === "icon") {
       const name = String(got.path).split(/[/\\]/).pop();
       el.icoReceipt.hidden = false;
-      el.icoReceipt.textContent =
-        `${name} — converted to cover.ico at the cartridge root, at every size Explorer asks for.`;
+      el.icoReceipt.textContent = `${name} — becomes the drive icon.`;
     }
 
     refreshPreview();
@@ -2228,18 +2419,18 @@ function applySettings() {
   el.setSgdb.checked = Boolean(settings.steamgriddbEnabled);
   el.setSgdbKey.value = settings.steamgriddbApiKey ?? "";
   el.sgdbKeyField.hidden = !el.setSgdb.checked;
-  el.setFilesystem.value = filesystem();
+  el.setFilesystem.value = filesystemInfo(settings.defaultFilesystem)
+    ? settings.defaultFilesystem
+    : DEFAULT_FILESYSTEM;
   describeFilesystem();
-  el.setVerify.checked = Boolean(settings.defaultVerify);
+  el.setVerify.checked = settings.defaultVerify !== false;
   el.setIcon.checked = settings.defaultIcon !== false;
   el.setEject.checked = settings.defaultEject !== false;
-  el.setRegisterSteam.checked = settings.defaultRegisterSteam !== false;
   el.setCopy.checked = settings.defaultCopy !== false;
   el.setCloseSteam.checked = settings.defaultCloseSteam !== false;
   el.setTune.checked = Boolean(settings.defaultTune);
   el.setTrim.checked = Boolean(settings.defaultTrim);
   el.setCopyRate.value = String(settings.defaultCopyRateMbS ?? 0);
-  el.setFormat.checked = Boolean(settings.defaultFormat);
   el.setOnInsert.value = settings.onCartridgeInsert || "focus_ui";
   describeOnInsert();
   // On unless it has been switched off: it writes to the cartridge only, and
@@ -2250,12 +2441,14 @@ function applySettings() {
   // Tuning edits Defender and Search, which exist on one platform.
   el.setTuneRow.hidden = platform !== "windows";
   el.tuneNow.hidden = platform !== "windows";
+  // Windows trims on its own schedule, so the switch would do nothing there.
+  el.setTrimRow.hidden = platform === "windows";
   resetTune();
 }
 
 /** Settings changed, so anything derived from them is stale. */
 function applyDefaults() {
-  copyWanted = settings.defaultCopy !== false;
+  resetRunOptions();
   refreshRail();
 }
 
@@ -2306,7 +2499,6 @@ async function showTab(name) {
  * order to edit a cartridge that already existed.
  */
 async function refreshEditDrives() {
-  let drives = [];
   try {
     drives = await invoke("list_target_drives");
   } catch (error) {
@@ -2375,36 +2567,48 @@ function renderSources() {
     .sort((a, b) => b[1] - a[1])
     .map(([name, n]) => `${name}: ${n}`);
   el.sources.textContent = parts.length
-    ? `${library.length} games — ${parts.join(", ")}.`
-    : "No games found yet.";
+    ? `${library.length} games · ${parts.join(", ")}`
+    : "No games found";
 
-  el.scanAge.textContent = scannedAt
-    ? `Last scanned ${Math.max(1, Math.round((Date.now() - scannedAt) / 60000))} minutes ago.`
-    : "Not scanned yet.";
+  const minutes = scannedAt ? Math.round((Date.now() - scannedAt) / 60000) : null;
+  el.scanAge.textContent = minutes === null
+    ? ""
+    : minutes < 1
+      ? "Scanned just now"
+      : `Scanned ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
 }
 
 async function saveSettings() {
   el.settingsStatus.textContent = "Saving…";
+  // Start from what is on disk, not from what this window last read. The
+  // front-end switches write themselves the moment they are flipped, and a
+  // save built from a stale copy put every one of them back.
+  let current = settings;
+  try {
+    current = (await invoke("get_settings")) ?? settings;
+  } catch {
+    // the copy this window has is the best there is
+  }
   try {
     settings = await invoke("set_settings", {
       settings: {
+        ...current,
         steamgriddbEnabled: el.setSgdb.checked,
         steamgriddbApiKey: el.setSgdbKey.value.trim(),
         defaultFilesystem: el.setFilesystem.value,
         defaultVerify: el.setVerify.checked,
         defaultIcon: el.setIcon.checked,
         defaultEject: el.setEject.checked,
-        defaultRegisterSteam: el.setRegisterSteam.checked,
         defaultCopy: el.setCopy.checked,
         defaultCloseSteam: el.setCloseSteam.checked,
         defaultTune: el.setTune.checked,
         defaultTrim: el.setTrim.checked,
         defaultCopyRateMbS: Number(el.setCopyRate.value) || 0,
-        defaultFormat: el.setFormat.checked,
+        // Erasing is chosen per cartridge now, and never remembered.
+        defaultFormat: false,
         onCartridgeInsert: el.setOnInsert.value,
         trackPlaytime: el.setPlaytime.checked,
         saveSync: el.setSaveSync.checked,
-        gameFolderRoots: settings.gameFolderRoots ?? [],
       },
     });
     applyDefaults();
@@ -2538,8 +2742,7 @@ const TWEAKS = ["defender", "indexing"];
  */
 async function showTunePlan(applying) {
   if (!selectedDrive) {
-    el.tuneStatus.textContent =
-      "Choose a cartridge on the Create tab first — this is set per drive.";
+    el.tuneStatus.textContent = "Choose a drive first.";
     return;
   }
   el.tuneStatus.textContent = "Reading what would change…";
@@ -2564,7 +2767,7 @@ async function showTunePlan(applying) {
     el.tunePlan.append(li);
   }
   el.tunePlan.hidden = commands.length === 0;
-  el.tuneStatus.textContent = "These run as administrator, one prompt each.";
+  el.tuneStatus.textContent = "Runs as administrator.";
   showTuneButtons(true);
 }
 
@@ -2648,7 +2851,7 @@ async function saveEdits() {
 
 el.search.addEventListener("input", renderGames);
 
-el.changeGame.addEventListener("click", openGamePicker);
+el.changeGame.addEventListener("click", () => (manual ? enterManual() : openGamePicker()));
 el.changeMedia.addEventListener("click", openMediaPicker);
 // method="dialog" means a stray Enter in the search box would close the dialog
 // mid-selection, which is the opposite of what Enter means in a filter. Only a
@@ -2675,6 +2878,13 @@ el.btnCustomBack.addEventListener("click", () => {
   manual = null;
   showPhase("build");
   renderTickCount();
+  refreshRail();
+});
+// Keeps what was entered and goes back to the build screen, where the drive
+// and the options are. The card there reopens it.
+el.btnCustomDone.addEventListener("click", () => {
+  if (manual) manual.title = el.customTitle.value.trim();
+  showPhase("build");
   refreshRail();
 });
 el.btnPickFolder.addEventListener("click", pickFolder);
@@ -2715,7 +2925,7 @@ el.btnInheritCover.addEventListener("click", async () => {
 });
 
 
-el.create.addEventListener("click", () => (activeTab === "edit" ? saveEdits() : write()));
+el.create.addEventListener("click", primaryAction);
 el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.btnRefetchArt.addEventListener("click", refetchArtwork);
@@ -2784,19 +2994,13 @@ el.settingsSave.addEventListener("click", saveSettings);
  */
 function describeOnInsert() {
   const hints = {
-    focus_ui: "The cartridge's window opens and comes to the front.",
-    auto_launch_game:
-      "Starts the game without a window — for a cartridge that points at a game " +
-      "your PC already has. A game stored on the cartridge still waits for a " +
-      "click, because a drive someone handed you should not get to run a program " +
-      "on its own.",
-    notify_only:
-      platform === "windows"
-        ? "Not available on Windows yet, so the launcher opens instead."
-        : "A desktop notification, and nothing else.",
-    none: "Nothing happens. The tray and the desktop entry still open it.",
+    focus_ui: "",
+    auto_launch_game: "Games stored on the cartridge still wait for Play.",
+    notify_only: platform === "windows" ? "Not on Windows yet — opens the launcher." : "",
+    none: "",
   };
   el.onInsertHint.textContent = hints[el.setOnInsert.value] ?? "";
+  el.onInsertHint.hidden = !el.onInsertHint.textContent;
 }
 
 /**
@@ -2853,7 +3057,8 @@ async function renderFrontends() {
     const hint = document.createElement("span");
     hint.className = "opt__hint";
     hint.textContent = frontendHint(front);
-    body.append(label, hint);
+    body.append(label);
+    if (hint.textContent) body.append(hint);
     row.append(box, body);
     el.frontends.append(row);
   }
@@ -2862,18 +3067,14 @@ async function renderFrontends() {
   // opened — and is worth saying out loud, because it is rarely the intention.
   const anyOn = list.some((front) => front.on);
   el.frontendsWarning.hidden = anyOn;
-  el.frontendsWarning.textContent = anyOn
-    ? ""
-    : "Nothing will happen when a cartridge is plugged in. Open it from the tray or the desktop entry.";
+  el.frontendsWarning.textContent = anyOn ? "" : "Nothing opens on insert.";
 }
 
 /** What to say under a front-end's name. */
 function frontendHint(front) {
-  if (!front.implemented) return `${front.description} Not built yet.`;
-  if (!front.installed) {
-    return `${front.description} Not found${front.installPath ? ` at ${front.installPath}` : ""}.`;
-  }
-  return front.description;
+  if (!front.implemented) return "Coming later";
+  if (!front.installed) return "Not installed";
+  return "";
 }
 
 el.setOnInsert.addEventListener("change", describeOnInsert);
@@ -2908,7 +3109,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
-    write();
+    if (!el.create.disabled && !document.querySelector("dialog[open]")) primaryAction();
   }
 });
 
@@ -3067,7 +3268,15 @@ async function demoInvoke(command, args) {
     case "update_cartridge":
       return { confPath: `${args.request.drivePath}/cartridge.conf`, warnings: [] };
     case "host_platform":
-      return "linux";
+      return new URLSearchParams(location.search).get("platform") || "linux";
+    case "frontends":
+      return [
+        { id: "launcher", name: "PC GamePak launcher", on: true, implemented: true, installed: true },
+        { id: "decky", name: "Steam Deck (Decky)", on: false, implemented: true, installed: false },
+        { id: "playnite", name: "Playnite", on: false, implemented: false, installed: false },
+      ];
+    case "set_frontend":
+      return true;
     case "tuning_plan":
       return [
         "Add-MpPreference -ExclusionPath 'D:\\'",

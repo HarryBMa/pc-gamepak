@@ -143,6 +143,33 @@ the digest answers "is this the same cartridge somebody else built", which no
 amount of local verifying can. Put it in a `build-cart` request as
 `expectDigest` and the build fails if it does not match.
 
+### The wizard asks less and gets more right
+
+One screen, in the order the questions come: **Games**, **Drive**, **Options**,
+**Artwork**. The choices that belong to one cartridge — copy the game, verify
+the copy, eject when done, erase the drive first and to which filesystem — are
+switches on that screen now, starting from the defaults in Settings and
+forgotten after the write. They used to exist only in Settings, which made
+"erase the drive" a preference that stayed on for every cartridge after it.
+Erasing always starts off, and Write asks once more, naming the drive.
+
+Settings lost most of its prose and one switch that did nothing ("Add the
+cartridge to Steam's library list" — a copied Steam game is always registered,
+or Steam could not play it).
+
+Fixed along the way:
+
+- Ticking a second game threw an error, so a collection could not be made.
+- A Hero picture chosen on Create was never written to the cartridge.
+- Saving Settings switched every front-end back to its default.
+- After a write finished, the button still said Write and would write again. It
+  now says **Make another**.
+- A game added by hand could not be given a drive: leaving that screen threw
+  the entry away. It now has **Done**, and picks the likeliest program in the
+  folder for you.
+- Ctrl+Enter on the Edit tab started a Create write.
+- The collection name and the Edit tab's name were plain white boxes.
+
 ### Removed: NFC and tag support
 
 About 1,200 lines of PC/SC reader and line-source code, gone.

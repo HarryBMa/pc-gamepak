@@ -143,7 +143,7 @@ registering the drive with Steam.
 Then plug the cartridge in. The launcher opens; press Play.
 
 <div align="center">
-<img width="560" alt="The cartridge wizard: a list of installed games on the left and the target drive on the right" src="docs/wizard.png" />
+<img width="560" alt="The cartridge wizard: the chosen game, drive, options and artwork on the left, and a preview of the launcher on the right" src="docs/wizard.png" />
 </div>
 
 To write one by hand, put a `cartridge.conf` at the drive's root:

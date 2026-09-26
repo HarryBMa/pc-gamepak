@@ -62,31 +62,11 @@
       <div id="work">
         <div id="panel-create" role="tabpanel" aria-labelledby="tab-create">
 
-        <!-- Three questions, in the order they are answered: what to write to,
-             what to put on it, what it looks like. Each is a card stating the
-             current answer with the way to change it. Nothing explains itself in
-             prose, because the preview on the right shows the result. -->
+        <!-- What goes on it, where it goes, how it is written, what it looks
+             like. Each card states the current answer with the way to change
+             it; the preview on the right shows the result. -->
         <section id="step-build" class="phase" aria-labelledby="step-build-h">
           <h2 class="sr-only" id="step-build-h">Build a cartridge</h2>
-
-          <div class="build-group">
-            <p class="build-label">Media</p>
-            <div id="build-media" class="build-card">
-              <span id="build-media-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"
-                     stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-                  <rect x="3" y="7" width="14" height="9" rx="1.6" />
-                  <path d="M7 7V4.6h6V7" />
-                  <path d="M6.4 11.5h4" />
-                </svg>
-              </span>
-              <div class="build-card__body">
-                <p id="build-media-title" class="build-card__title">Choose media</p>
-                <p id="build-media-meta" class="build-card__meta mono"></p>
-              </div>
-              <button id="btn-change-media" class="change-btn" type="button">Change</button>
-            </div>
-          </div>
 
           <div class="build-group">
             <p class="build-label">Games</p>
@@ -102,10 +82,10 @@
                 </svg>
               </div>
               <div class="build-card__body">
-                <p id="build-game-title" class="build-card__title">Choose games</p>
+                <p id="build-game-title" class="build-card__title">No game chosen</p>
                 <p id="build-game-meta" class="build-card__meta mono"></p>
               </div>
-              <button id="btn-change-game" class="change-btn" type="button">Change</button>
+              <button id="btn-change-game" class="change-btn" type="button">Choose</button>
             </div>
 
             <!-- A single game names itself. Only a collection has to be told. -->
@@ -114,6 +94,59 @@
                      placeholder="Collection name" autocomplete="off"
                      aria-label="Collection name" />
               <ol id="order-list" aria-label="Play order"></ol>
+            </div>
+          </div>
+
+          <div class="build-group">
+            <p class="build-label">Drive</p>
+            <div id="build-media" class="build-card">
+              <span id="build-media-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+                  <rect x="3" y="7" width="14" height="9" rx="1.6" />
+                  <path d="M7 7V4.6h6V7" />
+                  <path d="M6.4 11.5h4" />
+                </svg>
+              </span>
+              <div class="build-card__body">
+                <p id="build-media-title" class="build-card__title">No drive chosen</p>
+                <p id="build-media-meta" class="build-card__meta mono"></p>
+              </div>
+              <button id="btn-change-media" class="change-btn" type="button">Choose</button>
+            </div>
+          </div>
+
+          <!-- Choices about this cartridge, not preferences. They start from
+               the defaults in Settings and are forgotten after the write. -->
+          <div class="build-group">
+            <p class="build-label">Options</p>
+            <div class="toggles">
+              <div class="toggle" id="opt-copy-row">
+                <label class="toggle__main">
+                  <input id="opt-copy" type="checkbox" role="switch" />
+                  <span class="toggle__label">Copy games to the drive</span>
+                </label>
+                <span id="opt-copy-meta" class="toggle__meta mono"></span>
+              </div>
+              <div class="toggle" id="opt-verify-row">
+                <label class="toggle__main">
+                  <input id="opt-verify" type="checkbox" role="switch" />
+                  <span class="toggle__label">Verify the copy</span>
+                </label>
+              </div>
+              <div class="toggle">
+                <label class="toggle__main">
+                  <input id="opt-eject" type="checkbox" role="switch" />
+                  <span class="toggle__label">Eject when done</span>
+                </label>
+              </div>
+              <div class="toggle toggle--danger" id="opt-format-row">
+                <label class="toggle__main">
+                  <input id="opt-format" type="checkbox" role="switch" />
+                  <span class="toggle__label">Erase the drive first</span>
+                </label>
+                <select id="opt-filesystem" class="toggle__select" aria-label="Filesystem" hidden></select>
+              </div>
             </div>
           </div>
 
@@ -139,7 +172,7 @@
                 <span class="art-slot__name">Icon</span>
               </button>
               <button class="art-slot" type="button" data-slot="background">
-                <span class="art-slot__art art-slot__art--wide" id="slot-hero">
+                <span class="art-slot__art" id="slot-hero">
                   <img id="slot-hero-img" alt="" hidden />
                 </span>
                 <span class="art-slot__name">Hero</span>
@@ -204,9 +237,12 @@
                        autocomplete="off" spellcheck="false" />
               </label>
 
-              <button id="btn-custom-back" class="link" type="button">
-                Back
-              </button>
+              <div class="custom-actions">
+                <button id="btn-custom-done" class="btn btn--primary" type="button">
+                  <span class="btn__label">Done</span>
+                </button>
+                <button id="btn-custom-back" class="link" type="button">Cancel</button>
+              </div>
             </div>
           </div>
         </section>
@@ -319,7 +355,7 @@
               </div>
               <button id="btn-refetch-art" class="link" type="button"
                       title="Fetch a fresh poster for every game on this cartridge">
-                Refetch posters
+                Refetch posters from SteamGridDB
               </button>
             </div>
 
@@ -345,7 +381,7 @@
             <rect x="4" y="3" width="16" height="18" rx="2" />
             <path d="M8 7h8M8 21v-4h8v4" />
           </svg>
-          <p>Choose media and games</p>
+          <p>Choose a game and a drive</p>
         </div>
 
         <!-- What it is -->
@@ -393,7 +429,7 @@
           <!-- The other place a cartridge shows up, and the only thing the icon
                slot is for. -->
           <div id="rail-explorer" hidden>
-            <p class="field__label">In Explorer</p>
+            <p id="rail-explorer-label" class="field__label">In Explorer</p>
             <div id="rail-explorer-row">
               <span id="rail-explorer-icon" aria-hidden="true"></span>
               <span id="rail-explorer-name"></span>
@@ -517,13 +553,13 @@
       </header>
 
       <div class="dialog-body">
-        <p class="group">Where games come from</p>
+        <p class="group">Library</p>
         <div class="group__body">
-          <p id="sources" class="hint"></p>
           <div class="rescan">
-            <p id="scan-age" class="hint"></p>
-            <button id="btn-rescan" class="link" type="button">Rescan now</button>
+            <p id="sources" class="hint"></p>
+            <button id="btn-rescan" class="link" type="button">Rescan</button>
           </div>
+          <p id="scan-age" class="hint"></p>
         </div>
 
         <p class="group">Artwork</p>
@@ -531,143 +567,84 @@
           <label class="opt">
             <input id="set-sgdb" type="checkbox" />
             <span class="opt__body">
-              <span class="opt__label">Look artwork up on SteamGridDB</span>
+              <span class="opt__label">Search SteamGridDB for artwork</span>
             </span>
           </label>
-
           <div id="sgdb-key-field" hidden>
             <label class="field">
               <span class="field__label">API key</span>
               <input id="set-sgdb-key" type="password" autocomplete="off" spellcheck="false"
-                     placeholder="Paste your key" />
+                     placeholder="From steamgriddb.com → Preferences → API" />
             </label>
           </div>
-        </div>
-
-        <p class="group">Where a cartridge opens</p>
-        <div class="group__body">
-          <div id="frontends" class="frontends"></div>
-          <p id="frontends-warning" class="opt__hint" role="status" hidden></p>
         </div>
 
         <p class="group">When a cartridge is plugged in</p>
         <div class="group__body">
           <label class="field">
-            <span class="field__label">What the launcher does</span>
+            <span class="field__label">Do this</span>
             <select id="set-on-insert">
               <option value="focus_ui">Open the launcher</option>
               <option value="auto_launch_game">Start the game</option>
-              <option value="notify_only">Just tell me</option>
+              <option value="notify_only">Show a notification</option>
               <option value="none">Nothing</option>
             </select>
             <span id="on-insert-hint" class="opt__hint"></span>
           </label>
+          <div>
+            <span class="field__label">Open it in</span>
+            <div id="frontends" class="frontends"></div>
+            <p id="frontends-warning" class="opt__hint" role="status" hidden></p>
+          </div>
         </div>
 
-        <p class="group">What a cartridge remembers</p>
+        <p class="group">On the cartridge</p>
         <div class="group__body">
           <label class="opt">
             <input id="set-playtime" type="checkbox" />
             <span class="opt__body">
-              <span class="opt__label">Count launches and hours on the cartridge</span>
-              <span class="opt__hint">
-                One small file on the drive, so the count follows the cartridge
-                to another machine instead of staying on this one.
-              </span>
+              <span class="opt__label">Track playtime</span>
             </span>
           </label>
           <label class="opt">
             <input id="set-save-sync" type="checkbox" />
             <span class="opt__body">
-              <span class="opt__label">Carry saves on the cartridge</span>
-              <span class="opt__hint">
-                For cartridges that say where their saves are. On insert and
-                eject, whichever copy changed is copied to the other; if both
-                changed, neither is touched and the launcher says so. What gets
-                replaced is kept beside it.
-              </span>
+              <span class="opt__label">Sync saves</span>
+              <span class="opt__hint">Conflicts are never overwritten.</span>
             </span>
           </label>
         </div>
 
-        <p class="group">Defaults for a new cartridge</p>
+        <p class="group">New cartridges</p>
         <div class="group__body">
           <label class="field">
-            <span class="field__label">Filesystem</span>
+            <span class="field__label">Filesystem when erasing</span>
             <select id="set-filesystem"></select>
+            <span class="opt__hint" id="set-filesystem-note"></span>
           </label>
-          <p class="field__note" id="set-filesystem-note"></p>
           <label class="opt">
             <input id="set-copy" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Copy games onto the cartridge</span>
-            </span>
+            <span class="opt__body"><span class="opt__label">Copy games to the drive</span></span>
           </label>
           <label class="opt">
             <input id="set-verify" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Verify after copying</span>
-            </span>
-          </label>
-          <label class="opt">
-            <input id="set-icon" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Give the drive its own icon</span>
-            </span>
+            <span class="opt__body"><span class="opt__label">Verify the copy</span></span>
           </label>
           <label class="opt">
             <input id="set-eject" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Eject when writing finishes</span>
-            </span>
+            <span class="opt__body"><span class="opt__label">Eject when done</span></span>
           </label>
           <label class="opt">
-            <input id="set-register-steam" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Add the cartridge to Steam's library list</span>
-            </span>
+            <input id="set-icon" type="checkbox" />
+            <span class="opt__body"><span class="opt__label">Name the drive and give it an icon</span></span>
           </label>
           <label class="opt">
             <input id="set-close-steam" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Close Steam if it is in the way</span>
-            </span>
+            <span class="opt__body"><span class="opt__label">Close Steam when it needs to be</span></span>
           </label>
-          <label class="opt" id="set-tune-row" hidden>
-            <input id="set-tune" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Tune Windows for each cartridge</span>
-              <span class="opt__hint">
-                Defender's scanner and Search indexing both walk a cartridge
-                whenever it is plugged in, competing for the slowest link in the
-                machine. Switched off per drive, and put back the same way.
-              </span>
-            </span>
-          </label>
-          <div id="tune-now" class="tune-now" hidden>
-            <ul id="tune-plan" class="tune-plan" aria-label="Commands that will run" hidden></ul>
-            <div class="tune-actions">
-              <button id="btn-tune" class="link" type="button">
-                Tune the selected cartridge now
-              </button>
-              <button id="btn-untune" class="link" type="button"
-                      title="Put Defender scanning and Search indexing back">
-                Put it back
-              </button>
-              <button id="btn-tune-run" class="link" type="button" hidden>
-                Run these commands
-              </button>
-              <button id="btn-tune-cancel" class="link" type="button" hidden>
-                Cancel
-              </button>
-            </div>
-            <p id="tune-status" class="opt__hint" role="status" aria-live="polite"></p>
-          </div>
-          <label class="opt">
+          <label class="opt" id="set-trim-row">
             <input id="set-trim" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Release freed space back to the drive</span>
-            </span>
+            <span class="opt__body"><span class="opt__label">Trim free space after writing</span></span>
           </label>
           <label class="field">
             <span class="field__label">Copy speed limit</span>
@@ -678,21 +655,31 @@
               <option value="80">80 MB/s</option>
               <option value="40">40 MB/s</option>
             </select>
-            <span class="opt__hint">
-              A drive in a small enclosure gets hot on a long write, and a hot
-              bridge drops the link.
-            </span>
+            <span class="opt__hint">Lower it if the drive overheats and disconnects.</span>
           </label>
+        </div>
 
-          <!-- The one switch here that destroys something, so it does not look
-               like the ones above it. -->
-          <label class="opt opt--grave">
-            <input id="set-format" type="checkbox" />
-            <span class="opt__body">
-              <span class="opt__label">Format the drive before writing</span>
-              <span class="opt__hint">Erases the cartridge every time, without asking again.</span>
-            </span>
-          </label>
+        <!-- Defender and Search both exist on one platform only. -->
+        <div id="set-tune-row" hidden>
+          <p class="group">Windows</p>
+          <div class="group__body">
+            <label class="opt">
+              <input id="set-tune" type="checkbox" />
+              <span class="opt__body">
+                <span class="opt__label">Skip Defender scans and Search indexing on cartridges</span>
+              </span>
+            </label>
+            <div id="tune-now" class="tune-now" hidden>
+              <ul id="tune-plan" class="tune-plan" aria-label="Commands that will run" hidden></ul>
+              <div class="tune-actions">
+                <button id="btn-tune" class="link" type="button">Apply to the chosen drive</button>
+                <button id="btn-untune" class="link" type="button">Undo</button>
+                <button id="btn-tune-run" class="link" type="button" hidden>Run these commands</button>
+                <button id="btn-tune-cancel" class="link" type="button" hidden>Cancel</button>
+              </div>
+              <p id="tune-status" class="opt__hint" role="status" aria-live="polite"></p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -702,6 +689,27 @@
         </button>
       </footer>
       <p id="settings-status" class="hint" role="status" aria-live="polite"></p>
+    </form>
+  </dialog>
+
+  <!-- The one question the wizard asks at the last moment, because the answer
+       cannot be taken back. -->
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form id="confirm-form" method="dialog">
+      <header class="dialog-head">
+        <h3 id="confirm-title">Erase the drive?</h3>
+      </header>
+      <div class="dialog-body">
+        <p id="confirm-text" class="confirm-text"></p>
+      </div>
+      <footer class="dialog-actions">
+        <button id="confirm-cancel" class="btn btn--quiet" type="submit" value="cancel">
+          <span class="btn__label">Cancel</span>
+        </button>
+        <button id="confirm-go" class="btn btn--primary btn--danger" type="submit" value="go">
+          <span class="btn__label">Erase and write</span>
+        </button>
+      </footer>
     </form>
   </dialog>
 

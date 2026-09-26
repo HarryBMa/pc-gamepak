@@ -504,7 +504,7 @@ Run the installer menu and choose **Create a cartridge**, or start it directly:
 pc-gamepak --create
 ```
 
-<img width="760" alt="The create-cartridge wizard: one screen with Game, Media, Artwork and Written to as four groups down the left, each stating what is chosen with a Change button beside it, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
+<img width="760" alt="The create-cartridge wizard: one screen with Games, Drive, Options and Artwork down the left, each stating what is chosen, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
 
 The wizard lists everything installed. **Playnite** is read first when present —
 one list covering Steam, GOG, Epic, Xbox, Ubisoft, itch and emulators — and
@@ -524,10 +524,16 @@ can point the wizard at the right directory.
 > it once before using the wizard. Any extension that writes a `library.json` or
 > `games.json` file will work.
 
-Pick a game, pick the media, press Write. It is **one screen**: Game, Media,
-Artwork and what gets written, each stating what is currently chosen with a
-**Change** beside it — so nothing has to be finished before the next thing can
-be looked at, and there is no step to go back to.
+Pick a game, pick the drive, press Write. It is **one screen**: Games, Drive,
+Options and Artwork, each stating what is currently chosen with a **Change**
+beside it — so nothing has to be finished before the next thing can be looked
+at, and there is no step to go back to.
+
+**Options** are switches for this cartridge only: copy the games onto the drive,
+verify the copy, eject when done, and erase the drive first (with the
+filesystem beside it). They start from the defaults in Settings and are
+forgotten after the write. Erasing always starts off, and Write asks once more,
+naming the drive, before anything is touched.
 
 **Change** opens the library as a dialog, and it is a real list with tick boxes:
 selection is always multiple, so ticking a second game is all it takes. The rail
@@ -536,7 +542,7 @@ no mode to enter.
 
 <img width="760" alt="Choose the media: a dialog listing every removable drive with its free space, and a note against each one that already holds a cartridge" src="wizard-media.png" />
 
-Media is the same dialog asking the same kind of question. Every removable drive
+Drive is the same dialog asking the same kind of question. Every removable drive
 is listed with the room on it, and one that already holds a cartridge says so
 before you overwrite it.
 
@@ -706,7 +712,9 @@ artwork…** opens the desktop's own file dialog and copies whatever you point a
 
 <img width="760" alt="Every option with formatting enabled: options grouped by what they touch, with the destructive one alone under its own heading" src="wizard-format.png" />
 
-Formatting is opt-in per cartridge and gated three ways: the target must be on
+Formatting is the **Erase the drive first** switch under Options. It is off
+every time the wizard opens, Write asks to confirm it by the drive's name, and
+it is gated three ways: the target must be on
 the removable-drive allowlist the wizard re-derives itself, it must not be the
 system drive, and it must have been asked for explicitly. All three are checked
 in the backend, which re-derives them rather than trusting the window's idea of
