@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/icon.png" width="96" alt="" />
+<img src="docs/pc-gamepak-logo_0004_Lager-1.png" height="120" alt="" />
 
 # PC GamePak
 
