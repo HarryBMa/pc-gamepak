@@ -70,7 +70,7 @@ mod windows_watcher {
     const DEBOUNCE: Duration = Duration::from_secs(4);
 
     /// Files that mark a volume as a cartridge rather than an ordinary drive.
-    const MARKERS: [&str; 2] = ["cartridge.conf", "autorun.inf"];
+    const MARKERS: [&str; 3] = ["cartridge.conf", "memorycard.conf", "autorun.inf"];
 
     /// How long AutoPlay's own folder window takes to appear after arrival,
     /// before it is worth looking for.
@@ -392,7 +392,7 @@ mod windows_watcher {
         // pop up for every USB stick and phone the user plugs in.
         if !is_cartridge(&root) {
             crate::log::line(&format!(
-                "{letter}: no cartridge.conf or autorun.inf at the root; ignoring"
+                "{letter}: no cartridge.conf, memorycard.conf or autorun.inf at the root; ignoring"
             ));
             return;
         }

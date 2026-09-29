@@ -60,6 +60,63 @@
       </div>
     </div>
 
+    <!--
+      The memory card: every save on the drive as a game case on a shelf. Choose
+      one and it is pulled off the shelf onto the stage below, turning round to
+      its back cover, where the details are printed; beside it, the one button
+      that does what it needs. The whole window on a memory card; on a combo
+      drive, one button away from the cartridge.
+    -->
+    <section id="memcard" hidden aria-labelledby="mc-title">
+      <header class="mc__head" data-tauri-drag-region>
+        <h1 id="mc-title" data-tauri-drag-region>Memory card</h1>
+        <button id="mc-close" class="icon-btn icon-btn--close" type="button"
+                aria-label="Close" title="Close — Esc">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" width="14" height="14" aria-hidden="true">
+            <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" />
+          </svg>
+          <span class="pad-badge" aria-hidden="true">B</span>
+        </button>
+      </header>
+      <!-- How full the card is: what the saves take, and what is left. -->
+      <div class="mc__capacity" id="mc-capacity" hidden>
+        <div class="mc__bar"><i id="mc-bar-fill"></i></div>
+        <p id="mc-cap" class="mc__cap"></p>
+      </div>
+      <ul id="mc-blocks" role="listbox" aria-label="Saves"></ul>
+      <p id="mc-empty" class="mc__empty" hidden>No saves on this card yet.</p>
+      <footer id="mc-info" class="mc__info">
+        <!-- The chosen save, pulled off the shelf. Its back cover carries the
+             details; clicking it opens the save's folder. -->
+        <div class="mc__stage" id="mc-stage">
+          <div id="mc-hero" class="mc__hero" role="button" tabindex="-1"
+               title="Open the save folder" aria-hidden="true"></div>
+        </div>
+        <div class="mc__side">
+          <h2 id="mc-game" class="sr-only"></h2>
+          <p id="mc-state" class="sr-only"></p>
+          <div class="mc__actions">
+            <button id="mc-to-pc" class="btn btn--primary" type="button">
+              <span class="btn__label">Copy to PC</span>
+              <span class="pad-badge" aria-hidden="true">A</span>
+            </button>
+            <button id="mc-to-card" class="btn btn--primary" type="button">
+              <span class="btn__label">Copy to card</span>
+              <span class="pad-badge" aria-hidden="true">A</span>
+            </button>
+          </div>
+          <div class="mc__more">
+            <button id="mc-folder" class="mc__link" type="button" title="O">Open folder</button>
+            <button id="mc-remove" class="mc__link mc__delete" type="button" title="Delete">
+              <span class="btn__label">Delete</span>
+              <span class="pad-badge" aria-hidden="true">Y</span>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </section>
+
     <div id="face" data-tauri-drag-region>
 
       <!-- The art. Two layers so a collection can cross-fade between games. -->
@@ -99,6 +156,18 @@
       <!-- Top chrome. Present only while the pointer is in the window. -->
       <header id="chrome" data-tauri-drag-region>
         <div id="chrome-actions">
+          <!-- Only on a combo drive: the same saves, as a memory card. -->
+          <button id="btn-memcard" class="icon-btn" type="button" hidden
+                  aria-label="Memory card" title="Memory card — M">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                 stroke-linecap="round" stroke-linejoin="round" width="14" height="14"
+                 aria-hidden="true">
+              <path d="M4 1.8h6.2L12.5 4v10.2H4z" />
+              <path d="M6 1.8v2.6M8 1.8v2.6M10 1.8v2.6" />
+              <path d="M6.2 9.4h4.1" />
+            </svg>
+            <span class="pad-badge" aria-hidden="true">View</span>
+          </button>
           <button id="btn-details" class="icon-btn" type="button"
                   aria-expanded="false" aria-controls="sheet"
                   aria-label="Cartridge details" title="Details">
@@ -212,13 +281,15 @@
         <!-- The fold is what opens and closes; the list inside it is what gets
              clipped while it does. A <dl> cannot do both jobs itself, because
              the rows it animates are its own children. -->
+        <!-- The shortcuts, said once, where someone looking for more will look. -->
+        <p id="sheet-keys" class="sheet-keys"></p>
+
         <div id="paths-fold" hidden>
           <dl id="paths"></dl>
         </div>
       </div>
 
       <footer id="sheet-footer">
-        <button id="btn-sheet-back" class="sheet-back" type="button">Back to game</button>
         <!-- The wizard is only reachable from here, so both ways in live
              together: the whole wizard, and the shortcut past it to Settings.
              Neither competes with the way out. -->

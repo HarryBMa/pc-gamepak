@@ -239,6 +239,10 @@ pub struct CartridgeRequest {
     /// into `games`. A collection icon chosen outright still wins.
     #[serde(default)]
     pub primary_game: Option<usize>,
+    /// A combo drive: the launcher also offers the memory card view of its
+    /// saves. See [`crate::memcard`].
+    #[serde(default)]
+    pub memory_card: bool,
 }
 
 /// The picture a drive icon is made from, relative to the cartridge root.
@@ -1112,6 +1116,21 @@ pub fn create_cartridge(
             .map(|game| (game.title.as_str(), game.executable.as_str()))
             .collect();
         let conf = with_estimates(conf, &looked_up, progress, &mut warnings);
+        let card_games: Vec<(&str, &str, Option<&str>)> = entries
+            .iter()
+            .map(|game| {
+                let icon = game.icon.as_deref().or(game.cover.as_deref());
+                (game.title.as_str(), game.executable.as_str(), icon)
+            })
+            .collect();
+        let conf = with_memory_card(
+            conf,
+            request.memory_card,
+            &root,
+            &card_games,
+            progress,
+            &mut warnings,
+        );
         let conf_path = root.join("cartridge.conf");
         std::fs::write(&conf_path, conf)
             .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
@@ -1275,6 +1294,18 @@ pub fn create_cartridge(
         logo_destination.as_deref(),
     );
     let conf = with_estimates(conf, &[(&title, &executable)], progress, &mut warnings);
+    let conf = with_memory_card(
+        conf,
+        request.memory_card,
+        &root,
+        &[(
+            &title,
+            &executable,
+            icon_destination.as_deref().or(cover_destination.as_deref()),
+        )],
+        progress,
+        &mut warnings,
+    );
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
@@ -2189,6 +2220,71 @@ fn with_estimates(
     })
 }
 
+/// Make a cartridge a combo drive, and put its own games on its memory card.
+///
+/// `memory_card=yes` goes at the top, where every reader looks. Each game's
+/// save folder comes from Ludusavi when that lookup is on and goes into
+/// `memorycard.conf` beside the cartridge, the one place the memory card view
+/// and the wizard both edit, so writing the card again later replaces these
+/// rather than doubling them. `games` is `(title, executable, icon)`, the icon
+/// relative to the drive.
+pub(crate) fn with_memory_card(
+    conf: String,
+    on: bool,
+    root: &Path,
+    games: &[(&str, &str, Option<&str>)],
+    progress: &mut dyn FnMut(Progress),
+    warnings: &mut Vec<String>,
+) -> String {
+    if !on {
+        return conf;
+    }
+    let conf = format!("memory_card=yes\n{conf}");
+    if !crate::settings::load().ludusavi_enabled {
+        warnings.push(
+            "Combo drive: no save folders were looked up. Switch on Ludusavi in \
+             Settings, or add the games on the Memory card page."
+                .to_string(),
+        );
+        return conf;
+    }
+    progress(Progress {
+        step: "saves",
+        message: "Finding where each game keeps its saves…".to_string(),
+        done_bytes: 0,
+        total_bytes: 0,
+    });
+    let mut card = Vec::new();
+    for (title, executable, icon) in games {
+        let steam_id = executable.strip_prefix("steam://rungameid/");
+        match crate::ludusavi::lookup(title, steam_id) {
+            Ok(Some(places)) => card.push(crate::memcard::CardGame {
+                title: title.to_string(),
+                executable: executable.to_string(),
+                icon_source: icon.map(|rel| root.join(rel).to_string_lossy().into_owned()),
+                save_windows: places.windows,
+                save_linux: places.linux,
+                ..Default::default()
+            }),
+            Ok(None) => warnings.push(format!(
+                "Ludusavi does not know where {title} keeps its saves; add it on the \
+                 Memory card page."
+            )),
+            Err(e) => {
+                warnings.push(e);
+                break;
+            }
+        }
+    }
+    if !card.is_empty() {
+        match crate::memcard::add_games(root, card) {
+            Ok(more) => warnings.extend(more),
+            Err(e) => warnings.push(format!("The memory card was not written: {e}")),
+        }
+    }
+    conf
+}
+
 /// Put back whatever play history the stats file has for the games now on the
 /// cartridge. The conf was just written from scratch, and a game played before
 /// under the same executable keeps its hours.
@@ -2221,7 +2317,7 @@ fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<String>
 /// Playnite's, or the last artwork downloaded for this game, whichever the game
 /// came from. `Ok(None)` means there is simply no art to copy, which is not an
 /// error.
-fn cover_source(
+pub(crate) fn cover_source(
     chosen: Option<&str>,
     app_id: Option<&str>,
     playnite_id: Option<&str>,

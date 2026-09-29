@@ -27,8 +27,8 @@
   border-radius: 0;
   background: linear-gradient(180deg, oklch(0.18 0.006 65) 0%, oklch(0.145 0.005 65) 100%);
   box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 0.07),
-    inset 0 0 0 1px oklch(1 0 0 / 0.05),
+    inset 0 1px 0 var(--hairline-soft),
+    inset 0 0 0 1px var(--lift),
     0 26px 52px -18px oklch(0 0 0 / 0.8);
   animation: shell-in 460ms var(--ease) both;
 }
@@ -49,8 +49,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px 10px 18px;
-  border-bottom: 1px solid oklch(1 0 0 / 0.06);
-  background: linear-gradient(180deg, oklch(1 0 0 / 0.02), transparent);
+  border-bottom: 1px solid var(--hairline-soft);
+  background: linear-gradient(180deg, var(--lift), transparent);
 }
 
 #bar-title {
@@ -58,12 +58,12 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: 0.19em;
   text-transform: uppercase;
-  color: oklch(0.78 0.008 75);
+  color: var(--ink-2);
 }
 
 #bar-pip {
@@ -93,11 +93,11 @@
   height: 30px;
   border-radius: 6px;
   background: transparent;
-  color: oklch(0.68 0.008 75);
+  color: var(--ink-2);
 }
 
 #bar .icon-btn:hover:not(:disabled) {
-  background: oklch(1 0 0 / 0.07);
+  background: var(--hairline-soft);
   color: var(--ink);
 }
 
@@ -123,7 +123,7 @@
   flex-direction: column;
   gap: 3px;
   padding: 14px 10px;
-  border-right: 1px solid oklch(1 0 0 / 0.06);
+  border-right: 1px solid var(--hairline-soft);
   background: oklch(0 0 0 / 0.16);
 }
 
@@ -154,7 +154,7 @@
 
 .side-tab:hover {
   color: var(--ink);
-  background: oklch(1 0 0 / 0.04);
+  background: var(--lift);
 }
 
 .side-tab[aria-selected="true"] {
@@ -283,8 +283,8 @@
   gap: 13px;
   padding: 9px 10px 9px 12px;
   border-radius: 11px;
-  border: 1px solid oklch(1 0 0 / 0.07);
-  background: oklch(0 0 0 / 0.22);
+  border: 1px solid var(--hairline-soft);
+  background: var(--well);
 }
 
 /* Plugged in right now: the one thing that changes what the row can do. */
@@ -420,14 +420,14 @@
   border-radius: 4px;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 10px;
+  font-size: var(--text-label);
   font-weight: 800;
   line-height: 1;
 }
 
 .step__h {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--text-label);
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: 0.17em;
@@ -439,7 +439,7 @@
 .step__rule {
   flex: 1;
   height: 1px;
-  background: oklch(1 0 0 / 0.08);
+  background: var(--hairline-soft);
 }
 
 /* ==========================================================================
@@ -458,7 +458,7 @@
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: oklch(0.6 0.008 75);
+  color: var(--ink-3);
 }
 
 #search {
@@ -466,7 +466,7 @@
   font-size: 13px;
   color: var(--ink);
   background: var(--sunk);
-  border: 1px solid oklch(1 0 0 / 0.08);
+  border: 1px solid var(--hairline-soft);
   border-radius: 6px;
   padding: 9px 12px 9px 33px;
   width: 100%;
@@ -490,10 +490,10 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid oklch(1 0 0 / 0.07);
+  border: 1px solid var(--hairline-soft);
   border-radius: 12px;
   background: linear-gradient(180deg, oklch(0 0 0 / 0.18), oklch(0 0 0 / 0.12));
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04);
+  box-shadow: inset 0 1px 0 var(--lift);
   overflow: hidden;
 }
 
@@ -512,7 +512,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  border-bottom: 1px solid oklch(1 0 0 / 0.05);
+  border-bottom: 1px solid var(--lift);
   cursor: pointer;
   transition: background-color 110ms linear;
 }
@@ -550,7 +550,7 @@
   gap: 8px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   color: var(--ink-3);
 }
 
@@ -580,7 +580,7 @@
 }
 
 .game.is-on .game__meta {
-  color: oklch(0.72 0.008 75);
+  color: var(--ink-2);
 }
 
 #games-empty {
@@ -595,8 +595,8 @@
   flex: none;
   margin: 0;
   padding: 9px 14px;
-  border-top: 1px solid oklch(1 0 0 / 0.05);
-  background: oklch(0 0 0 / 0.22);
+  border-top: 1px solid var(--lift);
+  background: var(--well);
   font-size: 11px;
   color: var(--ink-3);
 }
@@ -608,7 +608,7 @@
   padding: 0;
   font: inherit;
   font-size: inherit;
-  color: oklch(0.86 0.008 75);
+  color: var(--ink-soft);
   text-align: left;
   text-decoration: underline;
   text-decoration-color: oklch(1 0 0 / 0.28);
@@ -638,10 +638,10 @@
   display: block;
   margin-bottom: 6px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: oklch(0.62 0.008 75);
+  color: var(--ink-3);
 }
 
 .field input,
@@ -650,7 +650,7 @@
   font-size: 13px;
   color: var(--ink);
   background: var(--sunk);
-  border: 1px solid oklch(1 0 0 / 0.08);
+  border: 1px solid var(--hairline-soft);
   border-radius: 6px;
   padding: 9px 12px;
   width: 100%;
@@ -676,8 +676,8 @@
 .hint code,
 .opt__hint code {
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
-  color: oklch(0.86 0.008 75);
+  font-size: var(--text-label);
+  color: var(--ink-soft);
 }
 
 .hint--warn,
@@ -710,7 +710,7 @@
   padding: 0 12px;
   border: 1px solid var(--hairline);
   border-radius: 5px;
-  background: oklch(1 0 0 / 0.04);
+  background: var(--lift);
   color: oklch(0.9 0.008 75);
   font-size: 11px;
   letter-spacing: 0.05em;
@@ -720,7 +720,7 @@
 
 .btn--quiet:hover:not(:disabled) {
   border-color: oklch(1 0 0 / 0.3);
-  background: oklch(1 0 0 / 0.07);
+  background: var(--hairline-soft);
 }
 
 .btn--quiet:disabled {
@@ -771,11 +771,11 @@
 
 .plate--empty p {
   margin: 0;
-  font-size: 9px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: oklch(0.56 0.008 75);
+  color: var(--ink-3);
 }
 
 /* Once there is art, the hatching and its label have nothing to say. */
@@ -840,9 +840,9 @@
   gap: 10px;
   width: 100%;
   padding: 7px 10px;
-  border: 1px solid oklch(1 0 0 / 0.08);
+  border: 1px solid var(--hairline-soft);
   border-radius: 6px;
-  background: oklch(0 0 0 / 0.28);
+  background: var(--well);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -851,7 +851,7 @@
 }
 
 .exe:hover {
-  border-color: oklch(1 0 0 / 0.18);
+  border-color: var(--hairline);
 }
 
 .exe[aria-pressed="true"] {
@@ -872,7 +872,7 @@
 /* Helper runtimes and uninstallers are pushed down, and say why. */
 .exe__why {
   flex: none;
-  font-size: 10px;
+  font-size: var(--text-label);
   color: var(--ink-3);
 }
 
@@ -887,7 +887,7 @@
   flex-direction: column;
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid oklch(1 0 0 / 0.07);
+  border-top: 1px solid var(--hairline-soft);
 }
 
 #order-list {
@@ -908,7 +908,7 @@
   gap: 10px;
   padding: 6px 10px;
   border-radius: 6px;
-  background: oklch(0 0 0 / 0.28);
+  background: var(--well);
   font-size: 12.5px;
   cursor: grab;
 }
@@ -931,7 +931,7 @@
   background: color-mix(in oklch, var(--accent) 20%, transparent);
   color: color-mix(in oklch, var(--accent) 80%, var(--ink));
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: var(--text-label);
   font-weight: 600;
 }
 
@@ -946,8 +946,8 @@
 .order-row__size {
   flex: none;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
-  color: oklch(0.62 0.008 75);
+  font-size: var(--text-label);
+  color: var(--ink-3);
 }
 
 /* The poster this game gets on the launcher, at the proportions it will have
@@ -987,7 +987,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: oklch(0 0 0 / 0.4);
-  color: oklch(0.72 0.008 75);
+  color: var(--ink-2);
   cursor: pointer;
   transition: background-color 160ms linear, color 160ms linear, border-color 160ms linear;
 }
@@ -1025,7 +1025,7 @@
 }
 
 .order-row:hover .order-row__grip {
-  color: oklch(0.68 0.008 75);
+  color: var(--ink-2);
 }
 
 /* ==========================================================================
@@ -1043,10 +1043,10 @@
 .group {
   margin: 0 0 9px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 8.5px;
+  font-size: var(--text-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: oklch(0.56 0.008 75);
+  color: var(--ink-3);
 }
 
 .group__body {
@@ -1055,7 +1055,7 @@
   gap: 11px;
   padding-bottom: 15px;
   margin-bottom: 15px;
-  border-bottom: 1px solid oklch(1 0 0 / 0.07);
+  border-bottom: 1px solid var(--hairline-soft);
 }
 
 .opt {
@@ -1094,7 +1094,7 @@
 .opt__hint {
   display: block;
   margin-top: 3px;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: oklch(0.64 0.008 75);
 }
@@ -1126,10 +1126,10 @@
 .figure__label {
   margin: 0;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 8.5px;
+  font-size: var(--text-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: oklch(0.58 0.008 75);
+  color: var(--ink-3);
 }
 
 .figure__value {
@@ -1196,8 +1196,8 @@
   justify-content: space-between;
   gap: 14px;
   margin: 9px 0 0;
-  font-size: 10.5px;
-  color: oklch(0.62 0.008 75);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
 }
 
 #current-file {
@@ -1216,7 +1216,7 @@
   flex-direction: column;
   margin-top: 20px;
   padding-top: 15px;
-  border-top: 1px solid oklch(1 0 0 / 0.07);
+  border-top: 1px solid var(--hairline-soft);
 }
 
 #log {
@@ -1237,7 +1237,7 @@
   gap: 9px;
   font-size: 11.5px;
   line-height: 1.4;
-  color: oklch(0.62 0.008 75);
+  color: var(--ink-3);
 }
 
 .log-row__mark {
@@ -1280,8 +1280,8 @@
   flex-direction: column;
   min-height: 0;
   padding: 20px;
-  border-left: 1px solid oklch(1 0 0 / 0.06);
-  background: linear-gradient(180deg, oklch(1 0 0 / 0.02), oklch(0 0 0 / 0.12));
+  border-left: 1px solid var(--hairline-soft);
+  background: linear-gradient(180deg, var(--lift), oklch(0 0 0 / 0.12));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1301,7 +1301,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
-  color: oklch(0.72 0.008 75);
+  color: var(--ink-2);
   max-width: 215px;
 }
 
@@ -1317,10 +1317,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: oklch(0.62 0.008 75);
+  color: var(--ink-3);
 }
 
 .pill {
@@ -1368,7 +1368,7 @@
   border-radius: 16px;
   background: oklch(0.115 0.004 65);
   box-shadow:
-    inset 0 0 0 1px oklch(1 0 0 / 0.1),
+    inset 0 0 0 1px var(--hairline-mid),
     0 14px 30px -12px oklch(0 0 0 / 0.8);
 }
 
@@ -1397,8 +1397,8 @@
   color: oklch(0.42 0.006 65);
   background: repeating-linear-gradient(
     135deg,
-    oklch(0.185 0.005 65) 0 10px,
-    oklch(0.16 0.005 65) 10px 20px
+    var(--panel) 0 10px,
+    var(--shell) 10px 20px
   );
 }
 
@@ -1425,12 +1425,24 @@
   padding: 0 20px 20px;
 }
 
+/* As the launcher prints it: the collection's name in the corner, where its
+   logo would go. The card is transformed, so fixed positions against it. */
 #rail-launcher-eyebrow {
-  margin: 0 0 9px;
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: oklch(0.66 0.008 75);
+  position: fixed;
+  top: 17px;
+  left: 20px;
+  z-index: 3;
+  max-width: 62%;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  font-stretch: 104%;
+  line-height: 1.2;
+  color: var(--ink);
+  text-shadow: 0 1px 12px oklch(0 0 0 / 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #rail-launcher-eyebrow[hidden] {
@@ -1523,8 +1535,8 @@
   gap: 10px;
   padding: 8px 10px;
   border-radius: 7px;
-  border: 1px solid oklch(1 0 0 / 0.07);
-  background: oklch(0 0 0 / 0.3);
+  border: 1px solid var(--hairline-soft);
+  background: var(--well);
 }
 
 #rail-explorer-icon {
@@ -1537,14 +1549,14 @@
 }
 
 #rail-explorer-icon.is-blank {
-  background: oklch(1 0 0 / 0.06);
+  background: var(--hairline-soft);
 }
 
 #rail-explorer-name {
   flex: 1;
   min-width: 0;
   font-size: 11.5px;
-  color: oklch(0.86 0.008 75);
+  color: var(--ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1552,8 +1564,8 @@
 
 #rail-explorer-free {
   flex: none;
-  font-size: 9.5px;
-  color: oklch(0.58 0.008 75);
+  font-size: var(--text-label);
+  color: var(--ink-3);
 }
 
 /* --- Change ------------------------------------------------------------- */
@@ -1566,20 +1578,20 @@
   height: 30px;
   padding: 0 12px;
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   border-radius: 6px;
-  border: 1px solid oklch(1 0 0 / 0.12);
-  background: oklch(1 0 0 / 0.04);
+  border: 1px solid var(--hairline-mid);
+  background: var(--lift);
   color: oklch(0.9 0.008 75);
   cursor: pointer;
   transition: background 160ms linear, border-color 160ms linear;
 }
 
 .change-btn:hover {
-  background: oklch(1 0 0 / 0.1);
+  background: var(--hairline-mid);
   border-color: oklch(1 0 0 / 0.2);
 }
 
@@ -1606,7 +1618,7 @@
 #rail-space {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid oklch(1 0 0 / 0.07);
+  border-top: 1px solid var(--hairline-soft);
 }
 
 #rail-space[hidden] {
@@ -1622,15 +1634,15 @@
 }
 
 #rail-drive-label {
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: oklch(0.62 0.008 75);
+  color: var(--ink-3);
 }
 
 #rail-drive-fill {
   font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
+  font-size: var(--text-sm);
   color: oklch(0.74 0.008 75);
 }
 
@@ -1678,9 +1690,9 @@
   gap: 10px;
   width: 100%;
   padding: 8px 11px;
-  border: 1px solid oklch(1 0 0 / 0.08);
+  border: 1px solid var(--hairline-soft);
   border-radius: 6px;
-  background: oklch(0 0 0 / 0.28);
+  background: var(--well);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -1689,7 +1701,7 @@
 }
 
 .drive:hover {
-  border-color: oklch(1 0 0 / 0.18);
+  border-color: var(--hairline);
 }
 
 .drive[aria-selected="true"] {
@@ -1709,7 +1721,7 @@
   flex: none;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font-size: var(--text-label);
   color: var(--ink-3);
 }
 
@@ -1724,7 +1736,7 @@
 #rail-forced {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid oklch(1 0 0 / 0.07);
+  border-top: 1px solid var(--hairline-soft);
 }
 
 #rail-plan[hidden],
@@ -1755,10 +1767,10 @@
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  background: oklch(1 0 0 / 0.07);
-  color: oklch(0.78 0.008 75);
+  background: var(--hairline-soft);
+  color: var(--ink-2);
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: var(--text-label);
   font-weight: 600;
 }
 
@@ -1778,8 +1790,8 @@
   display: block;
   margin-top: 2px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
-  color: oklch(0.62 0.008 75);
+  font-size: var(--text-label);
+  color: var(--ink-3);
 }
 
 #forced {
@@ -1796,14 +1808,14 @@
   align-items: baseline;
   gap: 9px;
   font-size: 11.5px;
-  color: oklch(0.78 0.008 75);
+  color: var(--ink-2);
 }
 
 .forced-row__mark {
   flex: none;
   width: 12px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-label);
   color: color-mix(in oklch, var(--good) 76%, var(--ink));
 }
 
@@ -1914,7 +1926,7 @@ dialog {
   background: var(--panel);
   color: var(--ink);
   box-shadow:
-    inset 0 0 0 1px oklch(1 0 0 / 0.07),
+    inset 0 0 0 1px var(--hairline-soft),
     0 30px 60px -20px oklch(0 0 0 / 0.8);
   overflow: hidden;
 }
@@ -1954,7 +1966,7 @@ dialog form {
   width: 30px;
   height: 30px;
   border-radius: 7px;
-  background: oklch(1 0 0 / 0.05);
+  background: var(--lift);
 }
 
 .dialog-body {
@@ -2005,9 +2017,9 @@ dialog form {
   align-items: center;
   gap: 10px;
   padding: 7px 10px 7px 7px;
-  border: 1px solid oklch(1 0 0 / 0.08);
+  border: 1px solid var(--hairline-soft);
   border-radius: 7px;
-  background: oklch(0 0 0 / 0.3);
+  background: var(--well);
 }
 
 .edit-game__name {
@@ -2055,7 +2067,7 @@ dialog form {
   border-radius: 6px;
   background: transparent;
   box-shadow: none;
-  color: oklch(0.68 0.008 75);
+  color: var(--ink-2);
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
@@ -2104,10 +2116,10 @@ dialog form {
   display: block;
   width: 100%;
   padding: 0;
-  border: 1px solid oklch(1 0 0 / 0.09);
+  border: 1px solid var(--hairline-mid);
   border-radius: 7px;
   overflow: hidden;
-  background: oklch(0 0 0 / 0.3);
+  background: var(--well);
   cursor: pointer;
   transition: border-color 180ms linear, box-shadow 180ms linear;
 }
@@ -2131,7 +2143,7 @@ dialog form {
   display: block;
   padding: 5px 7px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: var(--text-label);
   color: var(--ink-3);
 }
 
@@ -2176,7 +2188,7 @@ dialog form {
 }
 
 .pv:hover .pv__frame {
-  outline-color: oklch(1 0 0 / 0.18);
+  outline-color: var(--hairline);
 }
 
 /* The one the open tab is choosing. */
@@ -2198,8 +2210,8 @@ dialog form {
   place-items: center;
   background: repeating-linear-gradient(
     135deg,
-    oklch(0.185 0.005 65) 0 7px,
-    oklch(0.16 0.005 65) 7px 14px
+    var(--panel) 0 7px,
+    var(--shell) 7px 14px
   );
 }
 
@@ -2216,7 +2228,7 @@ dialog form {
 }
 
 .pv__empty {
-  font-size: 9px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -2258,10 +2270,10 @@ dialog form {
   place-items: center;
   background: repeating-linear-gradient(
     135deg,
-    oklch(0.185 0.005 65) 0 7px,
-    oklch(0.16 0.005 65) 7px 14px
+    var(--panel) 0 7px,
+    var(--shell) 7px 14px
   );
-  font-size: 9px;
+  font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.2em;
   color: var(--ink-3);
@@ -2390,10 +2402,10 @@ dialog form {
 .build-label {
   margin: 0;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: oklch(0.6 0.008 75);
+  color: var(--ink-3);
 }
 
 .build-card {
@@ -2402,8 +2414,8 @@ dialog form {
   gap: 13px;
   padding: 10px 12px;
   border-radius: 11px;
-  border: 1px solid oklch(1 0 0 / 0.09);
-  background: oklch(0 0 0 / 0.26);
+  border: 1px solid var(--hairline-mid);
+  background: var(--well);
 }
 
 /* Nothing chosen yet is a gap to fill, not a thing that exists — so the border
@@ -2429,7 +2441,7 @@ dialog form {
   width: 32px;
   height: 32px;
   border-radius: 7px;
-  background: oklch(1 0 0 / 0.06);
+  background: var(--hairline-soft);
   color: oklch(0.82 0.008 75);
 }
 
@@ -2454,9 +2466,9 @@ dialog form {
 
 .build-card__meta {
   margin: 0;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   letter-spacing: 0.04em;
-  color: oklch(0.62 0.008 75);
+  color: var(--ink-3);
 }
 
 /* --- Artwork slots ------------------------------------------------------- */
@@ -2476,8 +2488,8 @@ dialog form {
   font: inherit;
   color: inherit;
   border-radius: 9px;
-  border: 1px solid oklch(1 0 0 / 0.1);
-  background: oklch(0 0 0 / 0.26);
+  border: 1px solid var(--hairline-mid);
+  background: var(--well);
   cursor: pointer;
   transition: border-color 160ms linear, background 160ms linear;
 }
@@ -2543,8 +2555,8 @@ dialog form {
 #pick-games #tick-count {
   flex: none;
   padding-left: 12px;
-  font-size: 10px;
-  color: oklch(0.6 0.008 75);
+  font-size: var(--text-label);
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
@@ -2613,10 +2625,10 @@ dialog form {
   margin: 0 0 10px;
   padding: 10px 12px;
   list-style: none;
-  border: 1px solid oklch(1 0 0 / 0.09);
+  border: 1px solid var(--hairline-mid);
   border-radius: 8px;
-  background: oklch(0 0 0 / 0.26);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--well);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-size: 11px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -2660,7 +2672,7 @@ input.field__input--lead {
   font-family: inherit;
   color: var(--ink);
   background: var(--sunk);
-  border: 1px solid oklch(1 0 0 / 0.08);
+  border: 1px solid var(--hairline-soft);
   border-radius: 6px;
   width: 100%;
   outline: none;
@@ -2677,8 +2689,8 @@ input.field__input--lead:focus {
   display: flex;
   flex-direction: column;
   border-radius: 11px;
-  border: 1px solid oklch(1 0 0 / 0.09);
-  background: oklch(0 0 0 / 0.26);
+  border: 1px solid var(--hairline-mid);
+  background: var(--well);
   overflow: hidden;
 }
 
@@ -2691,7 +2703,7 @@ input.field__input--lead:focus {
 }
 
 .toggle + .toggle {
-  border-top: 1px solid oklch(1 0 0 / 0.06);
+  border-top: 1px solid var(--hairline-soft);
 }
 
 .toggle[hidden] {
@@ -2715,8 +2727,8 @@ input.field__input--lead:focus {
 
 .toggle__meta {
   flex: none;
-  font-size: 10px;
-  color: oklch(0.62 0.008 75);
+  font-size: var(--text-label);
+  color: var(--ink-3);
 }
 
 .toggle.is-off .toggle__main {
@@ -2791,7 +2803,7 @@ input.field__input--lead:focus {
   font-size: 11.5px;
   color: var(--ink);
   background: var(--sunk);
-  border: 1px solid oklch(1 0 0 / 0.12);
+  border: 1px solid var(--hairline-mid);
   border-radius: 6px;
   padding: 4px 6px;
 }
@@ -2810,7 +2822,7 @@ input.field__input--lead:focus {
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
-  color: oklch(0.86 0.008 75);
+  color: var(--ink-soft);
 }
 
 .btn--danger {
@@ -2831,5 +2843,135 @@ input.field__input--lead:focus {
 
 /* `.field` sets display, which outranks the browser's own [hidden]. */
 .field[hidden] {
+  display: none;
+}
+
+/* --- Memory card --------------------------------------------------------- */
+
+#panel-memcard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
+  padding: 20px 20px 18px;
+  overflow-y: auto;
+  animation: rise 320ms var(--ease) both;
+}
+
+#panel-memcard[hidden] {
+  display: none;
+}
+
+.mcw-select,
+.mcw-search {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--hairline-mid);
+  background: var(--well);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.mcw-search {
+  margin-top: 8px;
+}
+
+#mcw-games,
+#mcw-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#mcw-results {
+  margin-top: 6px;
+}
+
+.mcw-game {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--hairline-soft);
+  background: var(--well);
+}
+
+.mcw-game__icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  aspect-ratio: 1;
+  border-radius: 7px;
+}
+
+.mcw-game__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mcw-game__name {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.mcw-game__where {
+  font-size: 11px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcw-game__where.is-missing {
+  white-space: normal;
+  color: color-mix(in oklch, var(--accent) 70%, var(--ink));
+}
+
+.mcw-result {
+  appearance: none;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lift);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mcw-result:hover,
+.mcw-result:focus-visible {
+  background: color-mix(in oklch, var(--accent) 16%, transparent);
+  outline: none;
+}
+
+.mcw-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+#mcw-status {
+  flex: 1;
+  margin: 0;
+}
+
+#mcw-games-empty[hidden] {
   display: none;
 }

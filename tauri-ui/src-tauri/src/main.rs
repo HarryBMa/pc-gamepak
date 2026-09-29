@@ -73,8 +73,8 @@
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, created, drives, edit, format, frontend, health, home, idle, insert, playlog,
-    playtrack, saves, settings, sgdb, shaders, stats, tuning, unboxed,
+    busy, create, created, drives, edit, format, frontend, health, home, idle, insert, ludusavi,
+    memcard, playlog, playtrack, saves, settings, sgdb, shaders, stats, tuning, unboxed,
 };
 
 use std::collections::HashMap;
@@ -85,10 +85,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
-#[cfg(target_os = "windows")]
-use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-    CM_Get_Parent, CM_Request_Device_EjectW, CR_SUCCESS,
-};
 
 // --------------------------------------------------------------------------
 // Tauri commands
@@ -128,73 +124,12 @@ fn launch_game(
     // because a stats file could not be written is a broken launcher.
     count_the_launch(&drive_path, &executable, title.unwrap_or_default());
 
-    let known_schemes = [
-        "steam://",
-        "heroic://",
-        "gog://",
-        "epic://",
-        "playnite://",
-        "lutris://",
-        "http://",
-        "https://",
-    ];
-    let is_uri = known_schemes
-        .iter()
-        .any(|s| executable.to_lowercase().starts_with(s));
-
-    if is_uri {
-        // Started by somebody else's launcher, in somebody else's environment.
-        // Nothing here can decide where that game keeps its saves, which is
-        // what `save=` lines are for.
-        return open_uri(&executable);
+    // Starting it is core's, shared with every front-end. Only the reaping of
+    // a carried game's process is this window's.
+    let started = gamepak_core::launch::start(&drive_path, &executable, &|line| debug_log(line))?;
+    if let gamepak_core::launch::Started::Carried(child) = started {
+        settle_when_it_exits(child, drive_path, stats::key_for(&executable));
     }
-
-    let full_path = PathBuf::from(&drive_path).join(&executable);
-    if !full_path.exists() {
-        return Err(format!("Executable not found: {}", full_path.display()));
-    }
-
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = Command::new(&full_path);
-        command.current_dir(full_path.parent().unwrap_or(Path::new(".")));
-        command
-    };
-    // Through bash on purpose, not as a fallback: exFAT cannot store an
-    // executable bit, so nothing on an exFAT cartridge is executable and a
-    // carried Linux game is a shell script by necessity.
-    #[cfg(not(target_os = "windows"))]
-    let mut command = {
-        let mut command = Command::new("bash");
-        command
-            .arg(&full_path)
-            .current_dir(full_path.parent().unwrap_or(Path::new(".")));
-        command
-    };
-
-    // This is a game the cartridge carries and that this launcher is starting
-    // itself, which is the only case where its environment is ours to set — so
-    // it is the only case where the cartridge can be handed the game's whole
-    // home directory and catch every save without anyone having declared one.
-    if home::wanted(Path::new(&drive_path)) {
-        match home::prepare(Path::new(&drive_path)) {
-            Ok(portable) => {
-                for (name, value) in &portable.vars {
-                    command.env(name, value);
-                }
-                debug_log(format!("portable home: {}", portable.root));
-            }
-            // A cartridge asking for something the drive will not give it. The
-            // game still starts, in the ordinary environment, because refusing
-            // to launch would be a worse answer than saving to the host.
-            Err(why) => debug_log(format!("portable home unavailable: {why}")),
-        }
-    }
-
-    let child = command
-        .spawn()
-        .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
-    settle_when_it_exits(child, drive_path, stats::key_for(&executable));
     Ok(())
 }
 
@@ -213,32 +148,6 @@ fn settle_when_it_exits(mut child: std::process::Child, _drive_path: String, _ke
     });
 }
 
-fn open_uri(uri: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("cmd")
-            .args(["/c", "start", "", uri])
-            .spawn()
-            .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
-        Ok(())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(uri)
-            .spawn()
-            .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
-        Ok(())
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        Command::new("xdg-open")
-            .arg(uri)
-            .spawn()
-            .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
-        Ok(())
-    }
-}
 
 // --------------------------------------------------------------------------
 // What the cartridge remembers: hours played, and saves
@@ -1081,589 +990,12 @@ fn unmount(drive_path: &str) -> Result<(), String> {
     // afternoon. Errors are logged rather than raised: a save that could not
     // be written is not a reason to leave a drive mounted that the user has
     // asked to remove, and holding the cartridge hostage over it is worse.
-    let _ = push_saves(drive_path.to_string());
-    // After the saves, because a save is data and a shader cache is not: if the
-    // drive fills or the copy is slow, the thing that must already be written is
-    // the save.
-    let carried = push_shaders(drive_path.to_string());
-    if !carried.is_empty() {
-        let bytes: u64 = carried.iter().map(|synced| synced.bytes).sum();
-        debug_log(format!(
-            "shaders: carried {} caches, {bytes} bytes",
-            carried.len()
-        ));
-    }
+    gamepak_core::eject::settle(drive_path, &|line| debug_log(line));
     end_every_session();
 
-    #[cfg(target_os = "windows")]
-    {
-        eject_windows(drive_path)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        eject_linux(drive_path)
-    }
+    gamepak_core::eject::eject(drive_path)
 }
 
-/// Eject the cartridge, elevating only if it turns out to be necessary.
-///
-/// Asking PnP nicely works on a plain USB stick and prompts for nothing, so it
-/// is tried first and is usually the end of it. It cannot work on the hardware
-/// this project is actually built around: an NVMe stick in a UAS enclosure
-/// advertises no `CM_DEVCAP_EJECTSUPPORTED`, Explorer offers no Eject verb for
-/// it, and the request comes back `PNP_VetoDevice` — the device saying it does
-/// not do this — from the volume rather than from anything holding a file open.
-///
-/// So the fallback does the work by force, which needs administrator because
-/// Windows calls these disks fixed and will not hand out write access to a
-/// fixed volume otherwise. That is one UAC prompt, at the moment the user asked
-/// for something that cannot be done without one, and none at all on hardware
-/// that never needed it.
-#[cfg(target_os = "windows")]
-fn eject_windows(drive_path: &str) -> Result<(), String> {
-    let letter = drive_path.trim_end_matches(['\\', '/']);
-
-    match pnp_eject(letter) {
-        Ok(()) => Ok(()),
-        // The unelevated refusal is kept only to be shown if elevation is
-        // declined: it is the honest reason the prompt appeared.
-        Err(refusal) => elevated_eject(letter, &refusal),
-    }
-}
-
-/// Re-run this executable elevated, with `--eject`, and wait for it.
-///
-/// `ShellExecuteExW` with `runas` rather than a PowerShell hop: the elevated
-/// half is this same binary doing the same Win32 calls, so it can report what
-/// happened as an exit code instead of a parsed console message.
-#[cfg(target_os = "windows")]
-fn elevated_eject(letter: &str, refusal: &str) -> Result<(), String> {
-    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, WAIT_OBJECT_0};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, WaitForSingleObject, INFINITE,
-    };
-    use windows_sys::Win32::UI::Shell::{
-        ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
-
-    let Ok(exe) = std::env::current_exe() else {
-        return Err(refusal.to_string());
-    };
-
-    let verb = wide("runas");
-    let file = wide(&exe.to_string_lossy());
-    // Unquoted, and the letter rather than the root: `"G:\"` ends in a
-    // backslash, which the Windows command line reads as escaping the quote
-    // that closes it, so the elevated half was handed a mangled path and
-    // reported a drive that was not there. A drive letter cannot contain a
-    // space, so there is nothing for the quotes to have been protecting.
-    let parameters = wide(&format!("--eject {letter}"));
-
-    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
-    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
-    info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-    info.lpVerb = verb.as_ptr();
-    info.lpFile = file.as_ptr();
-    info.lpParameters = parameters.as_ptr();
-    info.nShow = SW_HIDE;
-
-    if unsafe { ShellExecuteExW(&mut info) } == 0 {
-        let error = unsafe { windows_sys::Win32::Foundation::GetLastError() };
-        return Err(if error == ERROR_CANCELLED {
-            "Ejecting this cartridge needs administrator, and the prompt was dismissed.".to_string()
-        } else {
-            refusal.to_string()
-        });
-    }
-
-    if info.hProcess == 0 {
-        return Err(refusal.to_string());
-    }
-
-    let waited = unsafe { WaitForSingleObject(info.hProcess, INFINITE) };
-    let mut code = EJECT_OTHER;
-    if waited == WAIT_OBJECT_0 {
-        unsafe { GetExitCodeProcess(info.hProcess, &mut code) };
-    }
-    unsafe { CloseHandle(info.hProcess) };
-
-    match code {
-        EJECT_OK => Ok(()),
-        // Administrator was already granted, so `FSCTL_LOCK_VOLUME` refusing
-        // means what it says: files are open on the volume. Not a rights
-        // problem, and not one a Defender exclusion fixes — that was tried on
-        // a cartridge that would not eject, and changed nothing.
-        //
-        // What holds it is whatever has read the cartridge since it arrived.
-        // A drive only just plugged in ejects every time; the same drive
-        // after a game has been played from it often will not, and does not
-        // let go until it is replugged. So the second half of the message is
-        // the thing that always works, rather than a second guess at who.
-        EJECT_IN_USE => Err(format!(
-            "{letter} is still in use. Close the game, Steam, or any folder open on it, \
-             or replug the cartridge — one that has just arrived always ejects."
-        )),
-        EJECT_MISSING => Err(format!("{letter} is not there any more.")),
-        _ => Err(refusal.to_string()),
-    }
-}
-
-/// Exit codes the elevated half reports back through.
-#[cfg(target_os = "windows")]
-const EJECT_OK: u32 = 0;
-#[cfg(target_os = "windows")]
-const EJECT_IN_USE: u32 = 1;
-#[cfg(target_os = "windows")]
-const EJECT_MISSING: u32 = 2;
-#[cfg(target_os = "windows")]
-const EJECT_OTHER: u32 = 3;
-
-/// The elevated half: flush the volume, dismount it, then stop the device.
-///
-/// Runs instead of the window when the executable is started with `--eject`.
-/// Locking is what needed the rights: with them, the filesystem is flushed and
-/// dismounted, and the drive is safe to unplug whether or not PnP will then
-/// take the device away — which it still declines to do on an enclosure that
-/// never claimed it could.
-#[cfg(target_os = "windows")]
-fn run_elevated_eject(drive_path: &str) -> u32 {
-    use std::time::Duration;
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE,
-    };
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    };
-    use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME};
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-
-    // Same three seconds the unelevated attempt used to allow: a cartridge
-    // whose game has just been quit is released over a second or two.
-    const ATTEMPTS: u32 = 12;
-    const RETRY_DELAY: Duration = Duration::from_millis(250);
-
-    let letter = drive_path.trim_end_matches(['\\', '/']);
-    let path = wide(&format!("\\\\.\\{letter}"));
-
-    let mut opened = false;
-
-    for attempt in 0..ATTEMPTS {
-        if attempt > 0 {
-            std::thread::sleep(RETRY_DELAY);
-        }
-
-        let handle = unsafe {
-            CreateFileW(
-                path.as_ptr(),
-                GENERIC_READ | GENERIC_WRITE,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                std::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            )
-        };
-        if handle == INVALID_HANDLE_VALUE {
-            continue;
-        }
-        opened = true;
-
-        let mut returned = 0u32;
-        let locked = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_LOCK_VOLUME,
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                0,
-                &mut returned,
-                std::ptr::null_mut(),
-            )
-        };
-        if locked == 0 {
-            unsafe { CloseHandle(handle) };
-            continue;
-        }
-
-        let dismounted = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_DISMOUNT_VOLUME,
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                0,
-                &mut returned,
-                std::ptr::null_mut(),
-            )
-        };
-        // The lock is released with the handle. Held until after the dismount
-        // so nothing can mount the volume back in between.
-        unsafe { CloseHandle(handle) };
-
-        if dismounted != 0 {
-            // Now that no filesystem is mounted there is nothing left to veto,
-            // so ask PnP again. It still refuses on an enclosure with no eject
-            // support, and that is fine: the cartridge is already safe to pull.
-            let _ = pnp_eject(letter);
-            return EJECT_OK;
-        }
-    }
-
-    if opened {
-        EJECT_IN_USE
-    } else {
-        EJECT_MISSING
-    }
-}
-
-/// Ask PnP to stop the device behind a drive letter.
-///
-/// The obvious implementation — lock the volume, dismount it — cannot work on
-/// the hardware this is for. `FSCTL_LOCK_VOLUME` needs administrator on a
-/// volume Windows considers fixed, and `GetDriveTypeW` calls an NVMe stick in a
-/// USB enclosure fixed, exactly like the internal disk. So the lock came back
-/// `ERROR_ACCESS_DENIED` every time, on a cartridge nothing was using, and
-/// `mountvol /P` behind it needed the same rights and failed the same way.
-///
-/// `CM_Request_Device_Eject` is what the notification area's own eject calls.
-/// It asks the PnP manager to stop the device rather than taking the volume by
-/// force: the filesystem is flushed and dismounted on the way, no elevation is
-/// involved, and the device is actually powered down at the end — which the
-/// dismount never did, so "safe to remove" had been describing a drive that was
-/// still spinning.
-///
-/// When something refuses, PnP says what: the veto names the application or
-/// driver holding the device, which is a better answer than any guess made from
-/// an error code.
-#[cfg(target_os = "windows")]
-fn pnp_eject(letter: &str) -> Result<(), String> {
-    let disk = device_number(letter)
-        .ok_or_else(|| format!("{letter} could not be identified as a disk."))?;
-    let devinst = disk_devinst(disk)
-        .ok_or_else(|| format!("Windows has no device for {letter} to eject."))?;
-
-    // The parent first: for a USB enclosure that is the mass-storage device,
-    // and stopping it is what "Safely Remove Hardware" stops. The disk itself
-    // is the fallback for anything shaped differently — a card reader slot, or
-    // a device that is its own parent as far as PnP is concerned.
-    let mut parent = 0u32;
-    let targets = if unsafe { CM_Get_Parent(&mut parent, devinst, 0) } == CR_SUCCESS {
-        vec![parent, devinst]
-    } else {
-        vec![devinst]
-    };
-
-    let mut refusal = None;
-    for target in targets {
-        match request_eject(target) {
-            Ok(()) => return Ok(()),
-            Err(why) => refusal = refusal.or(Some(why)),
-        }
-    }
-
-    Err(refusal.unwrap_or_else(|| format!("Windows would not eject {letter}.")))
-}
-
-/// Ask PnP to stop one device node.
-#[cfg(target_os = "windows")]
-fn request_eject(devinst: u32) -> Result<(), String> {
-    // Aliased in upper case because they are matched on as patterns, and a
-    // constant named in camel case there is read as a fresh binding that
-    // matches everything — the lint that fires on it is warning about a match
-    // arm that would silently swallow every other veto.
-    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        PNP_VetoDevice, PNP_VetoDriver, PNP_VetoOutstandingOpen, PNP_VetoPendingClose,
-        PNP_VetoWindowsApp, PNP_VetoWindowsService,
-    };
-    const VETO_APP: i32 = PNP_VetoWindowsApp;
-    const VETO_SERVICE: i32 = PNP_VetoWindowsService;
-    const VETO_OPEN: i32 = PNP_VetoOutstandingOpen;
-    const VETO_CLOSING: i32 = PNP_VetoPendingClose;
-    const VETO_DEVICE: i32 = PNP_VetoDevice;
-    const VETO_DRIVER: i32 = PNP_VetoDriver;
-
-    let mut veto_type = 0;
-    let mut veto_name = [0u16; 260];
-
-    let result = unsafe {
-        CM_Request_Device_EjectW(
-            devinst,
-            &mut veto_type,
-            veto_name.as_mut_ptr(),
-            veto_name.len() as u32,
-            0,
-        )
-    };
-    if result == CR_SUCCESS {
-        return Ok(());
-    }
-
-    let end = veto_name
-        .iter()
-        .position(|c| *c == 0)
-        .unwrap_or(veto_name.len());
-    let name = String::from_utf16_lossy(&veto_name[..end]);
-    let name = name.trim();
-
-    // The veto name is a process name or a driver's, so it is worth printing
-    // verbatim: "Steam is still using the cartridge" is the whole answer, where
-    // an error number would send someone looking for a fault that is not there.
-    Err(match veto_type {
-        VETO_APP | VETO_SERVICE | VETO_OPEN if !name.is_empty() => {
-            format!("{name} is still using the cartridge. Close it, then Eject.")
-        }
-        VETO_APP | VETO_SERVICE | VETO_OPEN => {
-            "Something is still using the cartridge. Quit the game or Steam, then Eject."
-                .to_string()
-        }
-        VETO_CLOSING => "The cartridge is still finishing up. Try Eject again.".to_string(),
-        VETO_DEVICE | VETO_DRIVER if !name.is_empty() => {
-            format!("{name} would not release the cartridge.")
-        }
-        _ => "Windows would not release the cartridge. Unplug it once the drive light settles."
-            .to_string(),
-    })
-}
-
-/// Which physical disk a drive letter sits on.
-///
-/// Opened with no access rights at all, which is enough for a query and is the
-/// reason none of this prompts: asking for read or write on a fixed volume is
-/// what needed administrator in the first place.
-#[cfg(target_os = "windows")]
-fn device_number(letter: &str) -> Option<u32> {
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    };
-    use windows_sys::Win32::System::Ioctl::{
-        IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_DEVICE_NUMBER,
-    };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-
-    let path = wide(&format!("\\\\.\\{letter}"));
-    let handle = unsafe {
-        CreateFileW(
-            path.as_ptr(),
-            0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            std::ptr::null(),
-            OPEN_EXISTING,
-            0,
-            0,
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return None;
-    }
-
-    let mut number: STORAGE_DEVICE_NUMBER = unsafe { std::mem::zeroed() };
-    let mut returned = 0u32;
-    let ok = unsafe {
-        DeviceIoControl(
-            handle,
-            IOCTL_STORAGE_GET_DEVICE_NUMBER,
-            std::ptr::null(),
-            0,
-            &mut number as *mut _ as *mut std::ffi::c_void,
-            std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
-            &mut returned,
-            std::ptr::null_mut(),
-        )
-    };
-    unsafe { CloseHandle(handle) };
-
-    (ok != 0).then_some(number.DeviceNumber)
-}
-
-/// The device node for a physical disk, found by matching its number.
-///
-/// There is no call from a disk number to a device node, so this walks the disk
-/// interfaces, opens each one and asks which disk it is — the same question
-/// `device_number` asked of the volume, from the other end.
-#[cfg(target_os = "windows")]
-fn disk_devinst(disk: u32) -> Option<u32> {
-    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW,
-        SetupDiGetDeviceInterfaceDetailW, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT,
-        SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA_W, SP_DEVINFO_DATA,
-    };
-
-    // Written out because windows-sys 0.52 does not export it. It is a fixed
-    // interface class id — {53F56307-B6BF-11D0-94F2-00A0C91EFB8B}, the one
-    // every disk registers — not a value that varies by machine or version.
-    const GUID_DEVINTERFACE_DISK: windows_sys::core::GUID = windows_sys::core::GUID {
-        data1: 0x53F5_6307,
-        data2: 0xB6BF,
-        data3: 0x11D0,
-        data4: [0x94, 0xF2, 0x00, 0xA0, 0xC9, 0x1E, 0xFB, 0x8B],
-    };
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    };
-    use windows_sys::Win32::System::Ioctl::{
-        IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_DEVICE_NUMBER,
-    };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-
-    let set = unsafe {
-        SetupDiGetClassDevsW(
-            &GUID_DEVINTERFACE_DISK,
-            std::ptr::null(),
-            0,
-            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
-        )
-    };
-    if set == INVALID_HANDLE_VALUE {
-        return None;
-    }
-
-    let mut found = None;
-
-    for index in 0.. {
-        let mut interface: SP_DEVICE_INTERFACE_DATA = unsafe { std::mem::zeroed() };
-        interface.cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DATA>() as u32;
-
-        if unsafe {
-            SetupDiEnumDeviceInterfaces(
-                set,
-                std::ptr::null(),
-                &GUID_DEVINTERFACE_DISK,
-                index,
-                &mut interface,
-            )
-        } == 0
-        {
-            break;
-        }
-
-        // The detail struct is variable length: a fixed head and the device
-        // path running off the end of it. `cbSize` describes the head only,
-        // which is why it is not the size of the buffer being passed.
-        let mut buffer = [0u8; 1024];
-        let detail = buffer.as_mut_ptr() as *mut SP_DEVICE_INTERFACE_DETAIL_DATA_W;
-        unsafe {
-            (*detail).cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
-        }
-
-        let mut info: SP_DEVINFO_DATA = unsafe { std::mem::zeroed() };
-        info.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
-
-        if unsafe {
-            SetupDiGetDeviceInterfaceDetailW(
-                set,
-                // Read, not written: the interface identifies which detail to
-                // fetch, and `info` on the end is the out-parameter.
-                &interface,
-                detail,
-                buffer.len() as u32,
-                std::ptr::null_mut(),
-                &mut info,
-            )
-        } == 0
-        {
-            continue;
-        }
-
-        let handle = unsafe {
-            CreateFileW(
-                (*detail).DevicePath.as_ptr(),
-                0,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                std::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            )
-        };
-        if handle == INVALID_HANDLE_VALUE {
-            continue;
-        }
-
-        let mut number: STORAGE_DEVICE_NUMBER = unsafe { std::mem::zeroed() };
-        let mut returned = 0u32;
-        let ok = unsafe {
-            DeviceIoControl(
-                handle,
-                IOCTL_STORAGE_GET_DEVICE_NUMBER,
-                std::ptr::null(),
-                0,
-                &mut number as *mut _ as *mut std::ffi::c_void,
-                std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
-                &mut returned,
-                std::ptr::null_mut(),
-            )
-        };
-        unsafe { CloseHandle(handle) };
-
-        if ok != 0 && number.DeviceNumber == disk {
-            found = Some(info.DevInst);
-            break;
-        }
-    }
-
-    unsafe { SetupDiDestroyDeviceInfoList(set) };
-    found
-}
-
-#[cfg(target_os = "windows")]
-fn wide(s: &str) -> Vec<u16> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
-    OsStr::new(s)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn eject_linux(drive_path: &str) -> Result<(), String> {
-    let findmnt = Command::new("findmnt")
-        .args(["-n", "-o", "SOURCE", drive_path])
-        .output()
-        .map_err(|e| format!("findmnt failed: {e}"))?;
-
-    let device = String::from_utf8_lossy(&findmnt.stdout).trim().to_string();
-
-    if device.is_empty() {
-        return Err(format!("Cannot find block device for {drive_path}"));
-    }
-
-    let unmount = Command::new("udisksctl")
-        .args(["unmount", "-b", &device, "--no-user-interaction"])
-        .status()
-        .map_err(|e| format!("udisksctl unmount failed: {e}"))?;
-
-    if !unmount.success() {
-        let _ = Command::new("umount").arg(&device).status();
-    }
-
-    let parent = get_parent_device(&device);
-    let _ = Command::new("udisksctl")
-        .args(["power-off", "-b", &parent, "--no-user-interaction"])
-        .status();
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_parent_device(partition: &str) -> String {
-    let out = Command::new("lsblk")
-        .args(["-no", "PKNAME", partition])
-        .output();
-    if let Ok(o) = out {
-        let parent_name = String::from_utf8_lossy(&o.stdout).trim().to_string();
-        if !parent_name.is_empty() {
-            return format!("/dev/{parent_name}");
-        }
-    }
-    partition.to_string()
-}
 
 // --------------------------------------------------------------------------
 // Wizard commands
@@ -2038,6 +1370,114 @@ async fn create_cartridge(
     .map_err(|e| format!("the build thread failed: {e}"))?
 }
 
+// --------------------------------------------------------------------------
+// Memory cards
+// --------------------------------------------------------------------------
+
+/// The memory card view of a drive: every save on it, as blocks. `cardOnly`
+/// says whether the drive is a memory card and nothing else.
+#[tauri::command]
+fn memory_card(drive_path: String) -> memcard::CardView {
+    memcard::view(Path::new(&drive_path))
+}
+
+/// Copy one save to the PC (`to: "pc"`) or onto the card (`to: "card"`).
+/// Whatever it replaces is moved aside and kept.
+#[tauri::command]
+fn memcard_copy(
+    drive_path: String,
+    slot_id: String,
+    to: String,
+) -> Result<saves::SyncOutcome, String> {
+    memcard::copy(Path::new(&drive_path), &slot_id, &to)
+}
+
+/// Take one save off the card. Moved aside on the card, never deleted.
+#[tauri::command]
+fn memcard_remove(drive_path: String, slot_id: String) -> Result<(), String> {
+    memcard::remove(Path::new(&drive_path), &slot_id)
+}
+
+/// Show one save's folder in the file manager. The window names the save, not
+/// a path: the backend works the folder out, so nothing on the page can point
+/// Explorer anywhere else.
+#[tauri::command]
+fn memcard_reveal(drive_path: String, slot_id: String) -> Result<(), String> {
+    let folder = memcard::folder(Path::new(&drive_path), &slot_id)?;
+    #[cfg(target_os = "windows")]
+    let opener = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let opener = "xdg-open";
+    Command::new(opener)
+        .arg(&folder)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not open {}: {e}", folder.display()))
+}
+
+/// The games already on a memory card, for the wizard to add to.
+#[tauri::command]
+fn memcard_games(drive_path: String) -> Vec<memcard::CardGameView> {
+    memcard::games(Path::new(&drive_path))
+}
+
+/// Write a memory card. Returns what was left off, and why.
+#[tauri::command]
+fn create_memory_card(request: memcard::CardRequest) -> Result<Vec<String>, String> {
+    memcard::write(&request)
+}
+
+/// Where a game keeps its saves, from Ludusavi. Refused unless switched on,
+/// because the first call downloads the list.
+#[tauri::command]
+async fn lookup_save_location(
+    title: String,
+    executable: String,
+) -> Result<Option<ludusavi::SaveLocations>, String> {
+    if !settings::load().ludusavi_enabled {
+        return Err("Ludusavi lookups are off in Settings.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let steam_id = executable.strip_prefix("steam://rungameid/");
+        ludusavi::lookup(&title, steam_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedSaveFolder {
+    path: String,
+    /// The portable form, or empty when the folder is somewhere no other
+    /// machine could find — inside a game's install folder, say.
+    template: String,
+}
+
+/// Point at a game's save folder by hand.
+#[tauri::command]
+async fn pick_save_folder(
+    window: tauri::WebviewWindow,
+) -> Result<Option<PickedSaveFolder>, String> {
+    let Some(folder) = window
+        .dialog()
+        .file()
+        .set_title("Choose the folder the game saves into")
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let path = folder
+        .into_path()
+        .map_err(|e| format!("That folder cannot be read: {e}"))?;
+    Ok(Some(PickedSaveFolder {
+        template: saves::template_from_path(&path).unwrap_or_default(),
+        path: path.to_string_lossy().into_owned(),
+    }))
+}
+
 /// Whether this machine is seeing this cartridge for the first time, which is
 /// when the launcher plays the unboxing. Asking records the answer.
 #[tauri::command]
@@ -2247,7 +1687,7 @@ fn main() {
     #[cfg(target_os = "windows")]
     if let Some(index) = args.iter().position(|arg| arg == "--eject") {
         let drive = args.get(index + 1).cloned().unwrap_or_default();
-        std::process::exit(run_elevated_eject(&drive) as i32);
+        std::process::exit(gamepak_core::eject::run_elevated(&drive) as i32);
     }
     let settings = args.iter().any(|arg| arg == "--settings");
     let wizard = settings || args.iter().any(|arg| arg == "--create");
@@ -2328,6 +1768,14 @@ fn main() {
             list_created,
             forget_created,
             first_insert,
+            memory_card,
+            memcard_copy,
+            memcard_remove,
+            memcard_reveal,
+            memcard_games,
+            create_memory_card,
+            lookup_save_location,
+            pick_save_folder,
             open_wizard_settings,
             open_wizard_window,
         ])

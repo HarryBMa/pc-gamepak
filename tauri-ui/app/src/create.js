@@ -126,6 +126,20 @@ const el = {
   tabCreate: $("tab-create"),
   tabEdit: $("tab-edit"),
   tabCreated: $("tab-created"),
+  tabMemcard: $("tab-memcard"),
+  panelMemcard: $("panel-memcard"),
+  optMemcard: $("opt-memcard"),
+  editMemcard: $("edit-memcard"),
+  setLudusavi: $("set-ludusavi"),
+  mcwDrive: $("mcw-drive"),
+  mcwDriveNote: $("mcw-drive-note"),
+  mcwName: $("mcw-name"),
+  mcwGames: $("mcw-games"),
+  mcwGamesEmpty: $("mcw-games-empty"),
+  mcwSearch: $("mcw-search"),
+  mcwResults: $("mcw-results"),
+  mcwStatus: $("mcw-status"),
+  mcwWrite: $("btn-mcw-write"),
   panelCreate: $("panel-create"),
   panelEdit: $("panel-edit"),
   panelCreated: $("panel-created"),
@@ -1243,13 +1257,12 @@ async function loadFilesystems() {
   // Two pickers, one list: the default in Settings and this cartridge's own.
   for (const select of [el.setFilesystem, el.optFilesystem]) {
     select.replaceChildren();
-    for (const fs of filesystems) {
+    // Only what this machine can actually make, by name. The note under the
+    // picker says what each one costs.
+    for (const fs of filesystems.filter((fs) => fs.canCreateHere)) {
       const option = document.createElement("option");
       option.value = fs.id;
-      // A format this machine cannot create is still shown, disabled, with the
-      // reason — otherwise "why is btrfs missing?" has no answer on screen.
-      option.textContent = fs.canCreateHere ? fs.name : `${fs.name} (needs ${fs.needs})`;
-      option.disabled = !fs.canCreateHere;
+      option.textContent = fs.name;
       select.append(option);
     }
   }
@@ -1999,6 +2012,7 @@ function buildRequest() {
     verifyCopy: on.verify,
     trimAfterWrite: on.trim,
     writeIcon: on.icon,
+    memoryCard: el.optMemcard.checked,
   };
 
   if (isCollection()) {
@@ -2102,7 +2116,7 @@ function startAnother() {
 
 /** The one button: write, update, or start again, depending on the tab. */
 function primaryAction() {
-  if (activeTab === "created") return;
+  if (activeTab === "created" || activeTab === "memcard") return;
   if (activeTab === "edit") return saveEdits();
   if (finished) return startAnother();
   return write();
@@ -2618,6 +2632,7 @@ function applySettings() {
   el.setIdle.value = String(settings.idlePauseMinutes ?? 10);
   el.setIdleRow.hidden = !el.setPlaytime.checked;
   el.setHltb.checked = Boolean(settings.hltbEnabled);
+  el.setLudusavi.checked = Boolean(settings.ludusaviEnabled);
   // Off unless it has been switched on: it writes to the user's home.
   el.setSaveSync.checked = Boolean(settings.saveSync);
   // Tuning edits Defender and Search, which exist on one platform.
@@ -2638,7 +2653,7 @@ function applyDefaults() {
    Create / Edit
    ========================================================================== */
 
-const TABS = ["create", "edit", "created"];
+const TABS = ["create", "edit", "created", "memcard"];
 
 /**
  * Which panel is showing. The rail belongs to Create and Edit and never moves;
@@ -2652,13 +2667,20 @@ async function showTab(name) {
     [el.tabCreate, el.panelCreate, "create"],
     [el.tabEdit, el.panelEdit, "edit"],
     [el.tabCreated, el.panelCreated, "created"],
+    [el.tabMemcard, el.panelMemcard, "memcard"],
   ]) {
     const on = id === activeTab;
     tab.setAttribute("aria-selected", String(on));
     tab.tabIndex = on ? 0 : -1;
     panel.hidden = !on;
   }
-  el.columns.classList.toggle("is-shelf", activeTab === "created");
+  el.columns.classList.toggle("is-shelf", activeTab === "created" || activeTab === "memcard");
+
+  if (activeTab === "memcard") {
+    el.barText.textContent = "Memory card";
+    await openMemcardPage();
+    return;
+  }
 
   if (activeTab === "created") {
     el.barText.textContent = "Created cartridges";
@@ -2927,6 +2949,7 @@ async function saveSettings() {
         trackPlaytime: el.setPlaytime.checked,
         idlePauseMinutes: Number(el.setIdle.value) || 0,
         hltbEnabled: el.setHltb.checked,
+        ludusaviEnabled: el.setLudusavi.checked,
         saveSync: el.setSaveSync.checked,
       },
     });
@@ -2962,6 +2985,7 @@ async function openEditor(drivePath) {
   artGame = null;
 
   el.editTitle.value = editing.title ?? "";
+  el.editMemcard.checked = Boolean(editing.memoryCard);
   renderEditArt();
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
@@ -3179,6 +3203,7 @@ async function saveEdits() {
         backgroundSource: art.background?.path ?? null,
         primaryGame: primaryIndexOf(editing.games ?? []),
         removeLogo: Boolean(art.logo?.remove),
+        memoryCard: el.editMemcard.checked,
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,
@@ -3200,6 +3225,258 @@ async function saveEdits() {
     el.editStatus.textContent = String(error);
   }
 }
+
+/* ==========================================================================
+   Memory card — a drive of saves
+   ==========================================================================
+   Pick a drive, name it, add games. Each game needs to know where its saves
+   live: Ludusavi's list is asked first when it is switched on, and a folder
+   can always be pointed at by hand. A drive that is already a card opens with
+   its games, so adding one does not mean entering the rest again. */
+
+/** The games on the card being made: `CardGame` plus what the page shows. */
+let mcwGames = [];
+
+async function openMemcardPage() {
+  await refreshDrives({ quick: true });
+  const previous = el.mcwDrive.value;
+  el.mcwDrive.replaceChildren(
+    ...drives.map((drive) => {
+      const option = document.createElement("option");
+      option.value = drive.path;
+      const what = drive.hasCartridge
+        ? ` — ${drive.cartridgeTitle || "a cartridge"}`
+        : "";
+      option.textContent = `${drive.label || drive.path} (${drive.path})${what}`;
+      return option;
+    }),
+  );
+  if (!drives.length) {
+    el.mcwDriveNote.textContent = "Plug a drive in.";
+    mcwGames = [];
+    renderMcwGames();
+    return;
+  }
+  el.mcwDrive.value = drives.some((d) => d.path === previous) ? previous : drives[0].path;
+  await loadMemcardDrive();
+}
+
+/** Read what the chosen drive already is. */
+async function loadMemcardDrive() {
+  const drive = drives.find((d) => d.path === el.mcwDrive.value);
+  el.mcwStatus.textContent = "";
+  mcwGames = [];
+  el.mcwName.value = "";
+  // A cartridge takes a memory card beside it and becomes a combo drive; its
+  // own file is not touched.
+  el.mcwDriveNote.textContent = drive?.hasCartridge
+    ? `${drive.cartridgeTitle || "This cartridge"} stays as it is. Writing adds a memory card beside it, so the drive is both.`
+    : "";
+  try {
+    const games = (await invoke("memcard_games", { drivePath: drive.path })) ?? [];
+    if (games.length) {
+      const card = await invoke("memory_card", { drivePath: drive.path });
+      el.mcwName.value = card?.title ?? "";
+      el.mcwDriveNote.textContent = "Already has a memory card. Writing replaces its list with this one.";
+    }
+    mcwGames = games.map((game) => ({ ...game, state: "saved" }));
+  } catch (error) {
+    el.mcwStatus.textContent = String(error);
+  }
+  renderMcwGames();
+}
+
+/** Where the save goes on this machine, in the form it was written down. */
+function mcwTemplateHere(game) {
+  const own = platform === "windows" ? game.saveWindows : game.saveLinux;
+  return own || game.save || "";
+}
+
+function renderMcwGames() {
+  const drive = drives.find((d) => d.path === el.mcwDrive.value);
+  el.mcwGamesEmpty.hidden = mcwGames.length > 0;
+  el.mcwGames.replaceChildren(
+    ...mcwGames.map((game, index) => {
+      const li = document.createElement("li");
+      li.className = "mcw-game";
+
+      const plate = document.createElement("span");
+      plate.className = game.icon ? "plate mcw-game__icon" : "plate plate--empty mcw-game__icon";
+      if (safeSrc(game.icon)) {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = safeSrc(game.icon);
+        plate.append(img);
+      }
+
+      const body = document.createElement("span");
+      body.className = "mcw-game__body";
+      const name = document.createElement("span");
+      name.className = "mcw-game__name";
+      name.textContent = game.title;
+      const where = document.createElement("span");
+      where.className = "mcw-game__where mono";
+      const template = mcwTemplateHere(game);
+      where.textContent = game.state === "looking"
+        ? "Looking up where it saves…"
+        : template || (game.note ?? "Where does it save? Choose the folder.");
+      where.classList.toggle("is-missing", !template && game.state !== "looking");
+      body.append(name, where);
+
+      const pick = document.createElement("button");
+      pick.type = "button";
+      pick.className = "change-btn";
+      pick.textContent = template ? "Change" : "Choose folder";
+      pick.addEventListener("click", () => pickMcwFolder(index));
+
+      const drop = document.createElement("button");
+      drop.type = "button";
+      drop.className = "row-btn row-btn--danger";
+      drop.append(icon(ICON_CROSS));
+      drop.title = `Take ${game.title} off the card`;
+      drop.setAttribute("aria-label", drop.title);
+      drop.addEventListener("click", () => {
+        mcwGames.splice(index, 1);
+        renderMcwGames();
+      });
+
+      li.append(plate, body, pick, drop);
+      return li;
+    }),
+  );
+  el.mcwWrite.disabled = !drive || !mcwGames.some(mcwTemplateHere);
+}
+
+function renderMcwResults() {
+  const query = el.mcwSearch.value.trim().toLowerCase();
+  el.mcwResults.replaceChildren();
+  if (!query) return;
+  const taken = new Set(mcwGames.map((game) => game.title.toLowerCase()));
+  const matches = library
+    .filter((game) => game.name.toLowerCase().includes(query) && !taken.has(game.name.toLowerCase()))
+    .slice(0, 6);
+  const add = (label, onClick) => {
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "mcw-result";
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    li.append(button);
+    el.mcwResults.append(li);
+  };
+  for (const game of matches) add(game.name, () => addMcwGame(game));
+  // A game the library does not know — an emulator, something run from a
+  // folder — can still carry a save; it just has to be named.
+  const typed = el.mcwSearch.value.trim();
+  if (!matches.some((game) => game.name.toLowerCase() === query)) {
+    add(`Add “${typed}” by name`, () => addMcwGame({ name: typed }));
+  }
+}
+
+async function addMcwGame(game) {
+  const entry = {
+    title: game.name,
+    executable: game.executable ?? "",
+    appId: game.library === "steam" ? game.id : null,
+    playniteId: game.library === "playnite" ? game.id : null,
+    icon: game.cover ?? "",
+    state: settings.ludusaviEnabled ? "looking" : "manual",
+  };
+  mcwGames.push(entry);
+  el.mcwSearch.value = "";
+  renderMcwResults();
+  renderMcwGames();
+
+  if (!entry.icon && game.library && game.id) {
+    invoke("game_cover", { library: game.library, id: game.id })
+      .then((cover) => {
+        entry.icon = cover;
+        renderMcwGames();
+      })
+      .catch(() => {});
+  }
+  if (!settings.ludusaviEnabled) {
+    entry.note = "Choose the folder it saves into, or switch on Ludusavi in Settings.";
+    renderMcwGames();
+    return;
+  }
+  try {
+    const found = await invoke("lookup_save_location", {
+      title: entry.title,
+      executable: entry.executable,
+    });
+    entry.saveWindows = found?.windows ?? null;
+    entry.saveLinux = found?.linux ?? null;
+    entry.state = "found";
+    if (!found) entry.note = "Ludusavi does not know this one. Choose the folder it saves into.";
+    else if (!mcwTemplateHere(entry)) entry.note = "Ludusavi knows it, but not for this system. Choose the folder.";
+  } catch (error) {
+    entry.state = "manual";
+    entry.note = String(error);
+  }
+  renderMcwGames();
+}
+
+async function pickMcwFolder(index) {
+  const game = mcwGames[index];
+  let picked;
+  try {
+    picked = await invoke("pick_save_folder");
+  } catch (error) {
+    el.mcwStatus.textContent = String(error);
+    return;
+  }
+  if (!picked) return;
+  if (!picked.template) {
+    game.note = "That folder is outside your user folders, so another PC could not find it. Choose the one the game saves into under your user folder.";
+    renderMcwGames();
+    return;
+  }
+  // Picked by hand is right by definition, on every system it can be read on.
+  game.save = picked.template;
+  game.saveWindows = null;
+  game.saveLinux = null;
+  game.note = "";
+  renderMcwGames();
+}
+
+async function writeMemoryCard() {
+  const drive = drives.find((d) => d.path === el.mcwDrive.value);
+  if (!drive) return;
+  el.mcwWrite.disabled = true;
+  el.mcwStatus.textContent = "Writing…";
+  try {
+    const warnings = await invoke("create_memory_card", {
+      request: {
+        drivePath: drive.path,
+        title: el.mcwName.value.trim() || "Memory card",
+        games: mcwGames.map((game) => ({
+          title: game.title,
+          executable: game.executable ?? "",
+          appId: game.appId ?? null,
+          playniteId: game.playniteId ?? null,
+          iconSource: game.iconSource ?? null,
+          save: game.save ?? null,
+          saveWindows: game.saveWindows ?? null,
+          saveLinux: game.saveLinux ?? null,
+        })),
+      },
+    });
+    status(`Memory card written to ${drive.label || drive.path}.`, "good");
+    // Read back first: loading the drive clears the line this is about to set.
+    await loadMemcardDrive();
+    el.mcwStatus.textContent = (warnings ?? []).join(" ");
+  } catch (error) {
+    el.mcwStatus.textContent = String(error);
+  } finally {
+    renderMcwGames();
+  }
+}
+
+el.mcwDrive.addEventListener("change", loadMemcardDrive);
+el.mcwSearch.addEventListener("input", renderMcwResults);
+el.mcwWrite.addEventListener("click", writeMemoryCard);
 
 /* ==========================================================================
    Wiring
@@ -3285,6 +3562,7 @@ el.create.addEventListener("click", primaryAction);
 el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.tabCreated.addEventListener("click", () => showTab("created"));
+el.tabMemcard.addEventListener("click", () => showTab("memcard"));
 // Drives are read again when the picker opens and when Create is shown, not on
 // window focus. A refresh on focus took the foreground back from a launcher
 // that had just opened on top of the wizard, so its arrow keys went here.
@@ -3669,6 +3947,25 @@ async function demoInvoke(command, args) {
       };
     case "update_cartridge":
       return { confPath: `${args.request.drivePath}/cartridge.conf`, warnings: [] };
+    case "memcard_games":
+      return args.drivePath.endsWith("CINDER")
+        ? [{ title: "Stardew Valley", executable: "steam://rungameid/413150",
+             saveWindows: "{appdata}/StardewValley/Saves", saveLinux: "{appdata}/StardewValley/Saves",
+             icon: "src/demo/cover.jpg", iconSource: "/run/media/harry/CINDER/.gamepak/card_0.png" }]
+        : [];
+    case "memory_card":
+      return { title: "Harry's Memory Card", cardOnly: true, blocks: [] };
+    case "lookup_save_location":
+      await new Promise((r) => setTimeout(r, 400));
+      return /hollow/i.test(args.title)
+        ? { windows: "{home}/AppData/LocalLow/Team Cherry/Hollow Knight",
+            linux: "{appdata}/unity3d/Team Cherry/Hollow Knight" }
+        : null;
+    case "pick_save_folder":
+      return { path: "/home/harry/.local/share/Tunic", template: "{localappdata}/Tunic" };
+    case "create_memory_card":
+      return args.request.games.filter((g) => !(g.save || g.saveWindows || g.saveLinux))
+        .map((g) => `${g.title} has no save folder, so it was left off.`);
     case "list_created":
       return demoShelf;
     case "forget_created":

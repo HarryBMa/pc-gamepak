@@ -133,7 +133,9 @@ fn changes(present: &[Mount], absent: &[Mount]) -> Vec<PathBuf> {
 /// the launcher reads one for a label and an icon, which is enough to show
 /// something useful.
 pub fn is_cartridge(root: &Path) -> bool {
-    root.join("cartridge.conf").is_file() || root.join("autorun.inf").is_file()
+    root.join("cartridge.conf").is_file()
+        || root.join("memorycard.conf").is_file()
+        || root.join("autorun.inf").is_file()
 }
 
 #[cfg(test)]
@@ -249,6 +251,10 @@ tmpfs /run tmpfs rw,nosuid,nodev 0 0
         let dir = std::env::temp_dir().join(format!("gamepak-mounts-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         assert!(!is_cartridge(&dir));
+
+        // A memory card opens the launcher too, which shows it as one.
+        std::fs::write(dir.join("memorycard.conf"), b"title=Card\n").unwrap();
+        assert!(is_cartridge(&dir));
 
         std::fs::write(dir.join("cartridge.conf"), b"title=X\n").unwrap();
         assert!(is_cartridge(&dir));

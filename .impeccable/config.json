@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "buried-raster",
+        "value": "*",
+        "files": [
+          "tauri-ui/app/index.html"
+        ],
+        "createdAt": "2026-09-27T08:51:49.29Z",
+        "reason": "Claude verified in critique 2026-09-27: #cover-img-b is the collection cross-fade layer, opacity 0 until .is-crossfaded and display:none while it has no src"
+      }
+    ]
+  }
+}

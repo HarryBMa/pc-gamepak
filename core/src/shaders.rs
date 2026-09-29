@@ -441,7 +441,7 @@ mod tests {
         std::fs::write(carried.join("fozpipelinesv6"), b"compiled pipelines").expect("cache");
 
         // Stand in for what `slots` would find, since Steam is not installed here.
-        let found = slot_for(&cart, "367520", &[steam.clone()]);
+        let found = slot_for(&cart, "367520", std::slice::from_ref(&steam));
         assert_eq!(plan(&found), Move::Pull);
         assert_eq!(
             found.host_path,
@@ -501,7 +501,7 @@ mod tests {
         std::fs::create_dir_all(&host).expect("mkdir");
         std::fs::write(host.join("fozpipelinesv6"), b"warmed here").expect("cache");
 
-        let found = slot_for(&cart, "367520", &[steam.clone()]);
+        let found = slot_for(&cart, "367520", std::slice::from_ref(&steam));
         assert_eq!(plan(&found), Move::Push);
         // An insert leaves it exactly where it is.
         assert!(!cartridge_path(&cart, "367520").exists());

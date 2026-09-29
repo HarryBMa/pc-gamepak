@@ -29,6 +29,7 @@
  */
 
 import { connect as connectGamepad } from "./gamepad.js";
+import { createMemoryCard } from "./memcard.js";
 
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke ?? demoInvoke;
@@ -36,6 +37,8 @@ const invoke = tauri?.core?.invoke ?? demoInvoke;
 const el = {
   card: document.getElementById("card"),
   unbox: document.getElementById("unbox"),
+  memcardButton: document.getElementById("btn-memcard"),
+  sheetKeys: document.getElementById("sheet-keys"),
   face: document.getElementById("face"),
   slot: document.getElementById("slot"),
   slotLabel: document.getElementById("slot-label"),
@@ -60,7 +63,6 @@ const el = {
   openWizard: document.getElementById("btn-open-wizard"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
-  sheetBack: document.getElementById("btn-sheet-back"),
   sheetThumb: document.getElementById("sheet-thumb"),
   sheetTitle: document.getElementById("sheet-title"),
   sheetSub: document.getElementById("sheet-sub"),
@@ -525,7 +527,11 @@ async function renderHealth() {
         label: "Link",
         value,
         unit,
-        note: health.transport || undefined,
+        // The protocol's name means nothing to a player; what it costs does.
+        note:
+          { UASP: "Fast mode (UASP)", BOT: "Slow mode (BOT)" }[health.transport] ||
+          health.transport ||
+          undefined,
         icon: slow ? "warn" : "info",
         advisory: advisoryForLink(health),
       }),
@@ -997,7 +1003,9 @@ function renderRail(list) {
     meta.className = "game-row__meta";
     // Only a game whose files are actually on the cartridge has a size worth
     // printing; a key that points at an installed copy takes no room.
-    meta.textContent = game.sizeBytes ? formatBytes(game.sizeBytes) : "";
+    // Left empty in the stock look: the size does not help choose what to
+    // play. The element stays, and the row keeps data-size, for skins.
+    meta.textContent = "";
     body.append(titleEl, meta);
 
     const dot = document.createElement("span");
@@ -1137,6 +1145,21 @@ async function init() {
     await showWindow();
     return;
   }
+  memcardDrive = drivePath;
+
+  // A memory card carries saves and no game, so the card is the whole window.
+  let card = null;
+  try {
+    card = await invoke("memory_card", { drivePath });
+  } catch (error) {
+    debugLog(`memory card: ${error}`);
+  }
+  if (card?.cardOnly) {
+    el.card.classList.add("is-memcard-only");
+    await memcard.show(drivePath, closeWindow);
+    await showWindow();
+    return;
+  }
 
   try {
     cartridge = await invoke("parse_cartridge", { drivePath });
@@ -1170,6 +1193,9 @@ async function init() {
     el.cartMark.hidden = false;
   }
   renderIdentity(cartridge);
+  // A combo drive: the same saves, as a memory card, one button away.
+  el.memcardButton.hidden = !cartridge.memory_card;
+  renderKeys();
   try {
     played = (await invoke("cartridge_stats", { drivePath }))?.games ?? {};
   } catch (error) {
@@ -1219,6 +1245,14 @@ async function init() {
   // starts on Play.
 }
 
+/** The shortcuts, said once in the details sheet, for this kind of cartridge. */
+function renderKeys() {
+  const keys = ["Enter play", "E eject", "I details"];
+  if (isCollection()) keys.splice(1, 0, "1–9 pick and play");
+  if (!el.memcardButton.hidden) keys.push("M memory card");
+  el.sheetKeys.textContent = `Keys: ${keys.join(" · ")}`;
+}
+
 /** What the cartridge remembers, keyed as the stats file keys it. */
 let played = {};
 /** One line about the saves, once they have been looked at. */
@@ -1227,7 +1261,6 @@ let saveNote = "";
 function renderSpecs(info) {
   el.specs.replaceChildren();
   const list = info.games ?? [];
-  if (list.length > 1) specRow(el.specs, "Games", String(list.length));
   renderBeat(currentGame() ?? info);
   renderPlayed(info);
   if (saveNote) specRow(el.specs, "Saves", saveNote);
@@ -1254,17 +1287,6 @@ function renderPlayed(info) {
     const where = entry.lastHost ? ` on ${entry.lastHost}` : "";
     specRow(el.specs, "Last played", `${since(entry.lastPlayed)}${where}`, true);
   }
-
-  // The last few sittings, newest first: when, how long, and where.
-  const recent = [...(entry.sessions ?? [])].reverse().slice(0, 3);
-  recent.forEach((session, index) => {
-    const when = new Date(session.started * 1000).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-    const where = session.host ? ` · ${session.host}` : "";
-    specRow(el.specs, index === 0 ? "Recent" : "", `${when} · ${duration(session.seconds)}${where}`, true);
-  });
 }
 
 /** HowLongToBeat's figures, when the cartridge was written with them. */
@@ -1625,7 +1647,9 @@ async function doEject() {
     // which is the whole message, so the toast stops repeating it.
     dismissToast();
     showSlot(outcome.message || "Safe to remove", null);
-    setTimeout(closeWindow, SEAT_MS + 800);
+    // Long enough to be read by someone across the room reaching for the
+    // drive: the words are the confirmation, not the animation.
+    setTimeout(closeWindow, SEAT_MS + 2600);
   } catch (error) {
     toast(String(error), true);
     setBusy(false);
@@ -1669,25 +1693,84 @@ invoke("debug_logging")
     debugPending = [];
   });
 
-/** A pad button during the unboxing skips it, like a key does. */
-const unlessUnboxing = (action) => (...args) => (unboxing ? unboxing() : action(...args));
+/* ==========================================================================
+   Memory card
+   ========================================================================== */
+
+/** The drive this window is for, once init has it. */
+let memcardDrive = "";
+
+const memcard = createMemoryCard({ invoke, toast, formatBytes, duration, since });
+
+/** On a combo drive, swap between the cartridge and its memory card. */
+async function toggleMemoryCard() {
+  if (memcard.open) {
+    memcard.hide();
+    return;
+  }
+  if (el.memcardButton.hidden || !memcardDrive) return;
+  try {
+    await memcard.show(memcardDrive, () => memcard.hide(), { back: true });
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+el.memcardButton.addEventListener("click", toggleMemoryCard);
+
+// While the card is open its keys are its own: Enter copies a save rather than
+// pressing Play on the cartridge underneath.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (unboxing || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (memcard.open) {
+      if (memcard.key(event)) event.stopImmediatePropagation();
+      return;
+    }
+    if ((event.key === "m" || event.key === "M") && !el.memcardButton.hidden) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void toggleMemoryCard();
+    }
+  },
+  { capture: true },
+);
+
+/**
+ * Where a pad button goes: skipping the unboxing, then the memory card if it
+ * is open, then the launcher.
+ */
+const route = (action, onCard) => (...args) => {
+  if (unboxing) return unboxing();
+  if (memcard.open) return onCard?.(...args);
+  return action(...args);
+};
 
 const gamepad = connectGamepad({
-  play: unlessUnboxing(doPlay),
-  eject: unlessUnboxing(doEject),
-  details: unlessUnboxing(() => toggleSheet()),
-  move: unlessUnboxing((x, y) => move(x, y)),
+  play: route(doPlay, memcard.pad.primary),
+  // X ejects the cartridge and does nothing on the card: a button that ejects
+  // on one screen must not delete on the next. Delete is Y there, pressed twice.
+  eject: route(doEject, () => {}),
+  details: route(() => toggleSheet(), memcard.pad.remove),
+  // View opens and closes the memory card on a combo drive.
+  card: route(
+    () => void toggleMemoryCard(),
+    () => {
+      if (!el.memcardButton.hidden) void toggleMemoryCard();
+    },
+  ),
+  move: route((x, y) => move(x, y), memcard.pad.move),
   log: debugLog,
-  back: unlessUnboxing(() => {
+  back: route(() => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
     else closeWindow();
-  }),
+  }, memcard.pad.back),
 });
 
 el.close.addEventListener("click", closeWindow);
 el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
-el.sheetBack.addEventListener("click", () => toggleSheet(false));
 el.pathsToggle.addEventListener("click", () => togglePaths());
 // One way through to the wizard, which is where both making a cartridge and
 // changing a setting happen. Two links here asked the reader to know which of
@@ -1801,6 +1884,34 @@ async function demoSkinCss() {
   }
 }
 
+/** The preview's memory card: one save in every state worth drawing. */
+const demoBlocks = (() => {
+  const now = Math.floor(Date.now() / 1000);
+  const block = (id, title, icon, direction, hostBytes, cartridgeBytes, seconds, ago) => ({
+    slot: { id, label: title, template: `{appdata}/${id}`, mode: "copy" },
+    hostPath: direction === "unusable" ? "" : `C:\\Users\\you\\AppData\\Roaming\\${id}`,
+    direction,
+    hostNewest: now - ago,
+    cartridgeNewest: now - ago - 3600,
+    hostBytes,
+    cartridgeBytes,
+    lastSync: 0,
+    detail: direction === "unusable" ? "This PC has no folder for it" : "",
+    title,
+    icon,
+    seconds,
+    launches: 3,
+  });
+  return [
+    block("stardew", "Stardew Valley", "src/demo/cover.jpg", "inSync", 2_400_000, 2_400_000, 187_200, 86_400 * 2),
+    block("gow", "God of War", "src/demo/gow-1.jpg", "pull", 31_000_000, 33_500_000, 47_520, 86_400),
+    block("ragnarok", "God of War Ragnarök", "src/demo/gow-2.jpg", "push", 41_000_000, 38_000_000, 21_000, 3_600),
+    block("tunic", "Tunic", "", "conflict", 800_000, 810_000, 9_000, 86_400 * 6),
+    block("bluey", "Bluey: The Videogame", "src/demo/gow-collection.jpg", "pull", 0, 120_000, 3_600, 86_400 * 12),
+    block("celeste", "Celeste", "", "unusable", 0, 96_000, 0, 86_400 * 30),
+  ];
+})();
+
 async function demoInvoke(command, args) {
   const state = new URLSearchParams(location.search).get("state");
   switch (command) {
@@ -1856,6 +1967,7 @@ async function demoInvoke(command, args) {
         is_bundle: false,
         holds_game: true,
         games: [],
+        memory_card: new URLSearchParams(location.search).has("combo"),
       };
     case "can_eject":
       // A cartridge on a fixed path has no drive to unmount, so the button
@@ -1903,6 +2015,26 @@ async function demoInvoke(command, args) {
       return [];
     case "shader_slots":
       return [];
+    // `?state=memcard` is a memory card; `&combo` makes a cartridge one too.
+    case "memory_card":
+      return {
+        title: state === "memcard" ? "Harry's Memory Card" : "Cinder & Salt",
+        cardOnly: state === "memcard",
+        blocks: demoBlocks,
+      };
+    case "memcard_copy": {
+      const block = demoBlocks.find((b) => b.slot.id === args.slotId);
+      if (block) Object.assign(block, { direction: "inSync", hostBytes: block.cartridgeBytes || block.hostBytes, cartridgeBytes: block.cartridgeBytes || block.hostBytes });
+      return { backup: "kept" };
+    }
+    case "memcard_reveal":
+      console.log("[preview] open save folder", args.slotId);
+      return null;
+    case "memcard_remove": {
+      const block = demoBlocks.find((b) => b.slot.id === args.slotId);
+      if (block) Object.assign(block, { cartridgeBytes: 0, direction: block.hostBytes ? "push" : "empty" });
+      return null;
+    }
     case "save_slots":
       return [
         {

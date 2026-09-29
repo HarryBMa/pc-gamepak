@@ -153,7 +153,7 @@ A row in `#game-list`, built at runtime:
 │                                 holding the game's initials when it has no picture
 ├── .game-row__body
 │   ├── .game-row__title
-│   └── .game-row__meta           size, only for a game whose files are on the cartridge
+│   └── .game-row__meta           empty in the stock look; the row's data-size carries the band
 └── .game-row__dot                lit for the selected row
 ```
 

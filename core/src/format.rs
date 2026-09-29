@@ -205,10 +205,21 @@ impl Filesystem {
         )
     }
 
-    /// Can Windows' own Format-Volume make it?
-    #[cfg_attr(not(windows), allow(dead_code))]
+    /// Can Windows' own Format-Volume make it? Only the two it has built in:
+    /// btrfs needs WinBtrfs, and Format-Volume refuses it without.
     pub fn windows_can_create(self) -> bool {
-        matches!(self, Self::Exfat | Self::Ntfs | Self::Btrfs)
+        matches!(self, Self::Exfat | Self::Ntfs)
+    }
+
+    /// Can this machine make it: Format-Volume on Windows, mkfs elsewhere.
+    /// Checking for `mkfs.*` on Windows found none, and left NTFS selectable
+    /// only by accident.
+    pub fn creatable_here(self) -> bool {
+        if cfg!(windows) {
+            self.windows_can_create()
+        } else {
+            crate::proc::tool_exists(self.mkfs_tool())
+        }
     }
 
     fn summary(self) -> &'static str {
@@ -260,7 +271,7 @@ impl Filesystem {
             native_on: self.native_on(),
             needs: self.needs(),
             runs_proton: self.runs_proton(),
-            can_create_here: crate::proc::tool_exists(self.mkfs_tool()),
+            can_create_here: self.creatable_here(),
         }
     }
 }

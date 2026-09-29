@@ -50,8 +50,8 @@ echo "mounted at: $MOUNT_POINT"
 
 # Only cartridges get a launcher. Without this every USB stick would pop a
 # window.
-if [ ! -f "$MOUNT_POINT/cartridge.conf" ] && [ ! -f "$MOUNT_POINT/autorun.inf" ]; then
-    echo "no cartridge.conf or autorun.inf at the root; not a cartridge"
+if [ ! -f "$MOUNT_POINT/cartridge.conf" ] && [ ! -f "$MOUNT_POINT/memorycard.conf" ] && [ ! -f "$MOUNT_POINT/autorun.inf" ]; then
+    echo "no cartridge.conf, memorycard.conf or autorun.inf at the root; not a cartridge"
     exit 0
 fi
 

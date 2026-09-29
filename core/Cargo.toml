@@ -53,4 +53,9 @@ windows-sys = { version = "0.52", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_SystemInformation",
     "Win32_UI_Input_XboxController",
+    # Ejecting, moved here from the launcher: CM_Request_Device_Eject and the
+    # SetupDi walk from a disk number to its device node, and ShellExecuteExW
+    # for the elevated retry (its info struct carries an HKEY, hence Registry).
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_System_Registry",
 ] }

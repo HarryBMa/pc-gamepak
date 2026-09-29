@@ -81,6 +81,18 @@
           <span>Created</span>
           <span id="created-count" class="side-tab__count mono" hidden></span>
         </button>
+        <button id="tab-memcard" class="side-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-memcard" tabindex="-1">
+          <!-- A memory card: notched top, contacts along it. -->
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
+               aria-hidden="true">
+            <path d="M5 2.5h7.5L15 5v12.5H5z" />
+            <path d="M7.5 2.5v3M10 2.5v3M12.5 2.5v3" />
+            <path d="M7.5 12h5" />
+          </svg>
+          <span>Memory card</span>
+        </button>
       </nav>
 
       <!-- ============================================================
@@ -165,6 +177,12 @@
                 <label class="toggle__main">
                   <input id="opt-eject" type="checkbox" role="switch" />
                   <span class="toggle__label">Eject when done</span>
+                </label>
+              </div>
+              <div class="toggle">
+                <label class="toggle__main">
+                  <input id="opt-memcard" type="checkbox" role="switch" />
+                  <span class="toggle__label">Combo drive: a memory card too</span>
                 </label>
               </div>
               <div class="toggle toggle--danger" id="opt-format-row">
@@ -277,7 +295,7 @@
         <!-- Writing — the same window, running (7b) ------------------ -->
         <section id="step-running" class="phase" hidden aria-labelledby="running-title">
           <p id="running-phase" class="group"></p>
-          <h1 id="running-title">Starting…</h1>
+          <h2 id="running-title">Starting…</h2>
 
           <div id="running-figures">
             <div>
@@ -349,6 +367,18 @@
                      autocomplete="off" aria-label="Cartridge name" />
             </div>
 
+            <div class="build-group">
+              <p class="build-label">Options</p>
+              <div class="toggles">
+                <div class="toggle">
+                  <label class="toggle__main">
+                    <input id="edit-memcard" type="checkbox" role="switch" />
+                    <span class="toggle__label">Combo drive: a memory card too</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <!-- The same three slots Create has, for the same three files. A
                  cartridge's artwork does not change meaning because it already
                  exists. -->
@@ -399,6 +429,39 @@
         </div>
 
         <!-- ============================================================
+             Memory card — a drive that carries saves, and no games
+             ============================================================ -->
+        <div id="panel-memcard" role="tabpanel" aria-labelledby="tab-memcard" hidden>
+          <div class="build-group">
+            <p class="build-label">Drive</p>
+            <select id="mcw-drive" class="mcw-select" aria-label="Drive"></select>
+            <p id="mcw-drive-note" class="hint"></p>
+          </div>
+
+          <div class="build-group">
+            <p class="build-label">Name</p>
+            <input id="mcw-name" type="text" class="field__input--lead"
+                   autocomplete="off" placeholder="Memory card" aria-label="Memory card name" />
+          </div>
+
+          <div class="build-group">
+            <p class="build-label">Saves on it</p>
+            <ul id="mcw-games" aria-label="Games whose saves it carries"></ul>
+            <p id="mcw-games-empty" class="hint">Add the games whose saves should travel with you.</p>
+            <input id="mcw-search" type="search" class="mcw-search" autocomplete="off"
+                   spellcheck="false" placeholder="Add a game…" aria-label="Add a game" />
+            <ul id="mcw-results" aria-label="Matching games"></ul>
+          </div>
+
+          <div class="mcw-foot">
+            <p id="mcw-status" class="hint" role="status" aria-live="polite"></p>
+            <button id="btn-mcw-write" class="btn btn--primary" type="button">
+              <span class="btn__label">Write memory card</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ============================================================
              Created — every cartridge written here, plugged in or not
              ============================================================ -->
         <div id="panel-created" role="tabpanel" aria-labelledby="tab-created" hidden>
@@ -444,7 +507,7 @@
           -->
           <div id="rail-launcher">
             <p class="field__label">The launcher</p>
-            <div id="rail-launcher-frame">
+            <div id="rail-launcher-frame" aria-hidden="true">
               <div id="rail-launcher-card">
                 <img id="rail-launcher-art" alt="" hidden />
                 <div id="rail-launcher-empty" aria-hidden="true"><span>No&nbsp;cover&nbsp;art</span></div>
@@ -452,7 +515,7 @@
                 <div id="rail-launcher-stage">
                   <p id="rail-launcher-eyebrow" class="mono" hidden></p>
                   <img id="rail-launcher-logo" alt="" hidden />
-                  <h4 id="rail-launcher-title">Nothing yet</h4>
+                  <p id="rail-launcher-title">Nothing yet</p>
                   <div id="rail-launcher-actions" aria-hidden="true">
                     <span id="rail-launcher-play">Play</span>
                     <span id="rail-launcher-eject">
@@ -619,6 +682,13 @@
                      placeholder="From steamgriddb.com → Preferences → API" />
             </label>
           </div>
+          <label class="opt">
+            <input id="set-ludusavi" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Look up where games keep their saves</span>
+              <span class="opt__hint">From Ludusavi's list, downloaded once (17 MB) and refreshed monthly.</span>
+            </span>
+          </label>
           <label class="opt">
             <input id="set-hltb" type="checkbox" />
             <span class="opt__body">
@@ -840,9 +910,9 @@
             <div id="preview-art" class="pv__frame">
               <img id="preview-grid" alt="" hidden />
               <div id="preview-empty" aria-hidden="true"><span>NO&nbsp;COVER</span></div>
-              <div id="preview-stage">
+              <div id="preview-stage" aria-hidden="true">
                 <img id="preview-logo" alt="" hidden />
-                <h3 id="preview-title">Nothing yet</h3>
+                <p id="preview-title">Nothing yet</p>
                 <div id="preview-actions" aria-hidden="true">
                   <span>Play</span>
                   <span>⏏</span>

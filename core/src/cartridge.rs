@@ -33,7 +33,7 @@ impl HowLong {
 }
 
 /// One game entry inside a multi-game bundle cartridge.
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct GameEntry {
     pub title: String,
     pub executable: String,
@@ -57,7 +57,7 @@ pub struct GameEntry {
     pub how_long: HowLong,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct CartridgeInfo {
     /// Display title of the game / collection.
     pub title: String,
@@ -114,6 +114,8 @@ pub struct CartridgeInfo {
     pub skin_css: String,
     /// A single game's HowLongToBeat figures. A collection's are per game.
     pub how_long: HowLong,
+    /// A combo drive, which the launcher can also show as a memory card.
+    pub memory_card: bool,
 }
 
 /// A stylesheet the cartridge carries, if it has one and it is not absurd.
@@ -340,6 +342,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 games,
                 skin_css: skin_css(root),
                 how_long: HowLong::default(),
+                memory_card: crate::memcard::is_combo_drive(root, &content),
             });
         }
 
@@ -389,6 +392,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             games: Vec::new(),
             skin_css: skin_css(root),
             how_long: HowLong::from_keys(ini.get("general")),
+            memory_card: crate::memcard::is_combo_drive(root, &content),
         });
     }
 
@@ -435,6 +439,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             skin_css: skin_css(root),
             how_long: HowLong::default(),
             games: Vec::new(),
+            memory_card: false,
         });
     }
 
@@ -461,7 +466,7 @@ pub fn resolve_cover(root: &Path, rel: &str) -> String {
 /// `cover=` comes out of a file on a volume someone else may have written, so
 /// `..\..\Users\me\.ssh\id_rsa` has to be rejected rather than read and handed
 /// to the webview.
-fn join_within(root: &Path, rel: &str) -> Option<PathBuf> {
+pub(crate) fn join_within(root: &Path, rel: &str) -> Option<PathBuf> {
     use std::path::Component;
 
     let candidate = Path::new(rel);

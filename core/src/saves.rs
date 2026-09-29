@@ -325,10 +325,48 @@ pub fn resolve_template(template: &str) -> Result<PathBuf, Unusable> {
 /// [`crate::cartridge::parse_ini`]: a game with two save locations writes two
 /// `save=` lines, and a map keeps one of them.
 pub fn declared(root: &Path) -> Vec<SaveSlot> {
-    let Ok(text) = std::fs::read_to_string(root.join("cartridge.conf")) else {
-        return Vec::new();
-    };
-    parse_declarations(&text)
+    // A memory card declares its saves the same way, in its own file, and a
+    // combo drive has both. Read as one text, so slot names stay unique across
+    // the two; the card's part starts in a section of its own, so nothing it
+    // declares is taken for the cartridge's last game.
+    let cartridge = std::fs::read_to_string(root.join("cartridge.conf")).unwrap_or_default();
+    let card = std::fs::read_to_string(root.join(crate::memcard::CONF)).unwrap_or_default();
+    if card.is_empty() {
+        return parse_declarations(&cartridge);
+    }
+    let mut slots = parse_declarations(&format!("{cartridge}\n[memorycard]\n{card}"));
+    // One folder declared in both files is one save, not two blocks that
+    // would sync over each other. The cartridge's own line comes first; keep it.
+    let mut seen = std::collections::HashSet::new();
+    slots.retain(|slot| seen.insert(slot.template.to_lowercase()));
+    slots
+}
+
+/// A save folder somebody pointed at, written the portable way.
+///
+/// The reverse of [`resolve_template`]: whichever token's directory holds the
+/// folder most closely wins, so `C:\Users\h\AppData\Roaming\Foo\Saves` is
+/// `{appdata}/Foo/Saves` rather than `{home}/AppData/Roaming/Foo/Saves`, which
+/// would only ever work on Windows. `None` for a folder outside every token —
+/// one inside a game's install folder, say — because there is no way to write
+/// that down that another machine would understand.
+pub fn template_from_path(path: &Path) -> Option<String> {
+    // Reversed because `max_by_key` keeps the last of equals, and on Windows
+    // three tokens share AppData\Roaming: `appdata`, listed first, should win.
+    let (token, base) = TOKENS
+        .iter()
+        .rev()
+        .filter_map(|token| Some((*token, token_path(token)?)))
+        .filter(|(_, base)| path.starts_with(base))
+        .max_by_key(|(_, base)| base.components().count())?;
+    let rest: Vec<String> = path
+        .strip_prefix(&base)
+        .ok()?
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    // The token's own directory is not a game's save folder.
+    (!rest.is_empty()).then(|| format!("{{{token}}}/{}", rest.join("/")))
 }
 
 /// The platform suffix this host answers to on a `save.<os>=` line.
@@ -1485,6 +1523,44 @@ mod tests {
 
     fn conf(scratch: &Scratch, body: &str) {
         scratch.write("cartridge.conf", body.as_bytes());
+    }
+
+    #[test]
+    fn a_picked_folder_is_written_the_portable_way() {
+        let scratch = Scratch::new("saves-template");
+        with_home(scratch.path(), || {
+            let home = scratch.path();
+            // The closest token wins over the home directory it sits in.
+            assert_eq!(
+                template_from_path(&home.join("Documents").join("My Games").join("Foo")),
+                Some("{documents}/My Games/Foo".to_string())
+            );
+            let appdata = token_path("appdata").unwrap();
+            assert_eq!(
+                template_from_path(&appdata.join("StardewValley").join("Saves")),
+                Some("{appdata}/StardewValley/Saves".to_string())
+            );
+            assert_eq!(
+                template_from_path(&home.join("Odd").join("Place")),
+                Some("{home}/Odd/Place".to_string())
+            );
+            // A token's own directory, or somewhere no token reaches, cannot be
+            // carried.
+            assert_eq!(template_from_path(home), None);
+            assert_eq!(template_from_path(Path::new("/nowhere/at/all")), None);
+        });
+    }
+
+    #[test]
+    fn a_memory_card_declares_its_saves_in_its_own_file() {
+        let scratch = Scratch::new("saves-memcard");
+        scratch.write(
+            crate::memcard::CONF,
+            b"title=Card\n\n[game]\ntitle=Stardew\nsave=Stardew|{appdata}/StardewValley/Saves\n",
+        );
+        let slots = declared(scratch.path());
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].label, "Stardew");
     }
 
     /// Say when a tree was last written, rather than sleeping until it is true.

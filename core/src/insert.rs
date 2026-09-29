@@ -258,6 +258,7 @@ mod tests {
             games: Vec::new(),
             skin_css: String::new(),
             how_long: Default::default(),
+            memory_card: false,
         }
     }
 

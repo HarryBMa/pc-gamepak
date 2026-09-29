@@ -76,6 +76,13 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   kept beside it. A game the cartridge *carries* needs none of that: one line
   gives it its whole home directory on the drive, and every save it writes goes
   there whether or not anyone knew where it would put them.
+- **Memory cards.** A drive with a `memorycard.conf` carries saves and no
+  games: plug it in and every save shows as a block, the way a console's memory
+  card browser showed them, with which copy is newer and a button to copy it
+  either way. The wizard makes one — it finds where each game saves from
+  [Ludusavi](https://github.com/mtkennerly/ludusavi-manifest)'s list if you
+  switch that on, or you point at the folder. A cartridge can be a *combo drive*
+  too, and keep its memory card one button away.
 - **Not an NFC project.** If you want to tap a card, a toy or a QR code to
   launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
   platforms and this does not do it at all.
@@ -175,7 +182,7 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 ## More
 
 [Installing on Linux](docs/INSTALL.md) · [The manual](docs/MANUAL.md) ·
-[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) ·
+[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) · [Tauri and Iced](docs/ICED.md) ·
 [Where the project is](docs/STATUS.md) · [What changed](CHANGELOG.md) ·
 [Contributing](CONTRIBUTING.md)
 

@@ -123,6 +123,9 @@ pub struct Settings {
     /// it is a network request to a site with no official API. See
     /// [`crate::hltb`].
     pub hltb_enabled: bool,
+    /// Look up where each game keeps its saves, from Ludusavi's manifest.
+    /// **Off**: it downloads a 17 MB file. See [`crate::ludusavi`].
+    pub ludusavi_enabled: bool,
 }
 
 impl Default for Settings {
@@ -152,6 +155,7 @@ impl Default for Settings {
             track_playtime: true,
             idle_pause_minutes: crate::playtrack::DEFAULT_IDLE_MINUTES,
             hltb_enabled: false,
+            ludusavi_enabled: false,
             frontends: crate::frontend::Frontends::default(),
             on_cartridge_insert: crate::insert::InsertAction::default(),
         }
@@ -280,6 +284,7 @@ mod tests {
             track_playtime: false,
             idle_pause_minutes: 3,
             hltb_enabled: true,
+            ludusavi_enabled: true,
             on_cartridge_insert: crate::insert::InsertAction::AutoLaunchGame,
             ..Settings::default()
         };

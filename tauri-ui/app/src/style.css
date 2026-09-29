@@ -64,13 +64,17 @@
   color: color-mix(in oklch, var(--accent) 8%, oklch(0.42 0 0));
 }
 
+/* "Safe to remove" is the last thing the window says, and it is said to
+   someone reaching for the drive across a room: it is the empty slot's
+   headline, not a caption. */
 #slot-label {
   margin: 0;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.22em;
+  font-size: 16px;
+  font-weight: 700;
+  font-stretch: 106%;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: color-mix(in oklch, var(--accent) 8%, oklch(0.5 0 0));
+  color: color-mix(in oklch, var(--accent) 10%, var(--ink-2));
 }
 
 #btn-insert {
@@ -353,15 +357,16 @@ body.is-gamepad #chrome-actions {
   display: none;
   place-items: center;
   position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
+  top: -6px;
+  right: -6px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--accent-ink);
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 8.5px;
+  font-size: var(--text-label);
   font-weight: 700;
 }
 
@@ -380,15 +385,36 @@ body.is-gamepad .pad-badge {
   padding: 0 20px 20px;
 }
 
-/* The cartridge's own name. Only a collection prints one — a single game
-   already says its name in the title. */
+/* The collection's own name, when it has no logo: in the corner the logo would
+   hold, printed on the case rather than stacked over the game's title, and big
+   enough to read from the couch. Fixed rather than absolute because #face is
+   always transformed, which makes it the containing block: the name stays on
+   the cartridge and rides out with it on Eject. Only a collection prints one —
+   a single game already says its name in the title. */
 #eyebrow {
-  margin: 0 0 9px;
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: oklch(0.66 0.008 75);
+  position: fixed;
+  top: 17px;
+  left: 20px;
+  z-index: 3;
+  max-width: 62%;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  font-stretch: 104%;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: var(--ink);
+  text-shadow: 0 1px 12px oklch(0 0 0 / 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 200ms linear;
+}
+
+/* The chrome appears on hover across the top; the name steps back, as the
+   logo mark does. */
+#card:hover #eyebrow {
+  opacity: 0.55;
 }
 
 #eyebrow[hidden] {
@@ -420,7 +446,7 @@ body.is-gamepad .pad-badge {
 #game-meta {
   margin: 9px 0 0;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-sm);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: oklch(0.7 0.008 75);
@@ -597,7 +623,7 @@ body.is-gamepad #play-ring:has(:focus) {
   position: relative;
   z-index: 1;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9.5px;
+  font-size: var(--text-label);
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1;
@@ -714,7 +740,7 @@ body.is-gamepad .btn__pad-icon {
   margin-top: 3px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: oklch(0.66 0.008 75);
 }
 
@@ -844,7 +870,7 @@ body.is-gamepad :focus {
   display: block;
   margin-top: 2px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: oklch(0.6 0.008 75);
@@ -888,7 +914,7 @@ body.is-gamepad :focus {
 .reading__label {
   margin: 0;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 8.5px;
+  font-size: var(--text-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: oklch(0.58 0.008 75);
@@ -916,7 +942,7 @@ body.is-gamepad :focus {
   align-items: center;
   gap: 6px;
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-sm);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: color-mix(in oklch, var(--accent) 80%, var(--ink));
@@ -1112,7 +1138,7 @@ body.is-gamepad :focus {
 
 #paths dt {
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 8.5px;
+  font-size: var(--text-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: oklch(0.56 0.008 75);
@@ -1137,32 +1163,7 @@ body.is-gamepad :focus {
 }
 
 /* The way out, and the only filled-width control on the sheet. */
-.sheet-back {
-  appearance: none;
-  width: 100%;
-  height: 46px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  font-stretch: 106%;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  border-radius: 7px;
-  border: 1px solid oklch(1 0 0 / 0.14);
-  background: transparent;
-  color: oklch(0.9 0.008 75);
-  cursor: pointer;
-  transition: border-color 200ms linear, color 200ms linear;
-}
 
-.sheet-back:hover,
-.sheet-back:focus-visible {
-  border-color: oklch(1 0 0 / 0.3);
-  color: oklch(0.99 0.006 75);
-}
 
 /* Settings are reached from nowhere else, so the link stays — quiet enough
    not to compete with the way back to the game. */
@@ -1193,7 +1194,8 @@ body.is-gamepad :focus {
 #toast {
   position: absolute;
   inset: auto 20px 92px;
-  z-index: 4;
+  /* Above the memory card view (15), whose errors it also carries. */
+  z-index: 20;
   margin: 0;
   font-size: var(--text);
   font-weight: 600;
@@ -1602,4 +1604,499 @@ body.is-gamepad :focus {
   to {
     opacity: 0;
   }
+}
+
+/* ==========================================================================
+   Memory card — every save on the drive, as a game case on a shelf
+   ==========================================================================
+   A mode of the launcher, in its language. The saves stand on one shelf,
+   turning slowly; choosing one pulls it off the shelf onto the stage below,
+   where it turns to its back cover and the details are printed there, with
+   the one button that does what it needs beside it. memcard.js drives every
+   angle and the spring. */
+
+#memcard {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  overflow: hidden;
+  color: var(--ink);
+  background: color-mix(in oklch, var(--accent) 4%, oklch(0.115 0 0));
+  animation: fade 240ms var(--ease) both;
+}
+
+.mc__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 0 22px;
+}
+
+#mc-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 800;
+  font-stretch: 104%;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#mc-close {
+  position: relative;
+  flex: none;
+}
+
+/* How full the card is. */
+.mc__capacity {
+  padding: 8px 22px 0;
+}
+
+.mc__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hairline-soft);
+  overflow: hidden;
+}
+
+.mc__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ink-2);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 400ms var(--ease);
+}
+
+.mc__cap {
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A save that asks for something: diamond when one side is newer, square
+   when both changed. Shape carries it as well as colour. */
+.lamp {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+
+.lamp[data-tone="warn"] {
+  background: oklch(0.82 0.15 80);
+  transform: rotate(45deg);
+}
+
+.lamp[data-tone="bad"] {
+  background: var(--danger);
+}
+
+/* --- The shelf: one row, scrolled sideways -------------------------------- */
+
+#mc-blocks {
+  list-style: none;
+  margin: 0;
+  padding: 18px 14px 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: 14px;
+}
+
+.mc__block {
+  flex: none;
+  width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  outline: none;
+}
+
+/* --- The case (shelf and stage share it; sizes are variables) ------------- */
+
+.mc__cube {
+  --w: 96px;
+  --h: 138px;
+  --d: 12px;
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  width: var(--w);
+  height: var(--h);
+  transform-style: preserve-3d;
+  transform: rotateX(-8deg);
+}
+
+.mc__face {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  backface-visibility: hidden;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.mc__face--front,
+.mc__face--back {
+  inset: 0;
+  border-radius: 2px;
+  background: var(--art, none) center / cover no-repeat,
+    color-mix(in oklch, var(--accent) 24%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--hairline-soft);
+}
+
+.mc__face--front {
+  transform: translateZ(calc(var(--d) / 2));
+}
+
+.mc__face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
+  filter: brightness(0.45);
+}
+
+.mc__face--left,
+.mc__face--right {
+  top: 0;
+  left: calc(50% - var(--d) / 2);
+  width: var(--d);
+  height: var(--h);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.mc__face--left {
+  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+}
+
+.mc__face--right {
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+  background: var(--sunk);
+}
+
+/* The spine, with the game's name running down it. */
+.mc__face--left span {
+  writing-mode: vertical-rl;
+  font-size: var(--text-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: var(--d);
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.mc__face--top,
+.mc__face--bottom {
+  top: calc(50% - var(--d) / 2);
+  left: 0;
+  width: var(--w);
+  height: var(--d);
+  background: var(--shell);
+}
+
+.mc__face--top {
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
+}
+
+.mc__face--bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+}
+
+/* On the shelf: the case in a slot with its shadow and reflection. */
+.mc__icon {
+  position: relative;
+  width: 112px;
+  height: 186px;
+  perspective: 900px;
+  opacity: 0.78;
+  transition: opacity 160ms linear;
+}
+
+.mc__block:hover .mc__icon {
+  opacity: 1;
+}
+
+.mc__shadow {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: 146px;
+  height: 10px;
+  border-radius: 50%;
+  background: oklch(0 0 0 / 0.55);
+  filter: blur(4px);
+}
+
+.mc__refl {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  width: 96px;
+  height: 138px;
+  transform: translateY(8px) scaleY(-0.3);
+  transform-origin: bottom;
+  pointer-events: none;
+}
+
+.mc__refl-plane {
+  position: absolute;
+  inset: 0;
+  background: var(--art, none) center / cover no-repeat,
+    color-mix(in oklch, var(--accent) 24%, var(--panel));
+  opacity: 0.2;
+  -webkit-mask-image: linear-gradient(to top, #000, transparent 75%);
+  mask-image: linear-gradient(to top, #000, transparent 75%);
+}
+
+/* The chosen case stays on the shelf, ringed in the accent, so the one on
+   the stage is plainly the same save. */
+.mc__block[aria-selected="true"] .mc__icon::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 104px;
+  height: 146px;
+  border-radius: 5px;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+.mc__block:focus-visible .mc__icon {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mc__label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.mc__block[aria-selected="true"] .mc__label {
+  color: var(--ink);
+}
+
+.mc__size {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc__empty {
+  align-self: center;
+  justify-self: center;
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--ink-2);
+}
+
+/* --- The stage: the pulled case, and what to do with it ------------------ */
+
+.mc__info {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 20px 18px 24px;
+  border-top: 1px solid var(--hairline-soft);
+}
+
+#memcard:not(.has-block) .mc__info {
+  display: none;
+}
+
+.mc__stage {
+  width: 168px;
+  height: 232px;
+  display: grid;
+  place-items: center;
+  perspective: 1100px;
+}
+
+.mc__hero {
+  position: relative;
+  width: 150px;
+  height: 216px;
+  cursor: pointer;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.mc__hero .mc__cube {
+  --w: 150px;
+  --h: 216px;
+  --d: 18px;
+  top: 0;
+  left: 0;
+}
+
+/* The back cover faces you on the stage, so it is not darkened like a back;
+   the art sits dim behind the printed details. */
+.mc__hero .mc__face--back {
+  filter: none;
+  background: linear-gradient(oklch(0.11 0.004 65 / 0.8), oklch(0.11 0.004 65 / 0.92)),
+    var(--art, none) center / cover no-repeat,
+    var(--panel);
+  place-items: stretch;
+}
+
+.mc__hero .mc__face--front {
+  box-shadow:
+    inset 0 0 0 1px var(--hairline-soft),
+    0 20px 32px -18px oklch(0 0 0 / 0.9);
+}
+
+.mc__hero .mc__face--left span {
+  font-size: var(--text-sm);
+}
+
+.mc__back {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 14px;
+  text-align: left;
+}
+
+.mc__back-title {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.mc__back-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.mc__back-row {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mc__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mc__actions:not(:has(.btn:not([hidden]))) {
+  display: none;
+}
+
+.mc__actions .btn {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+}
+
+.mc__more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.mc__link {
+  appearance: none;
+  position: relative;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mc__link:hover,
+.mc__link:focus-visible {
+  color: var(--ink);
+}
+
+.mc__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mc__delete:hover,
+.mc__delete.is-armed {
+  color: var(--danger);
+}
+
+/* Pad badges sit on the corner of whatever they press. */
+.mc__actions .pad-badge,
+#mc-close .pad-badge {
+  top: -7px;
+  right: -7px;
+}
+
+.mc__link .pad-badge {
+  top: -8px;
+  right: -20px;
+}
+
+/* A presses the suggested copy; when both are offered it presses neither. */
+.mc__actions .btn:not(.is-suggested) .pad-badge {
+  display: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+/* The shortcuts, said once, where someone looking for more will look. */
+.sheet-keys {
+  margin: 14px 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-2);
 }

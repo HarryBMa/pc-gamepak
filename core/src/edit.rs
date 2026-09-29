@@ -45,6 +45,8 @@ pub struct Editable {
     /// True when the games live on the cartridge, which is what makes removing
     /// one from the list worth a warning.
     pub holds_game: bool,
+    /// A combo drive: shown as a memory card too.
+    pub memory_card: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -91,6 +93,9 @@ pub struct UpdateRequest {
     /// the launcher's corner; `logo_source` absent only ever keeps it.
     #[serde(default)]
     pub remove_logo: bool,
+    /// Make it a combo drive, or stop it being one. Absent keeps what it was.
+    #[serde(default)]
+    pub memory_card: Option<bool>,
     /// Which game the drive icon is made from, as an index into `games`.
     /// Absent keeps the old rule: the icon slot, else the cover.
     #[serde(default)]
@@ -179,6 +184,7 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         background_path: info.background_path,
         is_bundle: info.is_bundle,
         holds_game: info.holds_game,
+        memory_card: info.memory_card,
         games,
     }
 }
@@ -232,6 +238,7 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
             games,
             primary_game: None,
             remove_logo: false,
+            memory_card: None,
         },
     )?;
 
@@ -473,9 +480,29 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     // this editor can write one, so a rewrite would drop the lines somebody
     // typed in by hand and orphan the saves already on the drive.
     let conf_path = root.join("cartridge.conf");
-    let conf = match std::fs::read_to_string(&conf_path) {
-        Ok(previous) => crate::saves::preserve(&previous, &conf),
-        Err(_) => conf,
+    let previous = std::fs::read_to_string(&conf_path).ok();
+    let conf = match &previous {
+        Some(previous) => crate::saves::preserve(previous, &conf),
+        None => conf,
+    };
+    // Combo drive: as asked, else as it was. The render above starts from
+    // nothing, so without this a rename quietly turned a combo back into a
+    // plain cartridge.
+    let combo = request
+        .memory_card
+        .unwrap_or_else(|| previous.as_deref().is_some_and(crate::memcard::is_combo));
+    let turned_on = combo && !previous.as_deref().is_some_and(crate::memcard::is_combo);
+    let conf = if turned_on {
+        // Newly a combo: its games go onto its card, the way Create does it.
+        let games: Vec<(&str, &str, Option<&str>)> = entries
+            .iter()
+            .map(|game| (game.title.as_str(), game.executable.as_str(), None))
+            .collect();
+        crate::create::with_memory_card(conf, true, root, &games, &mut |_| {}, &mut warnings)
+    } else if combo {
+        format!("memory_card=yes\n{conf}")
+    } else {
+        conf
     };
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
@@ -603,6 +630,7 @@ mod tests {
                 .collect(),
             primary_game: None,
             remove_logo: false,
+            memory_card: None,
         }
     }
 
@@ -640,6 +668,30 @@ mod tests {
         // The picture was not touched, and the conf still points at it.
         assert!(conf.contains("cover=cover.jpg"), "{conf}");
         assert!(scratch.join("cover.jpg").is_file());
+    }
+
+    #[test]
+    fn a_combo_drive_stays_one_until_asked() {
+        let scratch = Scratch::new("edit-combo");
+        scratch.write(
+            "cartridge.conf",
+            b"memory_card=yes\ntitle=Stardew\nexecutable=steam://rungameid/413150\n",
+        );
+        let games = [("Stardew", "steam://rungameid/413150")];
+
+        update_at(scratch.path(), &request("Stardew Valley", &games)).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(
+            crate::memcard::is_combo(&conf),
+            "a rename dropped it: {conf}"
+        );
+        assert!(read(&scratch.path().to_string_lossy()).unwrap().memory_card);
+
+        let mut req = request("Stardew Valley", &games);
+        req.memory_card = Some(false);
+        update_at(scratch.path(), &req).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(!crate::memcard::is_combo(&conf), "{conf}");
     }
 
     #[test]
