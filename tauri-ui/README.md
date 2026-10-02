@@ -111,20 +111,22 @@ WinBtrfs on Windows.
 ## Icon
 
 `src-tauri/icons/` is generated, not hand-drawn, from the logo sheet
-`docs/pc-gamepak-logo_0004_Lager-1.png`:
+`docs/pc-gamepak-logo-hires.png`, the logo export upscaled 4x:
 
-- the **red cartridge** is the app — the launcher, its taskbar button, and the
+- the **striped badge** is the app (`--app badge`) — the launcher, its taskbar button, and the
   watcher's notification-area icon, which embeds the same `icon.ico`
-- the **striped badge** is the wizard's window (`wizard.rgba`), so the two
+- the **red cartridge** is the wizard's window (`wizard.ico`), so the two
   windows of one executable look different in the taskbar
 
-Each is cut out by its own transparency, cleaned of stray pixels, centred on
-a square and shrunk in halving steps. `logo-cartridge.png` and `logo-badge.png`
-are the cut-outs. The source is about 250px tall, so the 512px `icon.png` is
-upscaled; a larger export of the sheet is the fix. Regenerate with:
+The upscale's soft, white-tinted edges are cleaned first; then each picture
+is cut out by its own transparency, centred on a square and shrunk in halving
+steps to every size from 16 to 512. `logo-cartridge.png` and `logo-badge.png`
+are the cleaned cut-outs. Each window is given its icons at its own DPI from
+the `.ico` entry made for that size — Tauri on its own sets only the small
+one, which left the taskbar stretching a 16px picture. Regenerate with:
 
 ```bash
-node tools/make-icons.mjs
+node tools/make-icons.mjs --app badge
 ```
 
 There is no `.icns`, so `bundle.targets` lists the Windows and Linux bundles

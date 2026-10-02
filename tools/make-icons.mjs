@@ -17,7 +17,7 @@
  * legible where one big jump would alias. The cleaned cut-outs are kept beside
  * the icons as the sources.
  *
- *   node tools/make-icons.mjs              the cartridge is the app
+*   node tools/make-icons.mjs --app badge  what this project uses
  *   node tools/make-icons.mjs --app badge  the badge is
  *
  * Needs `playwright` or `playwright-core` and a Chromium-family browser (Edge
@@ -42,10 +42,12 @@ const PNGS = [
   ["Square150x150Logo.png", 150],
   ["Square44x44Logo.png", 44],
 ];
-const ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256];
-// The wizard's window icon, as raw RGBA: Tauri takes that without the
-// image-png feature, which `tauri build` would otherwise have to keep enabled.
-const WIZARD_SIZE = 64;
+// Largest first: Tauri builds its default window icon from the .ico's first
+// entry alone, and Windows picks the best size whatever the order.
+const ICO_SIZES = [256, 128, 96, 64, 48, 40, 32, 24, 20, 16];
+// The wizard's window icon. Large, because Windows is asked for it at the
+// window's DPI and shrinks it: 48 px for a taskbar at 150%.
+const WIZARD_SIZE = 256;
 
 let chromium;
 try {
@@ -164,8 +166,9 @@ const render = await tab.evaluate(
     const [app, wizard] = sizes.appIsBadge ? [badge, cartridge] : [cartridge, badge];
     const result = { app: {}, cutouts: {} };
     for (const size of sizes.app) result.app[size] = toBase64(square(app, size, fillFor(size)));
-    const w = square(wizard, sizes.wizard, 1);
-    result.wizard = Array.from(w.getContext("2d").getImageData(0, 0, sizes.wizard, sizes.wizard).data);
+    result.wizard = toBase64(square(wizard, sizes.wizard, 1));
+    result.wizardIco = {};
+    for (const size of sizes.ico) result.wizardIco[size] = toBase64(square(wizard, size, fillFor(size)));
     for (const [name, box] of [["cartridge", cartridge], ["badge", badge]]) {
       const c = canvas(box.w, box.h);
       c.getContext("2d").drawImage(src, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
@@ -180,6 +183,7 @@ const render = await tab.evaluate(
       app: [...new Set([...PNGS.map(([, s]) => s), ...ICO_SIZES])],
       wizard: WIZARD_SIZE,
       appIsBadge: APP === "badge",
+      ico: ICO_SIZES,
     },
   },
 );
@@ -194,7 +198,8 @@ for (const [name, size] of PNGS) {
 
 // Multi-resolution .ico. Each entry stores a PNG verbatim, which Windows has
 // accepted since Vista and keeps the file small at 256px.
-const entries = ICO_SIZES.map((size) => ({ size, data: png(size) }));
+function icoOf(pngFor) {
+const entries = ICO_SIZES.map((size) => ({ size, data: pngFor(size) }));
 const header = Buffer.alloc(6 + entries.length * 16);
 header.writeUInt16LE(0, 0);
 header.writeUInt16LE(1, 2); // type: icon
@@ -210,12 +215,15 @@ entries.forEach((entry, i) => {
   header.writeUInt32LE(offset, at + 12);
   offset += entry.data.length;
 });
-const ico = Buffer.concat([header, ...entries.map((e) => e.data)]);
+return Buffer.concat([header, ...entries.map((e) => e.data)]);
+}
+const ico = icoOf(png);
 await fs.writeFile(path.join(ICONS, "icon.ico"), ico);
+await fs.writeFile(path.join(ICONS, "wizard.ico"), icoOf((size) => Buffer.from(render.wizardIco[size], "base64")));
 console.log(`${"icon.ico".padEnd(24)} ${ICO_SIZES.join(", ")} (${(ico.length / 1024).toFixed(0)} KB)`);
 
-await fs.writeFile(path.join(ICONS, "wizard.rgba"), Buffer.from(render.wizard));
-console.log(`${"wizard.rgba".padEnd(24)} ${WIZARD_SIZE}x${WIZARD_SIZE} raw RGBA, the wizard's window`);
+await fs.writeFile(path.join(ICONS, "wizard.png"), Buffer.from(render.wizard, "base64"));
+console.log(`${"wizard.ico, wizard.png".padEnd(24)} the wizard's window`);
 
 for (const [name, data] of Object.entries(render.cutouts)) {
   await fs.writeFile(path.join(ICONS, `logo-${name}.png`), Buffer.from(data, "base64"));

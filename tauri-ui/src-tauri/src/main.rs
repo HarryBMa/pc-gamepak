@@ -119,9 +119,69 @@ fn opens_memory_card() -> bool {
     std::env::args().any(|arg| arg == "--memcard")
 }
 
-/// The wizard's window icon, as `tools/make-icons.mjs` writes it: raw RGBA.
-const WIZARD_ICON: &[u8] = include_bytes!("../icons/wizard.rgba");
-const WIZARD_ICON_SIZE: u32 = 64;
+/// Each window's icons, as `tools/make-icons.mjs` writes them: every size from
+/// 16 to 256 px, each shrunk from the artwork in steps. The wizard's is the
+/// other logo: the launcher and the wizard are one executable, and their
+/// taskbar buttons should not look the same.
+const LAUNCHER_ICON: &[u8] = include_bytes!("../icons/icon.ico");
+const WIZARD_ICON: &[u8] = include_bytes!("../icons/wizard.ico");
+
+/// The picture in an `.ico` made for `size`, or the nearest larger one: the
+/// generator's shrink is cleaner than Windows' at small sizes.
+fn ico_entry(ico: &[u8], size: u32) -> Option<&[u8]> {
+    let count = u16::from_le_bytes(ico.get(4..6)?.try_into().ok()?) as usize;
+    let mut best: Option<(u32, &[u8])> = None;
+    for i in 0..count {
+        let entry = ico.get(6 + i * 16..6 + i * 16 + 16)?;
+        let width = if entry[0] == 0 { 256 } else { u32::from(entry[0]) };
+        let len = u32::from_le_bytes(entry[8..12].try_into().ok()?) as usize;
+        let at = u32::from_le_bytes(entry[12..16].try_into().ok()?) as usize;
+        let data = ico.get(at..at + len)?;
+        let better = match best {
+            None => true,
+            Some((have, _)) if have < size => width > have,
+            Some((have, _)) => width >= size && width < have,
+        };
+        if better {
+            best = Some((width, data));
+        }
+    }
+    best.map(|(_, data)| data)
+}
+
+/// Give a window both of its icons, at the size its screen wants.
+///
+/// Windows keeps two per window: a small one for the title bar and Alt-Tab,
+/// and a big one for the taskbar. Tauri sets only the small one, made from the
+/// first picture in `icon.ico`, so the taskbar showed a stretched 16 px icon
+/// for the launcher and nothing at all for the wizard. Both are set here at the
+/// window's DPI — 16 and 32 px at 100%, 24 and 48 at 150% — from the `.ico`
+/// entry made for that size.
+#[cfg(target_os = "windows")]
+fn set_window_icons(window: &tauri::WebviewWindow, ico: &[u8]) {
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateIconFromResourceEx, SendMessageW, ICON_BIG, ICON_SMALL, LR_DEFAULTCOLOR, WM_SETICON,
+    };
+    let Ok(handle) = window.hwnd() else { return };
+    let hwnd = handle.0 as isize;
+    let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
+    for (which, base) in [(ICON_SMALL, 16), (ICON_BIG, 32)] {
+        let size = (base * dpi / 96) as i32;
+        let Some(png) = ico_entry(ico, size as u32) else { continue };
+        // SAFETY: the bytes are a whole PNG, which Windows accepts as icon
+        // resource data since Vista; 0x30000 is the icon format version it asks for.
+        let icon = unsafe {
+            CreateIconFromResourceEx(png.as_ptr(), png.len() as u32, 1, 0x0003_0000, size, size, LR_DEFAULTCOLOR)
+        };
+        if icon != 0 {
+            unsafe { SendMessageW(hwnd, WM_SETICON, which as usize, icon) };
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_window_icons(_window: &tauri::WebviewWindow, _ico: &[u8]) {}
 
 /// Launch the game.
 /// `executable` can be a URI (steam://, heroic://, ...) or a path relative
@@ -1640,9 +1700,6 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
     // no way back. The minimum keeps the sidebar and both columns usable.
     let wizard = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
         .title("Create cartridge")
-        // The badge, not the cartridge: the wizard and the launcher are one
-        // executable, and their taskbar buttons should not look the same.
-        .icon(tauri::image::Image::new(WIZARD_ICON, WIZARD_ICON_SIZE, WIZARD_ICON_SIZE))?
         .inner_size(1030.0, 660.0)
         .min_inner_size(870.0, 520.0)
         .resizable(true)
@@ -1682,6 +1739,7 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         .build()?;
 
     round_dwm_corners(&wizard);
+    set_window_icons(&wizard, WIZARD_ICON);
 
     // The popup comes back when the wizard goes away, whichever way it goes:
     // create.js closes the window, so this is a destroy rather than a hide.
@@ -1848,6 +1906,7 @@ fn main() {
                         .visible(false)
                         .build()?;
                 round_dwm_corners(&launcher);
+                set_window_icons(&launcher, LAUNCHER_ICON);
                 // Closing the window while a game it can see is running only
                 // hides it: the process stays to watch the game, and exits when
                 // the game does (see `finish`). A session counted by the window
