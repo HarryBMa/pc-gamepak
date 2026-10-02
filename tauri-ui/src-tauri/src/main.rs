@@ -119,6 +119,10 @@ fn opens_memory_card() -> bool {
     std::env::args().any(|arg| arg == "--memcard")
 }
 
+/// The wizard's window icon, as `tools/make-icons.mjs` writes it: raw RGBA.
+const WIZARD_ICON: &[u8] = include_bytes!("../icons/wizard.rgba");
+const WIZARD_ICON_SIZE: u32 = 64;
+
 /// Launch the game.
 /// `executable` can be a URI (steam://, heroic://, ...) or a path relative
 /// to `drive_path`.
@@ -1636,6 +1640,9 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
     // no way back. The minimum keeps the sidebar and both columns usable.
     let wizard = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
         .title("Create cartridge")
+        // The badge, not the cartridge: the wizard and the launcher are one
+        // executable, and their taskbar buttons should not look the same.
+        .icon(tauri::image::Image::new(WIZARD_ICON, WIZARD_ICON_SIZE, WIZARD_ICON_SIZE))?
         .inner_size(1030.0, 660.0)
         .min_inner_size(870.0, 520.0)
         .resizable(true)

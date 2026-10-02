@@ -79,10 +79,10 @@ modules:
           /app/share/applications/io.github.HarryBMa.PCGamePak.desktop
       - install -Dm644 packaging/flatpak/io.github.HarryBMa.PCGamePak.metainfo.xml
           /app/share/metainfo/io.github.HarryBMa.PCGamePak.metainfo.xml
-      # Scalable is what the rules ask for; the raster sizes are kept because
-      # a desktop that cannot render SVG falls back to them.
-      - install -Dm644 tauri-ui/src-tauri/icons/icon.svg
-          /app/share/icons/hicolor/scalable/apps/io.github.HarryBMa.PCGamePak.svg
+      # The logo is a painting, not a vector, so the largest raster stands in
+      # for scalable: Flathub accepts a PNG of 256px or more.
+      - install -Dm644 tauri-ui/src-tauri/icons/icon.png
+          /app/share/icons/hicolor/512x512/apps/io.github.HarryBMa.PCGamePak.png
       - install -Dm644 tauri-ui/src-tauri/icons/128x128@2x.png
           /app/share/icons/hicolor/256x256/apps/io.github.HarryBMa.PCGamePak.png
       - install -Dm644 tauri-ui/src-tauri/icons/128x128.png
