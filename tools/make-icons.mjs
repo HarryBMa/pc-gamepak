@@ -1,19 +1,24 @@
 /**
  * Build every icon from the logo artwork.
  *
- *   docs/pc-gamepak-logo_0004_Lager-1.png   the badge (left) and the cartridge (right)
+ *   docs/pc-gamepak-logo-hires.png   the badge (left) and the cartridge (right),
+ *                                    the sheet upscaled 4x
  *
- * The cartridge is the app: the launcher's executable, its taskbar button, the
- * watcher and its notification-area icon (the watcher embeds icon.ico). The
- * badge is the wizard's window, so the two windows of one executable can be
- * told apart in the taskbar.
+ * One is the app: the launcher's executable, its taskbar button, the watcher
+ * and its notification-area icon (the watcher embeds icon.ico). The other is
+ * the wizard's window, so the two windows of one executable can be told apart
+ * in the taskbar. The cartridge is the app unless told otherwise.
  *
- * Cleaned on the way: each picture is cut out of the sheet by its own alpha,
- * stray near-transparent pixels are dropped, and it is centred on a square.
- * Shrunk in halving steps, which keeps 16 and 24 px legible where one big jump
- * would alias. The cut-outs are kept beside the icons as the sources.
+ * Cleaned on the way, because the upscale left soft, white-tinted edges: specks
+ * and stray lines are dropped, the soft alpha ramp is tightened to a crisp edge,
+ * and every edge pixel takes its colour from the solid picture just inside it,
+ * which removes the light rim. Then each picture is cut out by its own alpha and
+ * centred on a square, and shrunk in halving steps, which keeps 16 and 24 px
+ * legible where one big jump would alias. The cleaned cut-outs are kept beside
+ * the icons as the sources.
  *
- *   node tools/make-icons.mjs
+ *   node tools/make-icons.mjs              the cartridge is the app
+ *   node tools/make-icons.mjs --app badge  the badge is
  *
  * Needs `playwright` or `playwright-core` and a Chromium-family browser (Edge
  * on Windows): the canvas does the image work, so nothing else is installed.
@@ -23,7 +28,9 @@ import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SHEET = path.join(ROOT, "docs/pc-gamepak-logo_0004_Lager-1.png");
+const SHEET = path.join(ROOT, "docs/pc-gamepak-logo-hires.png");
+const APP = process.argv.includes("--app") ? process.argv[process.argv.indexOf("--app") + 1] : "cartridge";
+if (!["cartridge", "badge"].includes(APP)) throw new Error(`--app cartridge|badge, not ${APP}`);
 const ICONS = path.join(ROOT, "tauri-ui/src-tauri/icons");
 
 // The sizes Tauri's bundler expects, and the ones that go into the .ico.
@@ -63,8 +70,46 @@ const render = await tab.evaluate(
     const sg = src.getContext("2d");
     sg.drawImage(img, 0, 0);
     const px = sg.getImageData(0, 0, img.width, img.height);
-    // Near-transparent specks are compression dust, not edge: drop them.
-    for (let i = 3; i < px.data.length; i += 4) if (px.data[i] < 8) px.data[i] = 0;
+    const W = img.width, H = img.height, d = px.data;
+    const A = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : d[(y * W + x) * 4 + 3]);
+
+    // 1. Tighten the alpha: the upscale smeared a one-pixel edge across four.
+    //    Below LO is haze, above HI is solid, between is the real edge.
+    const LO = 60, HI = 220;
+    for (let i = 3; i < d.length; i += 4) {
+      d[i] = d[i] <= LO ? 0 : d[i] >= HI ? 255 : Math.round(((d[i] - LO) / (HI - LO)) * 255);
+    }
+
+    // 2. Re-colour the rim from the inside. A pixel is "inside" when nothing
+    //    within R of it is see-through; every other visible pixel takes the
+    //    average colour of the inside pixels near it, which replaces the white
+    //    the upscaler blended in with the picture's own edge colour.
+    const R = 3;
+    const inside = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        if (A(x, y) < 255) continue;
+        let ok = true;
+        for (let dy = -R; dy <= R && ok; dy++)
+          for (let dx = -R; dx <= R; dx++) if (A(x + dx, y + dy) < 255) { ok = false; break; }
+        inside[y * W + x] = ok ? 1 : 0;
+      }
+    const copy = new Uint8ClampedArray(d);
+    const reach = R + 4;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (!d[i + 3] || inside[y * W + x]) continue;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let dy = -reach; dy <= reach; dy++)
+          for (let dx = -reach; dx <= reach; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= W || yy >= H || !inside[yy * W + xx]) continue;
+            const j = (yy * W + xx) * 4;
+            r += copy[j]; g += copy[j + 1]; b += copy[j + 2]; n++;
+          }
+        if (n) (d[i] = r / n), (d[i + 1] = g / n), (d[i + 2] = b / n);
+      }
     sg.putImageData(px, 0, 0);
 
     // The pictures are separated by columns with nothing in them.
@@ -79,7 +124,8 @@ const render = await tab.evaluate(
       if (on && start < 0) start = x;
       if (!on && start >= 0) runs.push([start, x - 1]), (start = -1);
     }
-    const boxes = runs.map(([x0, x1]) => {
+    // A run a few pixels wide is a stray line at the sheet's edge, not a picture.
+    const boxes = runs.filter(([x0, x1]) => x1 - x0 > 8).map(([x0, x1]) => {
       let y0 = img.height, y1 = 0;
       for (let y = 0; y < img.height; y++)
         for (let x = x0; x <= x1; x++)
@@ -115,9 +161,10 @@ const render = await tab.evaluate(
     // little air, as Windows' own icons do.
     const fillFor = (size) => (size <= 32 ? 1 : 0.94);
     const [badge, cartridge] = boxes;
+    const [app, wizard] = sizes.appIsBadge ? [badge, cartridge] : [cartridge, badge];
     const result = { app: {}, cutouts: {} };
-    for (const size of sizes.app) result.app[size] = toBase64(square(cartridge, size, fillFor(size)));
-    const w = square(badge, sizes.wizard, 1);
+    for (const size of sizes.app) result.app[size] = toBase64(square(app, size, fillFor(size)));
+    const w = square(wizard, sizes.wizard, 1);
     result.wizard = Array.from(w.getContext("2d").getImageData(0, 0, sizes.wizard, sizes.wizard).data);
     for (const [name, box] of [["cartridge", cartridge], ["badge", badge]]) {
       const c = canvas(box.w, box.h);
@@ -127,7 +174,14 @@ const render = await tab.evaluate(
     result.boxes = boxes;
     return result;
   },
-  { sheet, sizes: { app: [...new Set([...PNGS.map(([, s]) => s), ...ICO_SIZES])], wizard: WIZARD_SIZE } },
+  {
+    sheet,
+    sizes: {
+      app: [...new Set([...PNGS.map(([, s]) => s), ...ICO_SIZES])],
+      wizard: WIZARD_SIZE,
+      appIsBadge: APP === "badge",
+    },
+  },
 );
 await browser.close();
 
@@ -166,4 +220,5 @@ console.log(`${"wizard.rgba".padEnd(24)} ${WIZARD_SIZE}x${WIZARD_SIZE} raw RGBA,
 for (const [name, data] of Object.entries(render.cutouts)) {
   await fs.writeFile(path.join(ICONS, `logo-${name}.png`), Buffer.from(data, "base64"));
 }
-console.log(`logo-cartridge.png, logo-badge.png   the cut-outs (${render.boxes.map((b) => `${b.w}x${b.h}`).join(", ")})`);
+console.log(`logo-cartridge.png, logo-badge.png   the cleaned cut-outs (${render.boxes.map((b) => `${b.w}x${b.h}`).join(", ")})`);
+console.log(`the ${APP} is the app; the ${APP === "badge" ? "cartridge" : "badge"} is the wizard`);

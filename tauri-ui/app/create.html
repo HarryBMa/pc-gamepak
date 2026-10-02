@@ -185,6 +185,14 @@
                   <span class="toggle__label">Combo drive: a memory card too</span>
                 </label>
               </div>
+              <!-- What the cartridge is for. A front-end that draws the
+                   physical cartridge picks its shell from it. -->
+              <div class="toggle">
+                <label class="toggle__main" for="opt-platform">
+                  <span class="toggle__label">Platform</span>
+                </label>
+                <select id="opt-platform" class="toggle__select"></select>
+              </div>
               <div class="toggle toggle--danger" id="opt-format-row">
                 <label class="toggle__main">
                   <input id="opt-format" type="checkbox" role="switch" />
@@ -375,6 +383,12 @@
                     <input id="edit-memcard" type="checkbox" role="switch" />
                     <span class="toggle__label">Combo drive: a memory card too</span>
                   </label>
+                </div>
+                <div class="toggle">
+                  <label class="toggle__main" for="edit-platform">
+                    <span class="toggle__label">Platform</span>
+                  </label>
+                  <select id="edit-platform" class="toggle__select"></select>
                 </div>
               </div>
             </div>

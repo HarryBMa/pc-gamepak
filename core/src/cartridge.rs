@@ -137,6 +137,48 @@ pub fn platform(value: Option<&String>) -> String {
     }
 }
 
+/// Set the cartridge's own `platform=` in a conf's text: the single game's, or
+/// the collection's in its `[collection]` section. `PC`, or nothing, removes it,
+/// since that is what no line means. A game's own line inside a `[game]` is
+/// left as it is.
+pub fn set_platform(conf: &str, value: &str) -> String {
+    let value = value.trim().replace(['\n', '\r'], "");
+    let mut out: Vec<String> = Vec::new();
+    let mut section = String::new();
+    let mut placed = false;
+    let wanted = !value.is_empty() && !value.eq_ignore_ascii_case("pc");
+    let line = format!("platform={value}");
+    for raw in conf.lines() {
+        let trimmed = raw.trim();
+        if trimmed.starts_with('[') {
+            section = trimmed.trim_matches(|c| c == '[' || c == ']').trim().to_lowercase();
+            out.push(raw.to_string());
+            if section == "collection" && wanted && !placed {
+                out.push(line.clone());
+                placed = true;
+            }
+            continue;
+        }
+        let is_head = section.is_empty() || section == "collection";
+        let is_platform = trimmed
+            .split_once('=')
+            .is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("platform"));
+        if is_head && is_platform {
+            continue;
+        }
+        out.push(raw.to_string());
+    }
+    if wanted && !placed {
+        // A single game: its keys are at the top, before any section.
+        out.insert(0, line);
+    }
+    let mut text = out.join("\n");
+    if conf.ends_with('\n') {
+        text.push('\n');
+    }
+    text
+}
+
 /// A stylesheet the cartridge carries, if it has one and it is not absurd.
 ///
 /// `.gamepak/skin.css`, beside the artwork, because that is where a cartridge's
@@ -694,6 +736,26 @@ cover=.gamepak/cover.png
         assert!(!info.holds_game);
         assert!(!info.is_bundle);
         assert!(info.games.is_empty());
+    }
+
+    #[test]
+    fn the_cartridge_s_platform_is_set_where_it_belongs() {
+        // A single game: at the top, replacing any old line.
+        assert_eq!(
+            set_platform("title=Zelda\nplatform=NES\nexecutable=z\n", "SNES"),
+            "platform=SNES\ntitle=Zelda\nexecutable=z\n"
+        );
+        // PC, or nothing, is no line at all.
+        assert_eq!(set_platform("title=X\nplatform=GBA\n", "PC"), "title=X\n");
+        assert_eq!(set_platform("title=X\n", ""), "title=X\n");
+        // A collection: in its own section, and a game's own line is left alone.
+        let conf = "memory_card=yes\n[collection]\ntitle=N\nplatform=NES\n\n\
+                    [game]\ntitle=P\nplatform=GBA\nexecutable=p\n";
+        assert_eq!(
+            set_platform(conf, "SNES"),
+            "memory_card=yes\n[collection]\nplatform=SNES\ntitle=N\n\n\
+             [game]\ntitle=P\nplatform=GBA\nexecutable=p\n"
+        );
     }
 
     #[test]

@@ -133,6 +133,8 @@ const el = {
   panelMemcard: $("panel-memcard"),
   optMemcard: $("opt-memcard"),
   editMemcard: $("edit-memcard"),
+  optPlatform: $("opt-platform"),
+  editPlatform: $("edit-platform"),
   setLudusavi: $("set-ludusavi"),
   mcwDrive: $("mcw-drive"),
   mcwDriveNote: $("mcw-drive-note"),
@@ -2074,6 +2076,7 @@ function buildRequest() {
     trimAfterWrite: on.trim,
     writeIcon: on.icon,
     memoryCard: el.optMemcard.checked,
+    platform: el.optPlatform.value,
   };
 
   if (isCollection()) {
@@ -3052,6 +3055,7 @@ async function openEditor(drivePath) {
 
   el.editTitle.value = editing.title ?? "";
   el.editMemcard.checked = Boolean(editing.memoryCard);
+  fillPlatforms(el.editPlatform, editing.platform);
   renderEditArt();
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
@@ -3270,6 +3274,7 @@ async function saveEdits() {
         primaryGame: primaryIndexOf(editing.games ?? []),
         removeLogo: Boolean(art.logo?.remove),
         memoryCard: el.editMemcard.checked,
+        platform: el.editPlatform.value,
         games: (editing.games ?? []).map((g) => ({
           title: g.title,
           executable: g.executable,
@@ -3800,6 +3805,42 @@ function frontendHint(front) {
   if (!front.installed) return "Not installed";
   return "";
 }
+
+/**
+ * What a cartridge can say it is for (`platform=`), as cartridge.conf.example
+ * lists them. A front-end that draws the physical cartridge picks its shell
+ * from this; the launcher itself only hands it to skins.
+ */
+const PLATFORMS = [
+  ["PC", "PC"], ["DOS", "DOS"],
+  ["NES", "NES"], ["SNES", "Super Nintendo"], ["N64", "Nintendo 64"], ["GameCube", "GameCube"],
+  ["Wii", "Wii"], ["WiiU", "Wii U"], ["Switch", "Switch"],
+  ["GB", "Game Boy"], ["GBC", "Game Boy Color"], ["GBA", "Game Boy Advance"], ["NDS", "Nintendo DS"],
+  ["3DS", "Nintendo 3DS"], ["VirtualBoy", "Virtual Boy"],
+  ["MasterSystem", "Master System"], ["Genesis", "Mega Drive / Genesis"], ["SegaCD", "Mega-CD"],
+  ["32X", "32X"], ["Saturn", "Saturn"], ["Dreamcast", "Dreamcast"], ["GameGear", "Game Gear"],
+  ["PS1", "PlayStation"], ["PS2", "PlayStation 2"], ["PS3", "PlayStation 3"], ["PSP", "PSP"], ["Vita", "PS Vita"],
+  ["Xbox", "Xbox"], ["Xbox360", "Xbox 360"],
+  ["Atari2600", "Atari 2600"], ["Atari7800", "Atari 7800"], ["Lynx", "Lynx"], ["Jaguar", "Jaguar"],
+  ["TurboGrafx16", "TurboGrafx-16"], ["NeoGeo", "Neo Geo"], ["NeoGeoPocket", "Neo Geo Pocket"],
+  ["WonderSwan", "WonderSwan"], ["Arcade", "Arcade"], ["C64", "Commodore 64"], ["Amiga", "Amiga"], ["MSX", "MSX"],
+];
+
+/** Fill a platform picker, keeping a value this list does not know. */
+function fillPlatforms(select, current = "PC") {
+  const known = PLATFORMS.some(([id]) => id.toLowerCase() === String(current).toLowerCase());
+  const entries = known ? PLATFORMS : [...PLATFORMS, [current, current]];
+  select.replaceChildren(
+    ...entries.map(([id, name]) => {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = name;
+      return option;
+    }),
+  );
+  select.value = entries.find(([id]) => id.toLowerCase() === String(current || "PC").toLowerCase())?.[0] ?? "PC";
+}
+fillPlatforms(el.optPlatform);
 
 el.optMove.addEventListener("change", () => {
   moveWanted = el.optMove.checked;

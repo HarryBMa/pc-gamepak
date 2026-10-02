@@ -257,6 +257,10 @@ pub struct CartridgeRequest {
     /// saves. See [`crate::memcard`].
     #[serde(default)]
     pub memory_card: bool,
+    /// What the cartridge is for, `platform=`: SNES, GBA... Empty or `PC` writes
+    /// nothing, which reads as PC.
+    #[serde(default)]
+    pub platform: Option<String>,
 }
 
 /// The picture a drive icon is made from, relative to the cartridge root.
@@ -1162,6 +1166,7 @@ pub fn create_cartridge(
             progress,
             &mut warnings,
         );
+        let conf = crate::cartridge::set_platform(&conf, request.platform.as_deref().unwrap_or(""));
         let conf_path = root.join("cartridge.conf");
         std::fs::write(&conf_path, conf)
             .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
@@ -1339,6 +1344,7 @@ pub fn create_cartridge(
         progress,
         &mut warnings,
     );
+    let conf = crate::cartridge::set_platform(&conf, request.platform.as_deref().unwrap_or(""));
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;

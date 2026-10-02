@@ -47,6 +47,8 @@ pub struct Editable {
     pub holds_game: bool,
     /// A combo drive: shown as a memory card too.
     pub memory_card: bool,
+    /// The cartridge's `platform=`, `PC` when it has none.
+    pub platform: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -96,6 +98,9 @@ pub struct UpdateRequest {
     /// Make it a combo drive, or stop it being one. Absent keeps what it was.
     #[serde(default)]
     pub memory_card: Option<bool>,
+    /// A new `platform=` for the cartridge. Absent keeps what it was.
+    #[serde(default)]
+    pub platform: Option<String>,
     /// Which game the drive icon is made from, as an index into `games`.
     /// Absent keeps the old rule: the icon slot, else the cover.
     #[serde(default)]
@@ -185,6 +190,7 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         is_bundle: info.is_bundle,
         holds_game: info.holds_game,
         memory_card: info.memory_card,
+        platform: info.platform.clone(),
         games,
     }
 }
@@ -239,6 +245,7 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
             primary_game: None,
             remove_logo: false,
             memory_card: None,
+            platform: None,
         },
     )?;
 
@@ -504,6 +511,11 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     } else {
         conf
     };
+    // The platform as asked; absent, the line `preserve` carried over stays.
+    let conf = match &request.platform {
+        Some(platform) => crate::cartridge::set_platform(&conf, platform),
+        None => conf,
+    };
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
@@ -631,6 +643,7 @@ mod tests {
             primary_game: None,
             remove_logo: false,
             memory_card: None,
+            platform: None,
         }
     }
 
