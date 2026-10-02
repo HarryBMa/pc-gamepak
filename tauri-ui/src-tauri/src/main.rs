@@ -1034,10 +1034,13 @@ fn get_settings() -> settings::Settings {
 
 /// Store the settings and hand back what was stored, so the window and the file
 /// cannot drift apart.
+///
+/// The front-end switches are kept as they are on disk: the settings form does
+/// not send them, and `set_frontend` is what changes them. See
+/// [`settings::save_form`].
 #[tauri::command]
 fn set_settings(settings: settings::Settings) -> Result<settings::Settings, String> {
-    settings::save(&settings)?;
-    Ok(settings)
+    settings::save_form(settings)
 }
 
 /// How well this cartridge is actually connected.
@@ -1698,6 +1701,25 @@ fn main() {
     if let Some(index) = args.iter().position(|arg| arg == "--eject") {
         let drive = args.get(index + 1).cloned().unwrap_or_default();
         std::process::exit(gamepak_core::eject::run_elevated(&drive) as i32);
+    }
+
+    // Play and Eject for a front-end with its own buttons. Before the insert
+    // reaction, which is about a cartridge arriving and not about being asked.
+    let play = headless::play_index(&args);
+    if play.is_some() || headless::wants_safe_eject(&args) {
+        let drive = cartridge::drive_from_args(args.iter().cloned());
+        if drive.is_empty() {
+            eprintln!("--play and --safe-eject need --drive");
+            std::process::exit(1);
+        }
+        std::process::exit(match play {
+            Some(Ok(index)) => headless::play(&drive, index),
+            Some(Err(why)) => {
+                eprintln!("{why}");
+                1
+            }
+            None => headless::safe_eject(&drive, args.iter().any(|arg| arg == "--force")),
+        });
     }
 
     // Play and Eject for a front-end with its own buttons. Before the insert
