@@ -3,7 +3,7 @@
 
    Art slots: covers in the rail, hero behind it, no logo. The list runs down
    the window as a stack of loading bays rather than across it, which is what
-   separates this from `arcade` (a sideways strip) and `cyberpunk` (a split).
+   separates this from `cyberpunk` (a split).
 
    Ported from a design written against a different set of class names.
    Orbitron and Rajdhani are not system fonts and `font-src 'self'` forbids

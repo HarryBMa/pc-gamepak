@@ -37,6 +37,11 @@
   --xp-button-line: #003c74;
   --xp-ink: #000000;
   --xp-font: Tahoma, "Segoe UI", ui-sans-serif, sans-serif;
+  --xp-title: linear-gradient(180deg, var(--xp-blue) 0%, var(--xp-blue-deep) 100%);
+
+  /* A file window has no box to open. The unboxing is the stock launcher's,
+     and this is the switch that turns it off. */
+  --skin-unbox: none;
 }
 
 /* ---------------------------------------------------------------- the window */
@@ -423,12 +428,177 @@ body.is-gamepad :focus {
   outline-offset: -4px;
 }
 
+/* ----------------------------------------------------------- the other screens
+
+   Details, the memory card and the empty slot are screens of their own, and a
+   skin that only restyles the stage leaves them in the stock dark look — or
+   worse, half in it: #card's black ink inherited onto a dark sheet. Nearly
+   everything on them is drawn from the colour tokens, so redefining those on
+   each screen does most of the work, and the rules after it do the rest. */
+
+#sheet,
+#memcard,
+#slot {
+  --ink: #000000;
+  --ink-2: #444444;
+  --ink-3: #6d6d6d;
+  --ink-soft: #222222;
+  --panel: #ffffff;
+  --shell: var(--xp-face);
+  --sunk: #f4f3ee;
+  --hairline: #aca899;
+  --hairline-mid: #c9c6b8;
+  --hairline-soft: #d4d0c8;
+  --lift: #f7f6f0;
+  --well: rgb(0 0 0 / 0.06);
+  --scroll-thumb: #c1d2ee;
+  --scroll-thumb-hover: #9db9eb;
+  font-family: var(--xp-font);
+  color: var(--xp-ink);
+}
+
+/* The stock details set a monospace face on each reading by id, which a
+   `#sheet *` rule loses to; they are named here so Tahoma wins. */
+#sheet *,
+#memcard *,
+#sheet-sub,
+#specs dt,
+#specs dd,
+#paths dt,
+#paths dd,
+.reading__label,
+.reading__value,
+.reading__note {
+  font-family: var(--xp-font);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Both get the window's title bar, and its buttons. */
+#sheet-head,
+.mc__head {
+  min-height: 30px;
+  margin: 0;
+  padding: 0 6px 0 10px;
+  background: var(--xp-title);
+  color: #ffffff;
+  text-shadow: 1px 1px 1px rgb(0 0 0 / 0.6);
+}
+
+#sheet-head #sheet-title,
+#mc-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+#sheet-head #sheet-sub {
+  font-size: 10px;
+  color: #c9dcfb;
+  text-transform: none;
+}
+
+#sheet-head .icon-btn,
+#mc-close {
+  width: 21px;
+  height: 21px;
+  border-radius: 3px;
+  border: 1px solid #ffffff;
+  background: linear-gradient(180deg, #e76654 0%, #e04332 100%);
+  color: #ffffff;
+}
+
+#sheet-head .icon-btn:hover,
+#mc-close:hover {
+  background: linear-gradient(180deg, #f07d6c 0%, #e8543f 100%);
+}
+
+/* Details: a Properties dialog. */
+#sheet {
+  background: var(--xp-face);
+  border-radius: 0;
+}
+
+.reading {
+  border-radius: 0;
+  background: var(--xp-pane);
+  border: 1px solid var(--xp-line);
+}
+
+#sheet-body .disclosure,
+#sheet-footer .sheet-link {
+  text-transform: none;
+  color: #0046d5;
+}
+
+#sheet-footer .sheet-link:hover {
+  text-decoration: underline;
+}
+
+/* The memory card: an Explorer window onto the card, the shelf in the white
+   pane. The cases keep the stock colours — they are pictures of boxes, and
+   their spine and back-cover text is printed over the art. */
+#memcard {
+  background: var(--xp-face);
+}
+
+#mc-blocks {
+  margin: 8px;
+  background: var(--xp-pane);
+  border: 2px solid var(--xp-line);
+}
+
+#memcard .mc__cube {
+  --ink: oklch(0.97 0.006 75);
+  --ink-2: oklch(0.75 0.008 75);
+  --ink-3: oklch(0.635 0.008 75);
+  --panel: oklch(0.185 0.006 65);
+}
+
+.mc__block[aria-selected="true"] .mc__label {
+  color: #ffffff;
+  background: var(--xp-select);
+}
+
+/* The capacity bar as Windows drew a progress bar: green blocks in a well. */
+.mc__bar {
+  height: 14px;
+  border-radius: 0;
+  border: 1px solid var(--xp-line);
+  background: var(--xp-pane);
+}
+
+.mc__bar i {
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, #2fb52f 0 8px, transparent 8px 10px);
+}
+
+.mc__info {
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.mc__link {
+  color: #0046d5;
+}
+
+.mc__link:hover {
+  text-decoration: underline;
+}
+
 /* --------------------------------------------------------------- the leftovers */
 
 #slot {
   background: var(--xp-face);
   color: #444444;
   border-radius: 0;
+}
+
+#slot-label {
+  font-family: var(--xp-font);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #444444;
 }
 
 #cover-placeholder {

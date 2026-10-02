@@ -77,9 +77,10 @@ pub enum SyncMode {
     /// Replace the host's directory with a symlink onto the cartridge, so the
     /// game writes straight to the drive and there is only ever one copy.
     ///
-    /// Faster and exact, and it has two costs that are easy to underestimate:
-    /// Windows refuses symlinks to an unprivileged process unless Developer
-    /// Mode is on, and the link dangles the moment the cartridge leaves. A
+    /// Faster and exact, and it has a cost that is easy to underestimate: the
+    /// link dangles the moment the cartridge leaves. (On Windows without
+    /// Developer Mode it is a directory junction rather than a symlink, which
+    /// needs no privilege and behaves the same.) A
     /// clean eject turns it back into a real directory; a drive pulled out of
     /// the port does not, and the game will find its save directory missing.
     Link,
@@ -116,6 +117,29 @@ pub const TOKENS: &[&str] = &[
     "appsupport",
     "prefs",
 ];
+
+/// Tokens that only resolve where a store is installed, so they are not in
+/// [`TOKENS`], which every host resolves.
+///
+/// `{steamuserdata}` is Steam's `userdata/<account id>`: where every Steam
+/// Cloud game keeps its saves, as `{steamuserdata}/<app id>/remote`.
+pub const STORE_TOKENS: &[&str] = &["steamuserdata"];
+
+/// The signed-in Steam account's `userdata` folder: the most recently written
+/// one, when more than one account has used this PC.
+fn steam_userdata() -> Option<PathBuf> {
+    // ponytail: newest account wins; a per-cartridge account id if people share PCs.
+    std::fs::read_dir(crate::steam::steam_root()?.join("userdata"))
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name != "0" && name.chars().all(|c| c.is_ascii_digit())
+        })
+        .max_by_key(|entry| entry.metadata().and_then(|m| m.modified()).ok())
+        .map(|entry| entry.path())
+}
 
 /// Resolve one token to a directory on this host.
 ///
@@ -195,6 +219,9 @@ pub fn token_path(token: &str) -> Option<PathBuf> {
                 env_path("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config"))
             }
         }
+        "steamuserdata" => return steam_userdata(),
+        // A registry key, carried as an exported file: see [`crate::registry`].
+        "registry" if cfg!(windows) => crate::registry::staging_root(),
         _ => return None,
     };
     Some(path)
@@ -296,6 +323,16 @@ pub fn resolve_template(template: &str) -> Result<PathBuf, Unusable> {
 
     let root = token_path(&token).ok_or_else(|| Unusable::UnknownToken(token.clone()))?;
 
+    if token == "registry" {
+        let parts: Vec<&str> = tail.split('/').filter(|p| !p.is_empty()).collect();
+        if parts.contains(&"..") {
+            return Err(Unusable::Escapes);
+        }
+        if !crate::registry::allowed(&parts) {
+            return Err(Unusable::TooBroad);
+        }
+    }
+
     let mut depth = 0usize;
     let mut path = root;
     for part in tail.split('/') {
@@ -355,6 +392,7 @@ pub fn template_from_path(path: &Path) -> Option<String> {
     // three tokens share AppData\Roaming: `appdata`, listed first, should win.
     let (token, base) = TOKENS
         .iter()
+        .chain(STORE_TOKENS)
         .rev()
         .filter_map(|token| Some((*token, token_path(token)?)))
         .filter(|(_, base)| path.starts_with(base))
@@ -852,9 +890,16 @@ pub struct SlotStatus {
     pub detail: String,
 }
 
+/// A save kept in the registry rather than in a folder.
+fn is_registry(template: &str) -> bool {
+    template.trim().to_lowercase().starts_with("{registry}")
+}
+
 /// Look at every declared slot and say what would happen.
 ///
-/// Read-only. Nothing here creates a directory, and that matters: the launcher
+/// Read-only, but for one thing: a registry save's export is refreshed in the
+/// app's own folder, since that export is how it is compared. Nothing in the
+/// user's folders is created, and that matters: the launcher
 /// calls this to draw a panel on every insert, including for cartridges whose
 /// owner has never turned save syncing on.
 pub fn status(root: &Path) -> Vec<SlotStatus> {
@@ -885,6 +930,23 @@ fn status_of(root: &Path, slot: SaveSlot, index: &Index) -> SlotStatus {
             }
         }
     };
+
+    // A registry save's host side is its export, brought up to date first.
+    if is_registry(&slot.template) {
+        if let Err(why) = crate::registry::stage(&host) {
+            return SlotStatus {
+                slot,
+                host_path: String::new(),
+                direction: Direction::Unusable,
+                host_newest: 0,
+                cartridge_newest: 0,
+                host_bytes: 0,
+                cartridge_bytes: 0,
+                last_sync: record.last_sync,
+                detail: why,
+            };
+        }
+    }
 
     let mine = record
         .hosts
@@ -1035,6 +1097,11 @@ fn links_into(host: &Path, cart: &Path) -> bool {
     let Ok(target) = std::fs::read_link(host) else {
         return false;
     };
+    // A junction reads back as `\\?\D:\...`; the same place as `D:\...`.
+    let target = match target.to_str().and_then(|t| t.strip_prefix(r"\\?\")) {
+        Some(plain) => PathBuf::from(plain),
+        None => target,
+    };
     let target = if target.is_absolute() {
         target
     } else {
@@ -1110,6 +1177,9 @@ pub fn sync_slot(root: &Path, status: &SlotStatus) -> Result<SyncOutcome, String
     let (files, bytes) = copy_tree(&source, &destination)?;
     outcome.files = files;
     outcome.bytes = bytes;
+    if matches!(status.direction, Direction::Pull) && is_registry(&status.slot.template) {
+        crate::registry::apply(&destination)?;
+    }
 
     record_sync(root, status, &destination)?;
     Ok(outcome)
@@ -1378,6 +1448,9 @@ fn copy_into(
 /// backup in place so the caller can fall back to [`SyncMode::Copy`] rather
 /// than being left with nothing.
 pub fn link_slot(root: &Path, status: &SlotStatus) -> Result<SyncOutcome, String> {
+    if is_registry(&status.slot.template) {
+        return Err("a registry save cannot be linked".to_string());
+    }
     if status.host_path.is_empty() {
         return Err(format!("{}: {}", status.slot.label, status.detail));
     }
@@ -1476,9 +1549,36 @@ fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
 
+/// A symlink when Windows allows one (Developer Mode, or elevated), else a
+/// directory junction, which any user may make. A junction only reaches a
+/// local volume, which a cartridge always is, and to everything reading it —
+/// the game, `read_link`, `remove_dir` — it behaves as the symlink would.
 #[cfg(windows)]
 fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_dir(target, link)
+    let refused = match std::os::windows::fs::symlink_dir(target, link) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    junction(target, link).map_err(|_| refused)
+}
+
+#[cfg(windows)]
+fn junction(target: &Path, link: &Path) -> std::io::Result<()> {
+    // std has no junction call; mklink is a cmd built-in.
+    let made = crate::proc::command("cmd")
+        .arg("/C")
+        .arg("mklink")
+        .arg("/J")
+        .arg(link)
+        .arg(target)
+        .output()?;
+    if made.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(
+            String::from_utf8_lossy(&made.stderr).trim().to_string(),
+        ))
+    }
 }
 
 /// Remove a symlink to a directory.
@@ -1501,6 +1601,22 @@ fn remove_link(link: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use crate::testutil::Scratch;
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_counts_as_a_link_into_the_cartridge_and_unlinks_cleanly() {
+        let scratch = Scratch::new("saves-junction");
+        let cart = scratch.join("cart");
+        std::fs::create_dir_all(&cart).unwrap();
+        scratch.write("cart/save.dat", b"x");
+        let host = scratch.join("host");
+        junction(&cart, &host).unwrap();
+        assert!(host.join("save.dat").is_file());
+        assert!(links_into(&host, &cart));
+        remove_link(&host).unwrap();
+        assert!(!host.exists());
+        assert!(cart.join("save.dat").is_file(), "the cartridge is untouched");
+    }
 
     /// Point the token table at a scratch directory for the duration of a test.
     ///

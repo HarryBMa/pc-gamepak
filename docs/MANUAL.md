@@ -277,6 +277,69 @@ save=Stardew Valley|{appdata}/StardewValley/Saves
 a cartridge names a *role* and the host resolves it. The full list of tokens is
 in `cartridge.conf.example`.
 
+`{steamuserdata}` is the one token that needs a store: Steam's
+`userdata/<account>` folder, where every Steam Cloud game keeps its saves, as
+`{steamuserdata}/<app id>/remote`. When more than one Steam account has used
+the PC it means the one used most recently.
+
+`{registry}` is for the games that save into the Windows registry — Unity's
+`PlayerPrefs` does, so plenty of small games do, Bluey: The Videogame among
+them:
+
+```ini
+save.windows=Bluey|{registry}/HKCU/Software/Outright Games Ltd/Bluey The Videogame
+```
+
+The key is exported to a `.reg` file, which is what the cartridge carries and
+compares, and imported back when the cartridge's copy is the newer one — the
+key replaced, not merged, with the PC's previous export kept as the backup. Only
+a key under `HKCU\Software` with at least the company and game below it is
+accepted, and a `.reg` file that names any key outside the one declared is
+refused before anything is imported: it came off a drive. Link mode does not
+apply to a registry save; it is always copied.
+
+#### Finding where a game saves
+
+Nobody should have to type those lines. With Settings → *Look up where games
+keep their saves* switched on, the wizard fills them in, trying in order:
+
+1. **[Ludusavi's manifest](https://github.com/mtkennerly/ludusavi-manifest)**,
+   PCGamingWiki's save locations for tens of thousands of games, downloaded
+   once and refreshed monthly. A game is matched by its Steam app id (including
+   the ids of its other editions), then by name — accents and punctuation
+   ignored, so "God of War - Ragnarok" finds "God of War Ragnarök" — then by the
+   folder it installs into, which is what a game found in a folder is called.
+2. **A look round this PC**, for a game the manifest does not list: a folder
+   with the game's name in Documents, Documents\My Games, Saved Games, or
+   AppData's Roaming, Local and LocalLow, directly or one level down under the
+   studio's name. This only finds a game that has already saved here.
+
+What neither finds, and why:
+
+- **A game that saves inside its own install folder** (older games, some
+  Unreal ones). If it is carried on the cartridge its saves already are too;
+  if it is installed on the PC there is no path another machine would share.
+- **A registry save under a different key than Ludusavi lists** — an older
+  build of the game, say. Bluey's was `DefaultCompany/Project biscuits` before
+  it was renamed. Write the line by hand.
+- **A game whose launcher keeps the saves** — Battle.net, the Xbox app,
+  Ubisoft Connect. Their clouds carry them.
+- **A shortened name** — "TMNT", "DC" for Director's Cut. Pick the folder by hand.
+
+Every lookup can be overridden: the Memory card page's *Choose folder* writes
+the folder you point at.
+
+#### Linking instead of copying
+
+`savemode=link` replaces the PC's save folder with a link onto the cartridge,
+so the game writes straight to the drive and there is one copy. On Windows that
+is a symbolic link when Developer Mode is on or the launcher runs elevated, and
+otherwise a **directory junction**, which any user may create and which behaves
+the same way for a game. The link is made on the PC, pointing at the drive, so
+the cartridge's own filesystem does not matter. A clean eject turns the link back into
+a real folder; a drive pulled out without ejecting leaves the game a dangling
+link until the cartridge returns.
+
 #### A carried game needs no save line at all
 
 Declaring a path means somebody had to find out where the game keeps its saves
@@ -380,9 +443,9 @@ launcher to choose from — a cartridge either brings a stylesheet or it does no
 which is the same arrangement the artwork already had. The look belongs to the
 cartridge and travels with it.
 
-Fifteen worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
-wood-grain television, a neon split, black-and-gold, a desktop of icons, an
-arcade cabinet, a cream one, and a Big Picture couch launcher. Copy one to
+Fourteen worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
+wood-grain television, a neon split, black-and-gold, a desktop of icons, a
+cream one, and a Big Picture couch launcher. Copy one to
 `.gamepak/skin.css` and edit it. [SKINNING.md](SKINNING.md) is the reference:
 which elements exist, what states they take, and what the content security
 policy forbids.

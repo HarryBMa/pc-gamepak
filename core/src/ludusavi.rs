@@ -183,33 +183,56 @@ fn download(path: &PathBuf) -> Result<(), String> {
 }
 
 /// Find a game in manifest text and work out its save directories.
+///
+/// Tried in order of how sure each is: the Steam app id (its own or one of
+/// its `steamExtra` ids), the name, then the name of the folder it installs
+/// into — which is what a game scanned from a folder is called. A name that
+/// is an `alias:` of another entry is looked up as that entry.
 pub fn lookup_in(text: &str, title: &str, steam_id: Option<&str>) -> Option<SaveLocations> {
+    let steam_id = steam_id.filter(|id| !id.is_empty());
     let wanted = normalise(title);
     let mut by_name = None;
+    let mut by_folder = None;
     for (name, block) in games(text) {
-        if let Some(id) = steam_id.filter(|id| !id.is_empty()) {
-            if steam_id_of(&block).as_deref() == Some(id) {
-                return Some(locations(&block)).filter(|found| !found.is_empty());
-            }
+        if steam_id.is_some_and(|id| steam_ids_of(&block).iter().any(|own| own == id)) {
+            return Some(locations(&block)).filter(|found| !found.is_empty());
         }
         if by_name.is_none() && normalise(&name) == wanted {
             by_name = Some(block);
-            if steam_id.is_none() {
-                break;
-            }
+        } else if by_folder.is_none()
+            && install_dirs_of(&block).iter().any(|dir| normalise(dir) == wanted)
+        {
+            by_folder = Some(block);
         }
     }
-    by_name
-        .map(|block| locations(&block))
-        .filter(|found| !found.is_empty())
+    let block = by_name.or(by_folder)?;
+    if let Some(target) = alias_of(&block) {
+        // One step only: an alias of an alias would be a manifest bug, and
+        // following it could loop.
+        let target = normalise(&target);
+        let block = games(text).find(|(name, _)| normalise(name) == target)?.1;
+        return Some(locations(&block)).filter(|found| !found.is_empty());
+    }
+    Some(locations(&block)).filter(|found| !found.is_empty())
 }
 
-/// Lower case, letters and digits only: "STAR WARS™: Knights" matches
-/// "Star Wars Knights".
+/// Lower case, letters and digits only, accents dropped: "STAR WARS™:
+/// Knights" matches "Star Wars Knights", and "Ragnarök" matches "Ragnarok".
 fn normalise(name: &str) -> String {
     name.chars()
         .filter(|c| c.is_alphanumeric())
         .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
+            'è' | 'é' | 'ê' | 'ë' => 'e',
+            'ì' | 'í' | 'î' | 'ï' => 'i',
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => 'o',
+            'ù' | 'ú' | 'û' | 'ü' => 'u',
+            'ñ' => 'n',
+            'ç' => 'c',
+            'ý' | 'ÿ' => 'y',
+            other => other,
+        })
         .collect()
 }
 
@@ -250,13 +273,53 @@ fn indent(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
 
-fn steam_id_of(block: &[&str]) -> Option<String> {
-    let at = block.iter().position(|line| *line == "  steam:")?;
-    block[at + 1..]
+/// The lines under one top-level field of a game (`  steam:`), trimmed.
+fn field<'a>(block: &'a [&'a str], name: &str) -> impl Iterator<Item = &'a str> {
+    let at = block.iter().position(|line| line.trim_end() == format!("  {name}:"));
+    at.map_or(&[][..], |at| &block[at + 1..])
         .iter()
         .take_while(|line| indent(line) > 2)
-        .find_map(|line| line.trim().strip_prefix("id:"))
-        .map(|id| id.trim().to_string())
+        .map(|line| line.trim())
+}
+
+/// `steam: id:` and every `id: steamExtra:` — a game sold as several
+/// editions or bundles lists the other app ids there.
+fn steam_ids_of(block: &[&str]) -> Vec<String> {
+    let own = field(block, "steam").filter_map(|line| line.strip_prefix("id:"));
+    let mut in_extra = false;
+    let extra = field(block, "id").filter_map(move |line| {
+        if line.ends_with(':') {
+            in_extra = line == "steamExtra:";
+            return None;
+        }
+        line.strip_prefix("- ").filter(|_| in_extra)
+    });
+    own.chain(extra).map(|id| id.trim().to_string()).collect()
+}
+
+/// The folder names the game installs into, from `installDir:`.
+fn install_dirs_of(block: &[&str]) -> Vec<String> {
+    block
+        .iter()
+        .skip_while(|line| line.trim_end() != "  installDir:")
+        .skip(1)
+        .take_while(|line| indent(line) > 2)
+        .filter(|line| indent(line) == 4)
+        .map(|line| {
+            let key = line.trim();
+            // `Name: {}` on one line, or `Name:` with fields under it.
+            let key = key.strip_suffix(" {}").unwrap_or(key);
+            unquote(key.strip_suffix(':').unwrap_or(key))
+        })
+        .collect()
+}
+
+/// `alias: Other Name`: this entry is only a pointer to that one.
+fn alias_of(block: &[&str]) -> Option<String> {
+    block
+        .iter()
+        .find_map(|line| line.strip_prefix("  alias:"))
+        .map(unquote)
 }
 
 /// One entry under `files:`.
@@ -264,27 +327,35 @@ fn steam_id_of(block: &[&str]) -> Option<String> {
 struct Entry {
     path: String,
     save: bool,
+    /// Any tag at all. An untagged entry is backed up by Ludusavi as a save.
+    tagged: bool,
     /// `(os, store)` per `when` item; empty means everywhere.
     when: Vec<(Option<String>, Option<String>)>,
 }
 
 fn entries(block: &[&str]) -> Vec<Entry> {
     let mut out: Vec<Entry> = Vec::new();
-    let mut in_files = false;
+    // Files, then registry keys, each written as a path: a key becomes
+    // `<registry>/HKEY_CURRENT_USER/...` and maps to the `{registry}` token.
+    let mut section = "-";
     let mut list = "";
     for line in block {
         let depth = indent(line);
         let text = line.trim();
         if depth == 2 {
-            in_files = text == "files:";
+            section = match text {
+                "files:" => "",
+                "registry:" => "<registry>/",
+                _ => "-",
+            };
             continue;
         }
-        if !in_files || text.is_empty() {
+        if section == "-" || text.is_empty() {
             continue;
         }
         match depth {
             4 => out.push(Entry {
-                path: unquote(text.strip_suffix(':').unwrap_or(text)),
+                path: format!("{section}{}", unquote(text.strip_suffix(':').unwrap_or(text))),
                 ..Default::default()
             }),
             6 => list = text.trim_end_matches(':'),
@@ -294,7 +365,10 @@ fn entries(block: &[&str]) -> Vec<Entry> {
                 };
                 let item = text.strip_prefix("- ");
                 match list {
-                    "tags" => entry.save |= item == Some("save"),
+                    "tags" => {
+                        entry.tagged = true;
+                        entry.save |= item == Some("save");
+                    }
                     "when" => {
                         let (field, starts) = match item {
                             Some(rest) => (rest, true),
@@ -325,7 +399,7 @@ fn locations(block: &[&str]) -> SaveLocations {
     let first = |os: &str| {
         entries
             .iter()
-            .filter(|entry| entry.save && applies(entry, os))
+            .filter(|entry| (entry.save || !entry.tagged) && applies(entry, os))
             .find_map(|entry| template_for(&entry.path, os))
     };
     SaveLocations {
@@ -349,6 +423,8 @@ fn applies(entry: &Entry, os: &str) -> bool {
 fn template_for(path: &str, os: &str) -> Option<String> {
     let map: &[(&str, &str)] = match os {
         "windows" => &[
+            ("<root>/userdata/<storeUserId>", "{steamuserdata}"),
+            ("<registry>/HKEY_CURRENT_USER", "{registry}/HKCU"),
             ("<winAppData>", "{appdata}"),
             ("<winLocalAppDataLow>", "{home}/AppData/LocalLow"),
             ("<winLocalAppData>", "{localappdata}"),
@@ -356,6 +432,7 @@ fn template_for(path: &str, os: &str) -> Option<String> {
             ("<home>", "{home}"),
         ],
         _ => &[
+            ("<root>/userdata/<storeUserId>", "{steamuserdata}"),
             ("<xdgConfig>", "{appdata}"),
             ("<xdgData>", "{localappdata}"),
             ("<home>", "{home}"),
@@ -455,6 +532,64 @@ Stardew Valley:
     fn a_game_only_its_install_folder_knows_is_not_a_match() {
         assert_eq!(lookup_in(SAMPLE, "!Hidden Game", None), None);
         assert_eq!(lookup_in(SAMPLE, "Not In The List", None), None);
+    }
+
+    const MORE: &str = r#"---
+Castle Crashers:
+  files:
+    "<base>/data/config.xml":
+      tags:
+        - config
+    "<root>/userdata/<storeUserId>/204360/remote":
+      tags:
+        - save
+      when:
+        - store: steam
+  id:
+    steamExtra:
+      - 999001
+  installDir:
+    CastleCrashers: {}
+  steam:
+    id: 204360
+"God of War Ragnarök":
+  files:
+    "<winDocuments>/God of War Ragnarök":
+      tags:
+        - save
+      when:
+        - os: windows
+Klaus Old Name:
+  alias: Castle Crashers
+"Bluey: The Videogame":
+  installDir:
+    Biscuits: {}
+  registry:
+    HKEY_CURRENT_USER/Software/Outright Games Ltd/Bluey The Videogame:
+      tags:
+        - save
+  steam:
+    id: 2078350
+"#;
+
+    #[test]
+    fn finds_steam_cloud_saves_extra_ids_folders_aliases_and_accents() {
+        let cloud = Some("{steamuserdata}/204360/remote".to_string());
+        assert_eq!(lookup_in(MORE, "x", Some("204360")).unwrap().windows, cloud);
+        assert_eq!(lookup_in(MORE, "x", Some("999001")).unwrap().windows, cloud);
+        assert_eq!(lookup_in(MORE, "CastleCrashers", None).unwrap().windows, cloud);
+        assert_eq!(lookup_in(MORE, "klaus old name", None).unwrap().windows, cloud);
+        assert_eq!(
+            lookup_in(MORE, "God of War - Ragnarok", None).unwrap().windows.as_deref(),
+            Some("{documents}/God of War Ragnarök")
+        );
+        // A save kept in the registry, on Windows only.
+        let bluey = lookup_in(MORE, "x", Some("2078350")).unwrap();
+        assert_eq!(
+            bluey.windows.as_deref(),
+            Some("{registry}/HKCU/Software/Outright Games Ltd/Bluey The Videogame")
+        );
+        assert_eq!(bluey.linux, None);
     }
 
     #[test]

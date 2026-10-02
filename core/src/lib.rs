@@ -29,6 +29,7 @@ pub mod home;
 pub mod idle;
 pub mod insert;
 pub mod launch;
+pub mod registry;
 pub mod ludusavi;
 pub mod memcard;
 pub mod notify;

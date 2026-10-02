@@ -52,6 +52,11 @@
 #                     · Linux $XDG_DATA_HOME (~/.local/share)
 #     {appsupport}    as {localappdata}, named for the macOS case
 #     {prefs}         macOS ~/Library/Preferences · %APPDATA% · ~/.config
+#     {steamuserdata} Steam's userdata/<account>, where Steam Cloud saves live:
+#                     {steamuserdata}/<app id>/remote. Only where Steam is.
+#     {registry}      Windows only: a registry key under HKCU\Software, as
+#                     {registry}/HKCU/Software/<company>/<game>. Carried as an
+#                     exported .reg file; write it on a save.windows= line.
 #
 #   A path that resolves to a whole home, Documents or AppData directory is
 #   refused: a save declaration has to name one game's saves inside one of
