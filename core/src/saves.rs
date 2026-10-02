@@ -683,6 +683,8 @@ fn declaration_lines(conf: &str) -> Vec<(String, String)> {
             || key == "save"
             || key.starts_with("save.")
             || key.starts_with("hltb_")
+            // Nothing in the editor sets the platform yet, so a rewrite would drop it.
+            || key == "platform"
         {
             // A cartridge-wide key even when it is written inside a section.
             let index = if key == "savemode" { 0 } else { index };
@@ -2260,6 +2262,17 @@ mod tests {
     fn a_conf_with_nothing_to_carry_is_returned_unchanged() {
         let new = "title=X\nexecutable=x://1\n";
         assert_eq!(preserve("title=Old\nexecutable=x://1\n", new), new);
+    }
+
+    #[test]
+    fn a_platform_survives_a_rewrite_on_its_own_game() {
+        let old = "[collection]\ntitle=T\nplatform=SNES\n\n[game]\nexecutable=x://1\n\n\
+                   [game]\nexecutable=x://2\nplatform=GBA\n";
+        let new = "[collection]\ntitle=Renamed\n\n[game]\nexecutable=x://1\n\n\
+                   [game]\nexecutable=x://2\n";
+        let kept = preserve(old, new);
+        assert!(kept.starts_with("[collection]\ntitle=Renamed\nplatform=SNES\n"), "{kept}");
+        assert!(kept.contains("executable=x://2\nplatform=GBA"), "{kept}");
     }
 
     #[test]

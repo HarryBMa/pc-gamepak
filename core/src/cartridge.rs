@@ -55,6 +55,8 @@ pub struct GameEntry {
     pub icon: String,
     pub icon_path: String,
     pub how_long: HowLong,
+    /// The game's own `platform=`, else the collection's. See [`platform`].
+    pub platform: String,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -116,6 +118,23 @@ pub struct CartridgeInfo {
     pub how_long: HowLong,
     /// A combo drive, which the launcher can also show as a memory card.
     pub memory_card: bool,
+    /// What the cartridge is for: `PC`, `SNES`, `GBA`... See [`platform`].
+    pub platform: String,
+}
+
+/// A cartridge's `platform=`, tidied: trimmed, and empty meaning a PC game.
+///
+/// What the cartridge is *for*, so a front-end that draws the physical thing —
+/// a 3D shelf, an Android "cartridge slot", a socket-style console UI — can
+/// pick the right shell: a SNES cartridge, a Game Boy one, a PC game box.
+/// Free text, compared without regard to case. The names front-ends should
+/// recognise are listed in `cartridge.conf.example`; an unknown one is a
+/// front-end's to draw as it likes, never an error.
+pub fn platform(value: Option<&String>) -> String {
+    match value.map(|v| v.trim()).filter(|v| !v.is_empty()) {
+        Some(v) => v.to_string(),
+        None => "PC".to_string(),
+    }
 }
 
 /// A stylesheet the cartridge carries, if it has one and it is not absurd.
@@ -280,6 +299,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 .map(|rel| resolve_cover(root, rel))
                 .unwrap_or_default();
 
+            let collection_platform = ini_get(&ini, "collection", "platform").cloned();
             let games: Vec<GameEntry> = game_sections
                 .iter()
                 .map(|g| {
@@ -314,6 +334,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                         icon: cover_as_data_uri(&icon_path),
                         icon_path,
                         how_long: HowLong::from_keys(Some(g)),
+                        platform: platform(g.get("platform").or(collection_platform.as_ref())),
                     }
                 })
                 .collect();
@@ -343,6 +364,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 skin_css: skin_css(root),
                 how_long: HowLong::default(),
                 memory_card: crate::memcard::is_combo_drive(root, &content),
+                platform: platform(collection_platform.as_ref()),
             });
         }
 
@@ -393,6 +415,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             skin_css: skin_css(root),
             how_long: HowLong::from_keys(ini.get("general")),
             memory_card: crate::memcard::is_combo_drive(root, &content),
+            platform: platform(ini_get(&ini, "general", "platform")),
         });
     }
 
@@ -440,6 +463,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             how_long: HowLong::default(),
             games: Vec::new(),
             memory_card: false,
+            platform: platform(None),
         });
     }
 
@@ -670,6 +694,27 @@ cover=.gamepak/cover.png
         assert!(!info.holds_game);
         assert!(!info.is_bundle);
         assert!(info.games.is_empty());
+    }
+
+    #[test]
+    fn a_cartridge_says_what_platform_it_is_for() {
+        let scratch = crate::testutil::Scratch::new("platform");
+        let read = |conf: &str| {
+            std::fs::write(scratch.join("cartridge.conf"), conf).unwrap();
+            read_cartridge_info(scratch.path().to_str().unwrap()).unwrap()
+        };
+        assert_eq!(read("title=Hades\nexecutable=x.exe\n").platform, "PC");
+        assert_eq!(read("title=Zelda\nplatform= SNES \nexecutable=z.sfc\n").platform, "SNES");
+
+        // A collection's platform is each game's unless the game says otherwise.
+        let info = read(
+            "[collection]\ntitle=Nintendo\nplatform=SNES\n\n\
+             [game]\ntitle=Zelda\nexecutable=z.sfc\n\n\
+             [game]\ntitle=Pokemon\nplatform=GBA\nexecutable=p.gba\n",
+        );
+        assert_eq!(info.platform, "SNES");
+        let games: Vec<&str> = info.games.iter().map(|g| g.platform.as_str()).collect();
+        assert_eq!(games, ["SNES", "GBA"]);
     }
 
     #[test]

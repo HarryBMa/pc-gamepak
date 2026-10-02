@@ -251,6 +251,16 @@ than a scale:
 | `data-played` | `yes` `no` |
 | `data-hltb` | `yes` `no` |
 
+**What the cartridge is for.** `#card` carries `data-platform`, the
+cartridge's `platform=` in lower case — `pc` when it does not say. A skin that
+dresses a Super Nintendo cartridge differently from a PC game box keys on it:
+
+```css
+#card[data-platform="snes"] #plate { border-radius: 4px 4px 18px 18px }
+```
+
+The names are listed in `cartridge.conf.example`.
+
 **A stats line**, `#play-stats`, under the title — hidden in the stock window,
 because the details sheet already says all of it. Show it and style it:
 

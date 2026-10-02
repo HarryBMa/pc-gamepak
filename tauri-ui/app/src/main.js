@@ -1184,6 +1184,8 @@ async function init() {
   // Before the window is shown, so the cartridge never appears in the stock
   // look and then changes its mind a frame later.
   wearSkin(cartridge.skin_css ?? "");
+  // What the cartridge is for (`platform=`), for a skin: `#card[data-platform="snes"]`.
+  el.card.dataset.platform = String(cartridge.platform || "PC").toLowerCase();
 
   // A directory has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
@@ -1207,6 +1209,11 @@ async function init() {
   renderIdentity(cartridge);
   // A combo drive: the same saves, as a memory card, one button away.
   el.memcardButton.hidden = !cartridge.memory_card;
+  // Opened by a front-end's "Memory card" action: the card is what was asked
+  // for, so closing it closes the window rather than revealing the cartridge.
+  if (cartridge.memory_card && (await invoke("opens_memory_card").catch(() => false))) {
+    await memcard.show(drivePath, closeWindow);
+  }
   renderKeys();
   try {
     played = (await invoke("cartridge_stats", { drivePath }))?.games ?? {};

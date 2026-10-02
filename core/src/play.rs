@@ -234,6 +234,7 @@ mod tests {
             skin_css: String::new(),
             how_long: Default::default(),
             memory_card: false,
+            platform: "PC".into(),
         }
     }
 
@@ -250,6 +251,7 @@ mod tests {
             icon: String::new(),
             icon_path: String::new(),
             how_long: Default::default(),
+            platform: "PC".into(),
         }
     }
 

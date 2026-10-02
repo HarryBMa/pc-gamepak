@@ -112,6 +112,13 @@ fn drive_path() -> String {
     cartridge::drive_from_args(std::env::args().skip(1))
 }
 
+/// `--memcard`: open on a combo cartridge's memory card rather than the
+/// cartridge, for a front-end with a "Memory card" action of its own.
+#[tauri::command]
+fn opens_memory_card() -> bool {
+    std::env::args().any(|arg| arg == "--memcard")
+}
+
 /// Launch the game.
 /// `executable` can be a URI (steam://, heroic://, ...) or a path relative
 /// to `drive_path`.
@@ -610,7 +617,8 @@ fn collect(results: Vec<Result<saves::SyncOutcome, String>>) -> Vec<saves::SyncO
 /// because they asked for one — `--show` is how the watcher and the tray say
 /// "the user asked for this specifically".
 fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
-    if args.iter().any(|arg| arg == "--show") {
+    // Asked for by a front-end, not a cartridge arriving: always the window.
+    if args.iter().any(|arg| arg == "--show" || arg == "--memcard") {
         return None;
     }
     let settings = settings::load();
@@ -1746,6 +1754,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             drive_path,
+            opens_memory_card,
             parse_cartridge,
             launch_game,
             eject_drive,
