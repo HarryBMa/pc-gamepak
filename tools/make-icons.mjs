@@ -17,8 +17,8 @@
  * legible where one big jump would alias. The cleaned cut-outs are kept beside
  * the icons as the sources.
  *
-*   node tools/make-icons.mjs --app badge  what this project uses
- *   node tools/make-icons.mjs --app badge  the badge is
+ *   node tools/make-icons.mjs              the cartridge is the app
+ *   node tools/make-icons.mjs --app badge  the badge is, which is what this project uses
  *
  * Needs `playwright` or `playwright-core` and a Chromium-family browser (Edge
  * on Windows): the canvas does the image work, so nothing else is installed.
