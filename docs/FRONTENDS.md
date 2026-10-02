@@ -132,7 +132,7 @@ a happy consequence.
 
 | | How it would get in |
 |---|---|
-| **Playnite** | An extension reading the state file. Playnite already imports from many sources; a cartridge is another one. `playnite.rs` reads its library today, so the plumbing is understood |
+| **Playnite** | Built: the extension in [pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/playnite) (Id `PCGamePak`) keeps a cartridge slot as the first library tile. It polls drives for `cartridge.conf` itself rather than waiting for the state file, and Play runs the launcher with no window (`--play 0`) for a single game, or opens its window (`--show`) to choose from a collection. Eject is `--safe-eject`. Off until `frontends.playnite` is switched on |
 | **Steam Big Picture** | Via (B). Nothing else reaches it |
 | **EmulationStation / Batocera** | Reads directories of ROMs. A cartridge holding ROMs could be a mount point it already scans — likely no work at all |
 | **Zaparoo** | Already supports USB sticks as tokens. A cartridge could carry a Zaparoo token file, so tapping *or* plugging works |

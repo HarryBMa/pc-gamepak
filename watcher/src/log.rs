@@ -61,7 +61,11 @@ pub fn line(message: &str) {
     let _ = writeln!(file, "[{}] {message}", timestamp());
 }
 
-/// `YYYY-MM-DD HH:MM:SS` in UTC, from the clock alone.
+/// `YYYY-MM-DDTHH:MM:SSZ`, from the clock alone.
+///
+/// UTC, and marked as UTC. It used to be written without the `Z`, so a line
+/// logged at 20:13 local read as 18:13 beside an event log that is local; the
+/// launcher's log already writes ISO 8601 with the `Z`, and now both agree.
 ///
 /// Formatting a civil date by hand rather than taking a dependency: this is the
 /// only place the watcher needs one, and the crate would be linked for the whole
@@ -72,7 +76,7 @@ pub fn timestamp() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let (y, mo, d, h, mi, s) = civil_from_unix(secs);
-    format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{s:02}")
+    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
 }
 
 /// Split a Unix timestamp into civil date and time (UTC).
@@ -131,9 +135,10 @@ mod tests {
     #[test]
     fn timestamp_is_the_expected_shape() {
         let t = timestamp();
-        assert_eq!(t.len(), 19, "{t}");
+        assert_eq!(t.len(), 20, "{t}");
         assert_eq!(&t[4..5], "-");
-        assert_eq!(&t[10..11], " ");
+        assert_eq!(&t[10..11], "T");
         assert_eq!(&t[13..14], ":");
+        assert!(t.ends_with('Z'), "a UTC time has to say it is one: {t}");
     }
 }

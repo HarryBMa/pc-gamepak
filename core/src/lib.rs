@@ -34,6 +34,7 @@ pub mod ludusavi;
 pub mod memcard;
 pub mod notify;
 pub mod playlog;
+pub mod play;
 pub mod playnite;
 pub mod playtrack;
 pub mod portable;

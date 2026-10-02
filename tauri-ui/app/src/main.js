@@ -935,13 +935,25 @@ function sizeBand(bytes) {
   return "small";
 }
 
-/** The first letter of up to three words, for a game with no picture. */
+/**
+ * A short mark for a game with no picture.
+ *
+ * Read from the name before any subtitle, so "FTL: Faster Than Light" is FTL
+ * and not FFT, the initials of "FTL:", "Faster" and "Than". A name that is
+ * already an abbreviation is kept whole; otherwise it is the first letter of up
+ * to three words. The letter is the first letter or digit in the word, so
+ * "(2000)" gives 2 rather than a bracket.
+ */
 function initialsOf(title) {
-  return (title || "")
-    .split(/\s+/)
-    .filter((word) => /[\p{L}\p{N}]/u.test(word))
+  const full = (title || "").trim();
+  const main = full.split(/\s*[:–—]\s*|\s+-\s+/)[0] || full;
+  const words = main.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word));
+  if (words.length === 1 && /^[\p{Lu}\p{N}]{2,4}$/u.test(words[0])) {
+    return words[0];
+  }
+  return words
     .slice(0, 3)
-    .map((word) => [...word][0].toUpperCase())
+    .map((word) => word.match(/[\p{L}\p{N}]/u)[0].toUpperCase())
     .join("");
 }
 

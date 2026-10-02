@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::drives::{self, TargetDrive};
 use crate::{
-    autorun, folders, format, health, playnite, portable, settings, sgdb, steam, steamlib, trim,
-    verify,
+    autorun, busy, folders, format, health, playnite, portable, settings, sgdb, steam, steamlib,
+    trim, verify,
 };
 
 /// Past this, a DRAM-less drive behind a USB bridge has little room for its
@@ -180,6 +180,20 @@ pub struct CartridgeRequest {
     /// inside it.
     #[serde(default)]
     pub copy_game: bool,
+    /// Move a Steam game instead of copying it: once the cartridge's copy has
+    /// been read back and every file matched, delete the install this PC had and
+    /// tell Steam the game now lives on the cartridge.
+    ///
+    /// Without it, a Steam game still installed on the PC is the copy Steam
+    /// plays. Steam records an app as installed in exactly one library, and a
+    /// second library holding the same app id is ignored — on 2026-09-12 a
+    /// verified FTL cartridge launched `F:\Games\Steam\…\FTLGame.exe` every time.
+    ///
+    /// Needs `copy_game` and `verify_copy` both: nothing is deleted on the
+    /// strength of a copy nobody checked. Steam games only — a folder picked by
+    /// hand has no library to update and no way back if the pick was wrong.
+    #[serde(default)]
+    pub move_game: bool,
     /// Which file inside the copied folder Play should start, relative to the
     /// game's install directory. Only used for non-Steam games.
     #[serde(default)]
@@ -338,6 +352,9 @@ pub struct CartridgeResult {
     pub steam_closed: bool,
     /// True when a stale entry for this drive was taken out of that list.
     pub steam_entry_removed: bool,
+    /// The PC installs deleted because the game was moved rather than copied,
+    /// one line each: what, from where, and how much space came back.
+    pub removed_from_pc: Vec<String>,
     pub warnings: Vec<String>,
 }
 
@@ -850,6 +867,7 @@ pub fn create_cartridge(
         digest_matched: None,
         steam_closed: false,
         steam_entry_removed: false,
+        removed_from_pc: Vec::new(),
         warnings: Vec::new(),
     };
 
@@ -866,6 +884,18 @@ pub fn create_cartridge(
     if title.is_empty() {
         return Err("Give the cartridge a title.".into());
     }
+
+    // Refused before anything is written, not discovered after the copy.
+    if request.move_game && !(request.copy_game && request.verify_copy) {
+        return Err(
+            "Moving a game deletes this PC's copy of it, so it needs both copying and \
+             verifying switched on: nothing is deleted on the strength of a copy nobody checked."
+                .into(),
+        );
+    }
+
+    // Steam installs to delete once the cartridge's copy has proved itself.
+    let mut pc_installs: Vec<steamlib::InstalledGame> = Vec::new();
 
     // ---- 0. Steam's library list ----------------------------------------
     //
@@ -958,6 +988,7 @@ pub fn create_cartridge(
                             result.game_folder = copied.folder.clone();
                         }
                         written.extend(copied.digests);
+                        pc_installs.extend(copied.pc_install);
                         // A generic copy moves the launch target onto the
                         // cartridge; a Steam copy keeps its steam:// URI.
                         if let Some(on_cartridge) = copied.executable {
@@ -1209,6 +1240,7 @@ pub fn create_cartridge(
             &mut warnings,
             progress,
         );
+        remove_pc_installs(&pc_installs, &root, &mut result, &mut warnings, progress);
         result.warnings = warnings;
         return Ok(result);
     }
@@ -1228,6 +1260,7 @@ pub fn create_cartridge(
                 result.registered_with_steam = copied.registered_with_steam;
                 result.game_folder = copied.folder.clone();
                 written.extend(copied.digests);
+                pc_installs.extend(copied.pc_install);
                 // A generic copy replaces the launch target with a path on the
                 // cartridge; a Steam copy keeps its steam:// URI.
                 if let Some(on_cartridge) = copied.executable {
@@ -1378,6 +1411,7 @@ pub fn create_cartridge(
         &mut warnings,
         progress,
     );
+    remove_pc_installs(&pc_installs, &root, &mut result, &mut warnings, progress);
     result.warnings = warnings;
     Ok(result)
 }
@@ -1718,6 +1752,9 @@ struct Copied {
     /// Every file that was written, and its sum, when the copy was asked to
     /// keep track. Empty otherwise.
     digests: Vec<crate::verify::FileDigest>,
+    /// The Steam install this was copied from, when the request asked for a
+    /// move. Deleted only after the whole cartridge has verified.
+    pc_install: Option<steamlib::InstalledGame>,
 }
 
 /// Copy the game, by whichever route suits where it came from.
@@ -1812,6 +1849,8 @@ fn copy_portable_game(
         folder: Some(relative_folder),
         registered_with_steam: false,
         digests: digests.map(|d| d.into_manifest().files).unwrap_or_default(),
+        // A folder picked by hand is never deleted; see `move_game`.
+        pc_install: None,
     }))
 }
 
@@ -1988,13 +2027,28 @@ fn copy_steam_game(
         return Err(steamlib::LibraryError::SteamRunning.to_string());
     }
 
-    let game = steamlib::locate(&steam_root, app_id)
-        .ok_or_else(|| steamlib::LibraryError::GameNotFound(request.title.clone()).to_string())?;
+    // Never the cartridge's own copy: see `locate_off`.
+    let game = steamlib::locate_off(&steam_root, app_id, root).ok_or_else(|| {
+        if steamlib::locate(&steam_root, app_id).is_some() {
+            format!(
+                "the only copy of {} Steam knows about is the one on this cartridge, so there \
+                 is nothing to copy it from",
+                request.title
+            )
+        } else {
+            steamlib::LibraryError::GameNotFound(request.title.clone()).to_string()
+        }
+    })?;
 
-    let total = if game.size_on_disk > 0 {
-        game.size_on_disk
+    // Measured, not taken from the manifest. `SizeOnDisk` is what Steam last
+    // recorded, and it drifts from what is really there: FTL's says 286,586,003
+    // bytes and the folder holds 287,269,333, so progress ran to 100.2%. The walk
+    // is metadata only, and nothing next to a copy of the same tree.
+    let measured = steamlib::tree_size(&game.install_path);
+    let total = if measured > 0 {
+        measured
     } else {
-        steamlib::tree_size(&game.install_path)
+        game.size_on_disk
     };
 
     // Check space before starting a copy that could run for many minutes.
@@ -2074,7 +2128,195 @@ fn copy_steam_game(
         folder: Some(format!("{}/steamapps/common", steamlib::LIBRARY_DIR)),
         registered_with_steam: registered,
         digests: digests.map(|d| d.into_manifest().files).unwrap_or_default(),
+        pc_install: request.move_game.then_some(game),
     }))
+}
+
+/// What a move would delete from this PC, in words, before anything is written.
+///
+/// One line per Steam game in the request that Steam has installed somewhere:
+/// the folder, and its size. A game Steam cannot find is said to be so rather
+/// than left out, because a plan that silently shrinks reads as a plan that
+/// covers everything.
+pub fn move_plan(request: &CartridgeRequest) -> Vec<String> {
+    let Some(steam_root) = steam::steam_root() else {
+        return vec!["Steam is not installed here, so nothing would be moved.".into()];
+    };
+    let games: Vec<(String, String)> = match request.games.as_deref().filter(|g| !g.is_empty()) {
+        Some(games) => games
+            .iter()
+            .filter_map(|game| Some((game.app_id.clone()?, game.title.clone())))
+            .collect(),
+        None => request
+            .app_id
+            .clone()
+            .map(|id| vec![(id, request.title.clone())])
+            .unwrap_or_default(),
+    };
+    games
+        .into_iter()
+        .filter(|(id, _)| is_numeric(id))
+        .map(|(id, title)| {
+            match steamlib::locate_off(&steam_root, &id, Path::new(&request.drive_path)) {
+                Some(game) => format!(
+                    "delete {} ({}) once the cartridge verifies",
+                    game.install_path.display(),
+                    format::human_bytes(steamlib::tree_size(&game.install_path))
+                ),
+                None => format!("{title}: Steam has no install of app {id} to delete"),
+            }
+        })
+        .collect()
+}
+
+/// Delete this PC's copy of every Steam game that was moved rather than copied.
+///
+/// Last, after `finish` has read the cartridge back, and only when every file
+/// matched. A copy that did not verify leaves the original exactly where it was
+/// — the one outcome worse than a slow cartridge is a game that exists nowhere.
+fn remove_pc_installs(
+    games: &[steamlib::InstalledGame],
+    root: &Path,
+    result: &mut CartridgeResult,
+    warnings: &mut Vec<String>,
+    progress: &mut dyn FnMut(Progress),
+) {
+    if games.is_empty() {
+        return;
+    }
+    let names = games
+        .iter()
+        .map(|game| game.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if result.verified_ok != Some(true) {
+        warnings.push(format!(
+            "{names} stayed on this PC: the copy on the cartridge did not check out, so the \
+             original was not deleted. Steam will go on playing the PC's copy."
+        ));
+        return;
+    }
+    let Some(steam_root) = steam::steam_root() else {
+        warnings.push(format!(
+            "{names} stayed on this PC: Steam could not be found to update."
+        ));
+        return;
+    };
+
+    for game in games {
+        progress(Progress {
+            step: "move",
+            message: format!("Removing {} from this PC…", game.name),
+            done_bytes: 0,
+            total_bytes: 0,
+        });
+        match remove_pc_install(&steam_root, root, game, warnings) {
+            Ok((library, freed)) => result.removed_from_pc.push(format!(
+                "{} from {} ({} freed)",
+                game.name,
+                library.display(),
+                format::human_bytes(freed)
+            )),
+            Err(e) => warnings.push(format!("{} stayed on this PC: {e}", game.name)),
+        }
+    }
+}
+
+/// Delete one Steam install, having checked it is the thing it claims to be.
+///
+/// The order is chosen so that stopping anywhere leaves Steam believing the
+/// truth. The manifest goes first: from then on Steam does not claim the game
+/// here, and the only manifest left for it is the cartridge's. Then the library
+/// list, then the files — a folder that fails to delete is wasted space, not a
+/// game Steam thinks is installed.
+///
+/// Workshop content and the shader cache under the old library are left alone:
+/// neither is the install, and Steam rebuilds both.
+fn remove_pc_install(
+    steam_root: &Path,
+    root: &Path,
+    game: &steamlib::InstalledGame,
+    warnings: &mut Vec<String>,
+) -> Result<(PathBuf, u64), String> {
+    let library = steamlib::library_of_install(game).ok_or_else(|| {
+        format!(
+            "{} is not laid out like a Steam install",
+            game.install_path.display()
+        )
+    })?;
+
+    // Never the cartridge itself, whatever path reaches it.
+    let canonical =
+        |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if canonical(&game.install_path).starts_with(canonical(root)) {
+        return Err("that copy is the one on the cartridge".into());
+    }
+
+    // The copy replacing it has to be where Steam will look for it.
+    let cartridge_library = steamlib::library_root(root);
+    let install_dir = game
+        .install_path
+        .file_name()
+        .ok_or_else(|| "the install folder has no name".to_string())?;
+    let manifest_name = game
+        .manifest_path
+        .file_name()
+        .ok_or_else(|| "the manifest has no name".to_string())?;
+    if !cartridge_library
+        .join("steamapps/common")
+        .join(install_dir)
+        .is_dir()
+        || !cartridge_library
+            .join("steamapps")
+            .join(manifest_name)
+            .is_file()
+    {
+        return Err("the cartridge does not hold a copy Steam can find".into());
+    }
+
+    if steamlib::steam_is_running() {
+        return Err(steamlib::LibraryError::SteamRunning.to_string());
+    }
+    let busy = busy::holders(&game.install_path);
+    if !busy.holders.is_empty() {
+        return Err(format!(
+            "it is in use by {}",
+            busy.holders
+                .iter()
+                .map(|holder| holder.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let freed = steamlib::tree_size(&game.install_path);
+
+    std::fs::remove_file(&game.manifest_path)
+        .map_err(|e| format!("could not delete {}: {e}", game.manifest_path.display()))?;
+
+    if let Err(e) = steamlib::record_moved_app(
+        steam_root,
+        &game.app_id,
+        &library,
+        &cartridge_library,
+        freed,
+    ) {
+        // Not fatal: with the manifest gone, Steam finds the truth when it scans.
+        warnings.push(format!(
+            "Steam's library list still names {} under {} until Steam next starts. ({e})",
+            game.name,
+            library.display()
+        ));
+    }
+
+    std::fs::remove_dir_all(&game.install_path).map_err(|e| {
+        format!(
+            "Steam no longer lists it here, but {} could not be deleted: {e}",
+            game.install_path.display()
+        )
+    })?;
+
+    Ok((library, freed))
 }
 
 /// After a format the mount point can briefly disappear.

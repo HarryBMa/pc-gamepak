@@ -112,6 +112,9 @@ const el = {
   drivesEmpty: $("drives-empty"),
   btnRegister: $("btn-register"),
   btnUnregister: $("btn-unregister"),
+  moveRow: $("move-row"),
+  optMove: $("opt-move"),
+  moveHint: $("move-hint"),
   railPlan: $("rail-plan"),
   plan: $("plan"),
   railForced: $("rail-forced"),
@@ -337,14 +340,28 @@ function resetRunOptions() {
 /** Set once a write has finished, until the next cartridge is started. */
 let finished = false;
 
+/**
+ * Move rather than copy: delete the PC's Steam install once the cartridge's copy
+ * has verified. Run-state like `run.copy`, but never seeded from Settings —
+ * a default that deletes games is not a default anyone should inherit.
+ */
+let moveWanted = false;
+
 /** How many of the chosen games came out of Steam. */
 function steamGames() {
   return picked.filter((g) => g.library === "steam").length;
 }
 
+/** The Steam games a move would take off this PC. */
+function movable() {
+  return copyable().filter((g) => g.library === "steam");
+}
+
 const on = {
   get copy() { return run.copy && copyable().length > 0; },
   get verify() { return run.verify; },
+  // The backend refuses a move without a verified copy; this refuses first.
+  get move() { return moveWanted && this.copy && this.verify && movable().length > 0; },
   get icon() { return settings.defaultIcon !== false; },
   get eject() { return run.eject; },
   // Only meaningful when Steam is involved: it exists so Steam does not write
@@ -1393,6 +1410,20 @@ function planSteps() {
       : "Write the launcher and manifest",
     detail: on.icon ? "autorun.ico · ~2 s" : "~2 s",
   });
+  // After the write, because that is when the backend does it: the read-back
+  // that makes deleting safe is the last thing the build does before this.
+  if (on.move) {
+    const games = movable();
+    const freed = games.reduce((s, g) => s + (g.sizeOnDisk || 0), 0);
+    steps.push({
+      what:
+        games.length === 1
+          ? `Delete ${games[0].name} from this PC`
+          : `Delete ${games.length} games from this PC`,
+      detail: `only if every file verified · frees ${formatBytes(freed)}`,
+      danger: true,
+    });
+  }
   if (on.tune) {
     steps.push({ what: "Tune Windows for this cartridge", detail: "Defender and Search" });
   }
@@ -1519,8 +1550,36 @@ function refreshRail() {
 
   renderBuild();
   refreshSpace();
+  refreshMove();
   refreshPlan();
   refreshCreateButton();
+}
+
+/**
+ * Offer the move only where it means something: Steam games being copied.
+ *
+ * A Steam game still installed on this PC is the copy Steam plays, however good
+ * the one on the cartridge is — Steam lists an app in one library and ignores
+ * the rest. The hint says so, because that is the only reason to tick this.
+ */
+function refreshMove() {
+  const games = movable();
+  const offered = on.copy && games.length > 0;
+  el.moveRow.hidden = !offered;
+  if (!offered) return;
+
+  el.optMove.disabled = !on.verify;
+  el.optMove.checked = on.move;
+  if (!on.verify) {
+    el.moveHint.textContent =
+      "Needs “Verify after copying” in Settings: nothing is deleted on the strength of an unchecked copy.";
+    return;
+  }
+  const what = games.length === 1 ? games[0].name : `these ${games.length} Steam games`;
+  el.moveHint.textContent =
+    `Deletes ${what} from this PC once every file on the cartridge has been checked, ` +
+    "and tells Steam the cartridge is where it lives. Without this, Steam keeps " +
+    "playing the copy on this PC.";
 }
 
 /**
@@ -1936,6 +1995,7 @@ function renderForced() {
     [on.format, `Formatted as ${filesystemLabel(filesystem())}`, "Not formatted"],
     [on.copy, "Games copied onto the cartridge", "Nothing copied — a key only"],
     [on.verify && on.copy, "Verify after copying", "Copy not verified"],
+    [on.move, "PC's Steam install deleted once verified", "PC's install kept"],
     [on.icon, "Drive icon from artwork", "No drive icon"],
     [on.tune, "Windows tuned", "Windows tuning skipped"],
     [on.eject, "Eject when done", "Left mounted"],
@@ -2008,6 +2068,7 @@ function buildRequest() {
     formatFilesystem: filesystem(),
     formatLabel: driveLabelFor(cartridgeTitle(), filesystem()) || null,
     copyGame: on.copy,
+    moveGame: on.move,
     closeSteam: on.closeSteam,
     verifyCopy: on.verify,
     trimAfterWrite: on.trim,
@@ -2141,6 +2202,7 @@ async function write() {
   renderForced();
   el.railForced.hidden = false;
   el.railPlan.hidden = true;
+  el.moveRow.hidden = true;
   el.runningTitle.textContent = cartridgeTitle();
   el.runningPhase.textContent = "Starting…";
   el.writtenDone.textContent = "—";
@@ -2178,7 +2240,10 @@ async function write() {
       );
     }
     if (result.registeredWithSteam) parts.push("Registered as a Steam library.");
+    for (const removed of result.removedFromPc ?? []) parts.push(`Moved: deleted ${removed}.`);
     for (const warning of result.warnings ?? []) parts.push(warning);
+    // Asked for per write, so the next write starts from not deleting anything.
+    moveWanted = false;
 
     // Tuning elevates, so it happens here rather than inside the copy: the UAC
     // prompt lands once, after the long part is over, and declining it costs
@@ -2245,6 +2310,7 @@ function stepKeyFor(what) {
   if (text.startsWith("close steam")) return "steam";
   if (text.startsWith("copy")) return "copy";
   if (text.startsWith("verify")) return "verify";
+  if (text.startsWith("delete")) return "move";
   if (text.startsWith("write")) return "autorun";
   if (text.startsWith("look up")) return "hltb";
   if (text.startsWith("tune")) return "tune";
@@ -3646,10 +3712,16 @@ el.settingsSave.addEventListener("click", saveSettings);
  */
 function describeOnInsert() {
   const hints = {
-    focus_ui: "",
-    auto_launch_game: "Games stored on the cartridge still wait for Play.",
-    notify_only: platform === "windows" ? "Not on Windows yet — opens the launcher." : "",
-    none: "",
+    focus_ui: "The cartridge's window opens and comes to the front.",
+    auto_launch_game:
+      "Starts the game without a window — for a cartridge that points at a game " +
+      "your PC already has. A game stored on the cartridge still waits for a " +
+      "click, because a drive someone handed you should not get to run a program " +
+      "on its own.",
+    notify_only:
+      "A notification, and nothing else. If one cannot be posted, the launcher " +
+      "opens instead.",
+    none: "Nothing happens. The tray and the desktop entry still open it.",
   };
   el.onInsertHint.textContent = hints[el.setOnInsert.value] ?? "";
   el.onInsertHint.hidden = !el.onInsertHint.textContent;
@@ -3728,6 +3800,11 @@ function frontendHint(front) {
   if (!front.installed) return "Not installed";
   return "";
 }
+
+el.optMove.addEventListener("change", () => {
+  moveWanted = el.optMove.checked;
+  refreshPlan();
+});
 
 el.setOnInsert.addEventListener("change", describeOnInsert);
 el.setPlaytime.addEventListener("change", () => {

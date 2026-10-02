@@ -50,6 +50,15 @@ fn main() {
                 }
                 return;
             }
+            Some("health") => {
+                // What the launcher's details panel would say about a drive,
+                // without opening the launcher to find out.
+                for mount in peeked.iter().skip(1) {
+                    let health = gamepak_core::health::inspect(mount);
+                    println!("{}", serde_json::to_string_pretty(&health).unwrap());
+                }
+                return;
+            }
             Some("query") => {
                 for name in peeked.iter().skip(1) {
                     println!("{name}\t->\t{}", create::search_query_for(name));
@@ -113,6 +122,13 @@ fn main() {
         }
     }
 
+    // The other thing a build can destroy, named just as plainly.
+    if request.move_game {
+        for line in create::move_plan(&request) {
+            println!("move plan: {line}");
+        }
+    }
+
     if mode != "build" {
         println!("plan only; nothing written. Re-run with `build` to write it.");
         return;
@@ -128,12 +144,11 @@ fn main() {
             last = progress.step.to_string();
         }
         if progress.total_bytes > 0 {
-            print!(
-                "\r{}: {} {:.1}%",
-                progress.step,
-                progress.message,
-                progress.done_bytes as f64 / progress.total_bytes as f64 * 100.0
-            );
+            // Capped the way the wizard caps its bar: a game that grows a file
+            // while it is being copied can still pass its measured size.
+            let percent =
+                (progress.done_bytes as f64 / progress.total_bytes as f64 * 100.0).min(100.0);
+            print!("\r{}: {} {percent:.1}%", progress.step, progress.message);
         }
         let _ = std::io::stdout().flush();
     });

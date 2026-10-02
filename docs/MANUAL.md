@@ -126,8 +126,10 @@ is a **plugin**, and **Settings → Where a cartridge opens** is the list:
 | | |
 |---|---|
 | **PC GamePak launcher** | The cartridge's own window. Built in, on by default. |
-| **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-decky). |
-| **Playnite library** | Cartridge games in Playnite's library while the drive is in. Not built yet, and listed so the shape is visible. |
+| **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/decky). |
+| **Playnite library** | A cartridge slot as the first tile in Playnite's library: empty with no cartridge in, the cartridge's art with one. Play starts a single game directly and opens this launcher to choose from a collection; the tile's menu ejects. Through the [Playnite extension](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/playnite). |
+
+Both plugins live in [pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins).
 
 A plugin has to be installed before its switch does anything, and the dialog says
 so rather than offering a dead control. More than one may be on: a desktop that
@@ -150,6 +152,39 @@ whether it is the designated front-end, and behaves accordingly — which is wha
 lets one be written in Python inside Steam's process tree and another in C# inside
 Playnite's.
 
+### Play and Eject without the window
+
+A front-end with its own Play button does not have to open the launcher's window
+to get what the window does. Two arguments do it with no window at all:
+
+```
+pc-gamepak --drive D:\ --play 0
+pc-gamepak --drive D:\ --safe-eject [--force]
+```
+
+`--play <n>` plays game *n* — 0 on a single-game cartridge, a collection's games
+in the order `cartridge.conf` lists them. It brings the saves and shader caches
+off the cartridge, counts the launch, starts the game, and **stays running while
+the game does**: a program running from the drive is how it knows — or, for a
+Steam game, a program running from its install folder in any Steam library,
+because Steam may start a second copy of the game instead of the cartridge's.
+When that has
+been gone for fifteen seconds (a game that restarts itself leaves a gap) it closes
+the session and takes the saves and caches back to the cartridge. Whatever started
+it can time that process. Two exceptions: a save that changed on both sides opens
+the window instead, because only the window can ask which to keep; and a cartridge
+that points at a game installed elsewhere has nothing on the drive to watch, so
+the game is started and the session closed at once, as **Start the game** does.
+
+`--play` is a click by another name — it is what the Playnite slot's Play runs —
+so it is not bound by the rule below about starting programs on the cartridge.
+Nothing runs it on insert.
+
+`--safe-eject` is the window's Eject. It prints one word on the first line —
+`ejected`, `busy` or `error` — and lines for a person after it, and exits 0, 2 or
+1 to match. `busy` means a program is running from the drive and nothing was
+done; `--force` closes it first, which is **Force quit and eject**.
+
 ### What the launcher does when you plug one in
 
 If the launcher is one of the front-ends that is on, **Settings → When a cartridge
@@ -159,7 +194,7 @@ is plugged in** decides what it does about it:
 |---|---|
 | **Open the launcher** | The cartridge's window appears and takes the front. The default, and what this has always done. |
 | **Start the game** | No window; the game starts. See the limit below. |
-| **Just tell me** | A desktop notification. Linux only so far. |
+| **Just tell me** | A desktop notification. On Windows it comes from the PC GamePak tray icon, so the watcher has to be running; if it is not, the launcher opens instead. |
 | **Nothing** | No reaction at all. The tray icon and the desktop entry still open it. |
 
 **Start the game only ever starts a game your PC already has** — a cartridge
@@ -736,6 +771,37 @@ check can be run later on a machine that no longer has the original.
 This is an integrity check, not a signature: CRC-32 is the right tool for *did
 this survive the cable*, the job it does in zip and gzip, and the wrong tool for
 *did somebody change this on purpose*.
+
+### Moving a Steam game instead of copying it
+
+**A Steam game that is still installed on your PC plays from your PC, not from
+the cartridge.** Steam records each game as installed in exactly one library and
+ignores a second copy of the same game anywhere else. The first cartridge tested
+this way — FTL, copied and verified — started `F:\Games\Steam\…\FTLGame.exe`
+every time Play was pressed.
+
+So when you pick a Steam game and copying is on, the wizard offers **Move instead
+of copy**. With it ticked, the build goes on exactly as before, and then, as its
+last step:
+
+1. only if **every file on the cartridge was read back and matched**, it deletes
+   the game's `appmanifest` from the PC's library, so Steam stops claiming it
+   there;
+2. moves the game's entry in Steam's library list to the cartridge (the file is
+   backed up first, as for every edit this makes);
+3. deletes the game's folder from the PC.
+
+A copy that did not verify deletes nothing, and the build says so. A game that is
+running is not deleted. Nothing is deleted for a folder you picked by hand — only
+Steam games, which Steam can reinstall. Workshop content and the shader cache
+stay where they are.
+
+It is never a saved default and starts unticked on every write, because it is
+the one option that removes something from your PC rather than the cartridge. It
+needs **Verify after copying** switched on, and is greyed out without it.
+
+From a script, `"moveGame": true` in a `build-cart` request does the same, and
+`build-cart plan` lists what it would delete before anything is written.
 
 ### Which cartridge is this?
 

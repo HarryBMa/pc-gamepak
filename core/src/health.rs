@@ -17,9 +17,10 @@
 //!     drive, the more that costs.
 //!
 //! On Linux all of this is read straight out of sysfs — no processes, no
-//! libraries. On Windows the transport is asked for once, lazily, through
-//! PowerShell; the link speed is not reported there, and this says so rather
-//! than guessing.
+//! libraries. On Windows the device tree is walked once, lazily, through
+//! PowerShell, for the transport and the hub the drive is plugged into, and
+//! that hub is asked for the speed it negotiated. Whatever cannot be read is
+//! left empty rather than guessed at.
 
 use std::path::Path;
 
@@ -294,49 +295,292 @@ fn capacity(mount: &Path) -> (u64, u64) {
         .unwrap_or((0, 0))
 }
 
-/// Windows does not publish the negotiated USB speed anywhere cheap, so only
-/// the transport is asked for — and only when someone opens the details.
+/// Walks from a drive letter up the device tree, printing what it passes.
+///
+/// `Get-PhysicalDisk`'s `BusType` is `USB` for every enclosure, which says
+/// nothing about either question this module exists to answer, so the tree is
+/// walked instead: the USB node's service is the transport, its parent and port
+/// are where to ask the hub for the negotiated speed, and the PCI node the walk
+/// ends on is the host controller.
+///
+/// `@LETTER@` is replaced rather than formatted in, so the braces stay PowerShell's.
+#[cfg(windows)]
+const TREE_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+$n = (Get-Partition -DriveLetter @LETTER@).DiskNumber
+"bus=" + (Get-Disk -Number $n).BusType
+$id = (Get-CimInstance Win32_DiskDrive -Filter "Index=$n").PNPDeviceID
+$seen = $false
+for ($i = 0; $i -lt 16 -and $id; $i++) {
+  $p = @{}
+  Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_Service,DEVPKEY_Device_Parent,DEVPKEY_Device_Address,DEVPKEY_Device_FriendlyName,DEVPKEY_Device_DeviceDesc -ErrorAction SilentlyContinue |
+    ForEach-Object { $p[$_.KeyName] = $_.Data }
+  if ($id -like 'PCI\*') {
+    $name = $p['DEVPKEY_Device_FriendlyName']
+    if (-not $name) { $name = $p['DEVPKEY_Device_DeviceDesc'] }
+    "controller=" + $name
+    break
+  }
+  if (-not $seen -and $p['DEVPKEY_Device_Service'] -in 'UASPStor','USBSTOR') {
+    $seen = $true
+    "service=" + $p['DEVPKEY_Device_Service']
+    "hub=" + $p['DEVPKEY_Device_Parent']
+    "port=" + $p['DEVPKEY_Device_Address']
+  }
+  $id = $p['DEVPKEY_Device_Parent']
+}
+"#;
+
+/// The transport, and the fastest the link can be running at, for a volume.
+///
+/// The speed comes from the hub the device is plugged into, which is the only
+/// place Windows keeps the negotiated one. If the hub will not answer, a
+/// USB 2.0 host controller still settles it: nothing on one runs faster than
+/// 480 Mbps. A USB 3 controller settles nothing — the port can still have
+/// fallen back — so that is left unknown rather than guessed at.
 #[cfg(windows)]
 fn probe(mount: &str) -> Option<Link> {
     let letter = mount.trim_end_matches('\\').trim_end_matches(':');
-    if letter.len() != 1 {
+    if letter.len() != 1 || !letter.chars().all(|c| c.is_ascii_alphabetic()) {
         return None;
     }
 
-    // The service driving the disk is the tell: uaspstor is UASP, USBSTOR is
-    // BOT. Anything unexpected is reported as-is rather than guessed at.
-    let script = format!(
-        "$ErrorActionPreference='Stop'; \
-         $p = Get-Partition -DriveLetter {letter}; \
-         $d = Get-PnpDevice -InstanceId (Get-Disk -Number $p.DiskNumber).Path.Split('#')[1..2] \
-              -ErrorAction SilentlyContinue; \
-         (Get-PhysicalDisk | Where-Object DeviceId -eq $p.DiskNumber).BusType"
-    );
-
+    let script = TREE_SCRIPT.replace("@LETTER@", letter);
     let out = crate::proc::command("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output()
         .ok()?;
-    let bus = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if bus.is_empty() {
+    let tree = UsbTree::parse(&String::from_utf8_lossy(&out.stdout));
+
+    let transport = tree.transport();
+    if transport.is_empty() {
+        // Not USB at all — an internal disk, or a bus this does not know. Its
+        // bus type is the most honest thing to say about it.
+        return (!tree.bus.is_empty() && tree.bus != "USB").then(|| Link {
+            mbps: None,
+            transport: tree.bus.clone(),
+        });
+    }
+
+    let mbps = negotiated_mbps(&tree.hub, tree.port).or_else(|| tree.controller_ceiling());
+    Some(Link { mbps, transport })
+}
+
+/// What [`TREE_SCRIPT`] found, one `key=value` per line.
+///
+/// Parsed on every platform so the tests run in CI, which is Linux.
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Debug, Default, PartialEq)]
+struct UsbTree {
+    /// `Get-Disk`'s bus type: `USB`, `NVMe`, `SATA`.
+    bus: String,
+    /// The service on the USB device node: `UASPStor` or `USBSTOR`.
+    service: String,
+    /// Instance id of the hub the device is plugged into.
+    hub: String,
+    /// Port on that hub, 1-based.
+    port: u32,
+    /// The host controller's name.
+    controller: String,
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+impl UsbTree {
+    fn parse(text: &str) -> Self {
+        let mut tree = Self::default();
+        for line in text.lines() {
+            let Some((key, value)) = line.trim().split_once('=') else {
+                continue;
+            };
+            let value = value.trim();
+            match key {
+                "bus" => tree.bus = value.to_string(),
+                "service" => tree.service = value.to_string(),
+                "hub" => tree.hub = value.to_string(),
+                "port" => tree.port = value.parse().unwrap_or(0),
+                "controller" => tree.controller = value.to_string(),
+                _ => {}
+            }
+        }
+        tree
+    }
+
+    /// "UASP" or "BOT", named the way Linux names them; empty when neither.
+    fn transport(&self) -> String {
+        if self.service.eq_ignore_ascii_case("uaspstor") {
+            "UASP".to_string()
+        } else if self.service.eq_ignore_ascii_case("usbstor") {
+            "BOT".to_string()
+        } else {
+            String::new()
+        }
+    }
+
+    /// The most a link on this controller can be, when that is informative.
+    ///
+    /// Only the USB 2.0 and 1.1 controllers say anything definite. On
+    /// 2026-08-20 a cartridge sat on an `AMD USB 2.0 eXtensible Host
+    /// Controller` behind a hub called `ROOT_HUB30` and copied at 18 MB/s; the
+    /// hub's name said USB 3, the controller's said the truth.
+    fn controller_ceiling(&self) -> Option<u32> {
+        let name = self.controller.to_ascii_lowercase();
+        if name.contains("usb 2.0") || name.contains("enhanced host controller") {
+            Some(480)
+        } else if name.contains("open host controller")
+            || name.contains("universal host controller")
+        {
+            Some(12)
+        } else {
+            None
+        }
+    }
+}
+
+/// The speed a hub port negotiated, from the hub's own answer.
+///
+/// `_EX_V2` says whether the device is running at SuperSpeed or SuperSpeedPlus;
+/// the older `_EX` distinguishes the speeds below that. SuperSpeedPlus is 10 or
+/// 20 Gbps and the hub does not say which, so it is reported as 10 — the lower
+/// of the two, which is also the one no warning is given for.
+#[cfg(windows)]
+fn negotiated_mbps(hub: &str, port: u32) -> Option<u32> {
+    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
+        CM_Get_Device_Interface_ListW, CM_Get_Device_Interface_List_SizeW,
+        CM_GET_DEVICE_INTERFACE_LIST_PRESENT, CR_SUCCESS,
+    };
+    use windows_sys::Win32::Devices::Usb::{
+        GUID_DEVINTERFACE_USB_HUB, IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX,
+        IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX_V2, USB_NODE_CONNECTION_INFORMATION_EX,
+        USB_NODE_CONNECTION_INFORMATION_EX_V2,
+    };
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    if hub.is_empty() || port == 0 {
+        return None;
+    }
+    let hub_id: Vec<u16> = hub.encode_utf16().chain(std::iter::once(0)).collect();
+
+    // The hub's device interface path, which is what CreateFileW opens.
+    let path = unsafe {
+        let mut length = 0u32;
+        if CM_Get_Device_Interface_List_SizeW(
+            &mut length,
+            &GUID_DEVINTERFACE_USB_HUB,
+            hub_id.as_ptr(),
+            CM_GET_DEVICE_INTERFACE_LIST_PRESENT,
+        ) != CR_SUCCESS
+            || length <= 1
+        {
+            return None;
+        }
+        let mut list = vec![0u16; length as usize];
+        if CM_Get_Device_Interface_ListW(
+            &GUID_DEVINTERFACE_USB_HUB,
+            hub_id.as_ptr(),
+            list.as_mut_ptr(),
+            length,
+            CM_GET_DEVICE_INTERFACE_LIST_PRESENT,
+        ) != CR_SUCCESS
+        {
+            return None;
+        }
+        // A multi-string: the first entry, and its terminator.
+        let end = list.iter().position(|c| *c == 0)?;
+        list.truncate(end + 1);
+        list
+    };
+
+    // No access rights asked for: both IOCTLs are FILE_ANY_ACCESS, and asking
+    // for none is what lets this run unelevated.
+    let handle = unsafe {
+        CreateFileW(
+            path.as_ptr(),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            0,
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
         return None;
     }
 
-    Some(Link {
-        mbps: None,
-        transport: windows_transport(&bus),
-    })
+    // SAFETY: both structs are packed(1), so a byte buffer of at least their
+    // size is a valid place for them, and only fixed-offset fields are read.
+    unsafe {
+        let mut v2: USB_NODE_CONNECTION_INFORMATION_EX_V2 = std::mem::zeroed();
+        v2.ConnectionIndex = port;
+        v2.Length = std::mem::size_of::<USB_NODE_CONNECTION_INFORMATION_EX_V2>() as u32;
+        // USB 1.1, 2.0 and 3.0: every protocol this caller understands.
+        v2.SupportedUsbProtocols.ul = 0b111;
+        let mut returned = 0u32;
+        let v2_ok = DeviceIoControl(
+            handle,
+            IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX_V2,
+            std::ptr::addr_of!(v2).cast(),
+            v2.Length,
+            std::ptr::addr_of_mut!(v2).cast(),
+            v2.Length,
+            &mut returned,
+            std::ptr::null_mut(),
+        ) != 0;
+        let flags = if v2_ok { v2.Flags.ul } else { 0 };
+
+        // The pipe list on the end is variable length; room for plenty.
+        let mut buffer = [0u8; 1024];
+        let info = buffer
+            .as_mut_ptr()
+            .cast::<USB_NODE_CONNECTION_INFORMATION_EX>();
+        std::ptr::addr_of_mut!((*info).ConnectionIndex).write_unaligned(port);
+        let ex_ok = DeviceIoControl(
+            handle,
+            IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX,
+            info.cast(),
+            buffer.len() as u32,
+            info.cast(),
+            buffer.len() as u32,
+            &mut returned,
+            std::ptr::null_mut(),
+        ) != 0;
+        let ex_speed = ex_ok.then(|| (*info).Speed);
+
+        CloseHandle(handle);
+        speed_from_hub(v2_ok.then_some(flags), ex_speed)
+    }
 }
 
-/// Windows reports a bus type rather than the transport; only USB is
-/// interesting here, and it does not say which USB protocol is in use.
-#[cfg(windows)]
-fn windows_transport(bus: &str) -> String {
-    match bus.trim() {
-        // Plain "USB" says nothing about which USB protocol is in use, so it
-        // is no more informative than saying nothing.
-        "USB" | "" => String::new(),
-        other => other.to_string(),
+/// Turn the hub's two answers into megabits.
+///
+/// `flags` is `_EX_V2`'s: bit 0 operating at SuperSpeed or higher, bit 2
+/// operating at SuperSpeedPlus or higher (bits 1 and 3 are only what the device
+/// is *capable* of, which is not the question). `speed` is `_EX`'s
+/// `USB_DEVICE_SPEED`: 0 low, 1 full, 2 high, 3 super.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn speed_from_hub(flags: Option<u32>, speed: Option<u8>) -> Option<u32> {
+    const OPERATING_AT_SUPER_SPEED: u32 = 1 << 0;
+    const OPERATING_AT_SUPER_SPEED_PLUS: u32 = 1 << 2;
+
+    if let Some(flags) = flags {
+        if flags & OPERATING_AT_SUPER_SPEED_PLUS != 0 {
+            return Some(10_000);
+        }
+        if flags & OPERATING_AT_SUPER_SPEED != 0 {
+            return Some(5_000);
+        }
+    }
+    match speed? {
+        0 => Some(1),
+        1 => Some(12),
+        2 => Some(480),
+        // SuperSpeed by the old call, but V2 did not answer to say which kind.
+        // Calling that 5 Gbps would warn about a 10 Gbps link, so it is unknown.
+        _ => None,
     }
 }
 
@@ -399,6 +643,60 @@ mod tests {
         assert_eq!(said.len(), 2, "{said:?}");
         assert!(said[0].contains("UASP"), "{said:?}");
         assert!(said[1].contains("92%"), "{said:?}");
+    }
+
+    #[test]
+    fn the_windows_tree_is_read_into_transport_and_port() {
+        // What TREE_SCRIPT printed for the RTL9210B-CG enclosure on 2026-09-12.
+        // PowerShell ends its lines with CRLF, which the parse has to survive.
+        let tree = UsbTree::parse(
+            "bus=USB\r\n\
+             service=UASPStor\r\n\
+             hub=USB\\ROOT_HUB30\\9&1191aa4&0&0\r\n\
+             port=1\r\n\
+             controller=AMD USB 3.20 eXtensible Host Controller - 1.10 (Microsoft)\r\n",
+        );
+        assert_eq!(tree.transport(), "UASP");
+        assert_eq!(tree.hub, "USB\\ROOT_HUB30\\9&1191aa4&0&0");
+        assert_eq!(tree.port, 1);
+        // A USB 3 controller is no ceiling worth reporting: the port can still
+        // have fallen back.
+        assert_eq!(tree.controller_ceiling(), None);
+
+        let bot = UsbTree::parse("bus=USB\nservice=USBSTOR\n");
+        assert_eq!(bot.transport(), "BOT");
+
+        // An internal disk has no USB node at all.
+        let nvme = UsbTree::parse("bus=NVMe\ncontroller=Standard NVM Express Controller\n");
+        assert_eq!(nvme.transport(), "");
+    }
+
+    #[test]
+    fn a_usb_2_controller_caps_the_link_whatever_the_hub_is_called() {
+        // 2026-08-20: ROOT_HUB30, on this controller, at 18 MB/s.
+        let tree = UsbTree {
+            controller: "AMD USB 2.0 eXtensible Host Controller - 1.20".into(),
+            ..Default::default()
+        };
+        assert_eq!(tree.controller_ceiling(), Some(480));
+        let ehci = UsbTree {
+            controller: "Intel(R) USB Enhanced Host Controller".into(),
+            ..Default::default()
+        };
+        assert_eq!(ehci.controller_ceiling(), Some(480));
+    }
+
+    #[test]
+    fn the_hub_answer_becomes_a_speed_only_when_it_is_definite() {
+        // Operating flags win over capability flags.
+        assert_eq!(speed_from_hub(Some(0b0101), Some(3)), Some(10_000));
+        assert_eq!(speed_from_hub(Some(0b0001), Some(3)), Some(5_000));
+        // Capable of SuperSpeedPlus, running at USB 2.0: the case to warn about.
+        assert_eq!(speed_from_hub(Some(0b1010), Some(2)), Some(480));
+        assert_eq!(speed_from_hub(None, Some(1)), Some(12));
+        // SuperSpeed of an unknown kind is not reported as 5 Gbps.
+        assert_eq!(speed_from_hub(None, Some(3)), None);
+        assert_eq!(speed_from_hub(None, None), None);
     }
 
     #[cfg(not(windows))]

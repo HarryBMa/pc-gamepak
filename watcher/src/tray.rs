@@ -22,7 +22,8 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Shell::{
-    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
+    Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_DELETE,
+    NIM_MODIFY, NOTIFYICONDATAW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, LoadIconW, SetForegroundWindow,
@@ -150,6 +151,42 @@ pub fn add(hwnd: HWND) -> bool {
     data.szTip[..tip.len()].copy_from_slice(&tip);
 
     unsafe { Shell_NotifyIconW(NIM_ADD, &data) != 0 }
+}
+
+/// Show a balloon from the icon — the `notify_only` insert action on Windows.
+///
+/// The launcher decides to notify but cannot: a notification there has to come
+/// from something resident with an icon, which is this process. False when the
+/// icon is not there to post from, so the launcher can open its window instead.
+/// Text longer than the struct holds is cut, not refused.
+pub fn balloon(hwnd: HWND, title: &str, body: &str) -> bool {
+    let mut data: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
+    data.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+    data.hWnd = hwnd;
+    data.uID = ICON_ID;
+    data.uFlags = NIF_INFO;
+    data.dwInfoFlags = NIIF_INFO;
+    copy_truncated(&mut data.szInfoTitle, title);
+    copy_truncated(&mut data.szInfo, body);
+
+    unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) != 0 }
+}
+
+/// Copy as much of `text` as fits, always leaving the terminating NUL.
+fn copy_truncated(buffer: &mut [u16], text: &str) {
+    let Some(room) = buffer.len().checked_sub(1) else {
+        return;
+    };
+    let mut count = 0;
+    for unit in text.encode_utf16().take(room) {
+        buffer[count] = unit;
+        count += 1;
+    }
+    // Never end on half a surrogate pair.
+    if count > 0 && (0xD800..0xDC00).contains(&buffer[count - 1]) {
+        count -= 1;
+    }
+    buffer[count] = 0;
 }
 
 /// Take the icon away, so it does not linger as a ghost until something hovers
