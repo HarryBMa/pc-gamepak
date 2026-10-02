@@ -1721,25 +1721,6 @@ fn main() {
             None => headless::safe_eject(&drive, args.iter().any(|arg| arg == "--force")),
         });
     }
-
-    // Play and Eject for a front-end with its own buttons. Before the insert
-    // reaction, which is about a cartridge arriving and not about being asked.
-    let play = headless::play_index(&args);
-    if play.is_some() || headless::wants_safe_eject(&args) {
-        let drive = cartridge::drive_from_args(args.iter().cloned());
-        if drive.is_empty() {
-            eprintln!("--play and --safe-eject need --drive");
-            std::process::exit(1);
-        }
-        std::process::exit(match play {
-            Some(Ok(index)) => headless::play(&drive, index),
-            Some(Err(why)) => {
-                eprintln!("{why}");
-                1
-            }
-            None => headless::safe_eject(&drive, args.iter().any(|arg| arg == "--force")),
-        });
-    }
     let settings = args.iter().any(|arg| arg == "--settings");
     let wizard = settings || args.iter().any(|arg| arg == "--create");
 

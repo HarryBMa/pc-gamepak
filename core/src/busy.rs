@@ -263,10 +263,22 @@ pub fn running_where(wanted: &dyn Fn(&Path) -> bool) -> Vec<u32> {
 /// `/run/media/you/CARTRIDGE`, and a prefix test says it does. That bug would
 /// refuse to eject one cartridge because a different one was in use.
 pub fn is_within(path: &Path, root: &Path) -> bool {
+    // Windows paths are case-insensitive, and the two sides rarely agree on
+    // case: a process's image path comes back in the case the files have on
+    // disk, the root in whatever case it was typed — `d:\` for `D:\`.
+    let same = |a: std::path::Component, b: std::path::Component| {
+        if cfg!(windows) {
+            a.as_os_str()
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&b.as_os_str().to_string_lossy())
+        } else {
+            a == b
+        }
+    };
     let mut path = path.components();
     for part in root.components() {
         match path.next() {
-            Some(theirs) if theirs == part => {}
+            Some(theirs) if same(theirs, part) => {}
             _ => return false,
         }
     }
@@ -1068,6 +1080,19 @@ mod tests {
         let scratch = Scratch::new("busy-stop-idle");
         scratch.write("Games/unopened.dat", b"nobody has this");
         assert_eq!(stop_all_within(scratch.path(), 1), Stopped::default());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_path_is_within_its_root_whatever_the_case() {
+        assert!(is_within(
+            Path::new(r"C:\Users\h\documents-github\cart\Game\x.exe"),
+            Path::new(r"c:\Users\H\Documents-GitHub\cart"),
+        ));
+        assert!(!is_within(
+            Path::new(r"C:\Other\x.exe"),
+            Path::new(r"C:\cart")
+        ));
     }
 
     #[cfg(target_os = "linux")]
