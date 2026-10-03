@@ -205,6 +205,12 @@ is plugged in** decides what it does about it:
 | **Just tell me** | A desktop notification. On Windows it comes from the PC GamePak tray icon, so the watcher has to be running; if it is not, the launcher opens instead. |
 | **Nothing** | No reaction at all. The tray icon and the desktop entry still open it. |
 
+On Windows, whichever you choose, **Explorer does not open the cartridge as a
+folder.** AutoPlay asks before it acts on a new drive, and the watcher answers
+no for one with a `cartridge.conf` or `memorycard.conf` at its root — every
+other drive still does whatever AutoPlay is set to. Nothing is changed in
+Windows' settings for this; it lasts as long as the watcher is running.
+
 **Start the game only ever starts a game your PC already has** — a cartridge
 whose `executable=` is a `steam://`, `heroic://`, `gog://`, `epic://`,
 `playnite://`, `lutris://` or `itch://` URI. A game *stored on the cartridge*

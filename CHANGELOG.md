@@ -10,6 +10,14 @@ nothing about either changes.
 Every version in the repository is checked to agree —
 `node tools/check-versions.mjs` — because for three releases they did not.
 
+## Unreleased
+
+- **No Explorer window for a cartridge.** Windows' AutoPlay used to open a
+  cartridge as a folder beside the launcher, and the watcher closed it a second
+  later. It now answers AutoPlay's own "should I?" question, through the
+  documented `IQueryCancelAutoPlay`, so the window never opens — for cartridges
+  and memory cards only. Every other drive behaves as AutoPlay is set to.
+
 ## 1.1.0 — 2026-10-03
 
 The release where the cartridge stopped being only a way to carry a game and
