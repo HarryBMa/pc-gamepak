@@ -1617,7 +1617,10 @@ mod tests {
         assert!(links_into(&host, &cart));
         remove_link(&host).unwrap();
         assert!(!host.exists());
-        assert!(cart.join("save.dat").is_file(), "the cartridge is untouched");
+        assert!(
+            cart.join("save.dat").is_file(),
+            "the cartridge is untouched"
+        );
     }
 
     /// Point the token table at a scratch directory for the duration of a test.
@@ -2271,7 +2274,10 @@ mod tests {
         let new = "[collection]\ntitle=Renamed\n\n[game]\nexecutable=x://1\n\n\
                    [game]\nexecutable=x://2\n";
         let kept = preserve(old, new);
-        assert!(kept.starts_with("[collection]\ntitle=Renamed\nplatform=SNES\n"), "{kept}");
+        assert!(
+            kept.starts_with("[collection]\ntitle=Renamed\nplatform=SNES\n"),
+            "{kept}"
+        );
         assert!(kept.contains("executable=x://2\nplatform=GBA"), "{kept}");
     }
 

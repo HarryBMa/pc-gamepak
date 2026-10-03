@@ -26,10 +26,14 @@ fn main() -> iced::Result {
 
     let drive = gamepak_core::cartridge::drive_from_args(args.into_iter());
 
-    iced::application(move || app::Launcher::new(drive.clone()), app::update, app::view)
-        .title(app::title)
-        .subscription(app::subscription)
-        .theme(app::theme)
-        .window_size((960.0, 640.0))
-        .run()
+    iced::application(
+        move || app::Launcher::new(drive.clone()),
+        app::update,
+        app::view,
+    )
+    .title(app::title)
+    .subscription(app::subscription)
+    .theme(app::theme)
+    .window_size((960.0, 640.0))
+    .run()
 }

@@ -20,6 +20,7 @@
 use std::path::{Path, PathBuf};
 
 /// The file a key is exported to, inside its folder.
+#[cfg_attr(not(windows), allow(dead_code))]
 const FILE: &str = "key.reg";
 
 /// The folder `{registry}` stands for.
@@ -119,6 +120,7 @@ pub fn apply(_staged: &Path) -> Result<(), String> {
 }
 
 /// A `.reg` file's text. `reg export` writes UTF-16 with a byte-order mark.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn read_reg(file: &Path) -> Result<String, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     Ok(match bytes.strip_prefix(&[0xFF, 0xFE]) {
@@ -136,6 +138,7 @@ fn read_reg(file: &Path) -> Result<String, String> {
 }
 
 /// Refuse a file that touches any key outside `key`.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn check(text: &str, key: &str) -> Result<(), String> {
     let full = key.replacen("HKCU", "HKEY_CURRENT_USER", 1).to_lowercase();
     for line in text.lines() {
@@ -163,7 +166,12 @@ mod tests {
 
     #[test]
     fn only_a_key_inside_the_users_software_is_allowed() {
-        assert!(allowed(&["HKCU", "Software", "DefaultCompany", "Project biscuits"]));
+        assert!(allowed(&[
+            "HKCU",
+            "Software",
+            "DefaultCompany",
+            "Project biscuits"
+        ]));
         assert!(allowed(&["hkcu", "SOFTWARE", "Vendor"]));
         assert!(!allowed(&["HKCU", "Software"]));
         assert!(!allowed(&["HKLM", "Software", "Vendor"]));
@@ -178,9 +186,17 @@ mod tests {
             \"Save_h1\"=hex:01\r\n\r\n\
             [HKEY_CURRENT_USER\\Software\\Outright Games Ltd\\Bluey The Videogame\\Unity]\r\n";
         assert!(check(good, key).is_ok());
-        let sibling = good.replace("\\Unity]", "]\r\n[HKEY_CURRENT_USER\\Software\\Outright Games Ltd\\Bluey The Videogame 2]");
-        assert!(check(&sibling, key).is_err(), "a key that only starts with the name");
-        let run = format!("{good}[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run]\r\n");
+        let sibling = good.replace(
+            "\\Unity]",
+            "]\r\n[HKEY_CURRENT_USER\\Software\\Outright Games Ltd\\Bluey The Videogame 2]",
+        );
+        assert!(
+            check(&sibling, key).is_err(),
+            "a key that only starts with the name"
+        );
+        let run = format!(
+            "{good}[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run]\r\n"
+        );
         assert!(check(&run, key).is_err());
         let delete = format!("{good}[-HKEY_LOCAL_MACHINE\\SOFTWARE\\X]\r\n");
         assert!(check(&delete, key).is_err());
@@ -196,10 +212,16 @@ mod tests {
         reg(&["add", key, "/v", "Save", "/d", "one", "/f"]);
         let staged = staging_root().join("HKCU/Software/PCGamePakTest/Game");
         stage(&staged).unwrap();
-        let first = std::fs::metadata(staged.join(FILE)).unwrap().modified().unwrap();
+        let first = std::fs::metadata(staged.join(FILE))
+            .unwrap()
+            .modified()
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1100));
         stage(&staged).unwrap();
-        let again = std::fs::metadata(staged.join(FILE)).unwrap().modified().unwrap();
+        let again = std::fs::metadata(staged.join(FILE))
+            .unwrap()
+            .modified()
+            .unwrap();
         assert_eq!(first, again, "unchanged key, untouched file");
         reg(&["add", key, "/v", "Save", "/d", "two", "/f"]);
         reg(&["add", key, "/v", "Extra", "/d", "x", "/f"]);

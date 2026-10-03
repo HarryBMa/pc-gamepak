@@ -151,7 +151,10 @@ pub fn set_platform(conf: &str, value: &str) -> String {
     for raw in conf.lines() {
         let trimmed = raw.trim();
         if trimmed.starts_with('[') {
-            section = trimmed.trim_matches(|c| c == '[' || c == ']').trim().to_lowercase();
+            section = trimmed
+                .trim_matches(|c| c == '[' || c == ']')
+                .trim()
+                .to_lowercase();
             out.push(raw.to_string());
             if section == "collection" && wanted && !placed {
                 out.push(line.clone());
@@ -766,7 +769,10 @@ cover=.gamepak/cover.png
             read_cartridge_info(scratch.path().to_str().unwrap()).unwrap()
         };
         assert_eq!(read("title=Hades\nexecutable=x.exe\n").platform, "PC");
-        assert_eq!(read("title=Zelda\nplatform= SNES \nexecutable=z.sfc\n").platform, "SNES");
+        assert_eq!(
+            read("title=Zelda\nplatform= SNES \nexecutable=z.sfc\n").platform,
+            "SNES"
+        );
 
         // A collection's platform is each game's unless the game says otherwise.
         let info = read(
