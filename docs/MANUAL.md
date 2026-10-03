@@ -87,8 +87,8 @@ The window is 420 × 560 — the 3:4 of a cover — and the artwork fills it. Th
 window is the slot and the cover is the cartridge seated in it: press Eject and
 the whole face rides out, leaving the empty slot behind.
 
-<img width="420" alt="The launcher showing Stardew Valley: cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="launcher.png" />
-<img width="420" alt="The details sheet for a single-game cartridge: the link speed and the free space as two large figures side by side, above a folded Show file paths disclosure" src="launcher-details.png" />
+<img width="420" alt="The launcher showing Dave the Diver: cover art filling the window, the game's logo over it, and a wide Play button beside an eject icon" src="launcher.png" />
+<img width="420" alt="The details sheet for a single-game cartridge: the link speed and the free space as two large figures side by side, how long the game takes to beat, and a folded Show file paths disclosure" src="launcher-details.png" />
 
 The accent colour is sampled from the cover art at load, so the Play button
 belongs to whatever game is in the dock. At rest almost nothing else is on
@@ -102,7 +102,7 @@ launcher grows a rail: **picking a game is what Play acts on**, and the artwork
 behind it cross-fades to whichever one is selected — no menu, no submenu,
 nothing to learn.
 
-<img width="420" alt="The launcher showing a ten-game Tomb Raider cartridge: the selected game's art filling the window, the collection name above a rail of games, and the selected game's title over one shared Play button" src="launcher-bundle.png" />
+<img width="420" alt="The launcher showing a two-game XCOM cartridge: the selected game's art filling the window, the collection's logo in the corner, a rail of games, and the selected game's logo over one shared Play button" src="launcher-bundle.png" />
 
 Each row carries the game's own art and size, and the first nine answer to the
 number keys — pressing one selects that game and starts it, so the window shows
@@ -441,6 +441,23 @@ aside first and kept, three deep, as `<name>.gamepak-backup-<time>` beside it.
 A conflict is refused rather than resolved. Picking a winner silently is how a
 save-sync tool eats an eighty-hour run.
 
+### Memory cards
+
+A drive with a `memorycard.conf` carries saves and no games — the other half
+of a cartridge, the way a console's memory card was. Plug one in and every save
+on it is a game case on a shelf; choose one and it turns round to its back
+cover, which says which copy is newer, when it was saved and how much it holds,
+beside the one button that does what it needs: copy to this PC, or to the card.
+Anything a copy replaces is kept, as with every other save here.
+
+<img width="420" alt="The memory card view: each save as a game case on a shelf, the chosen one turned round on the stage below with when it was saved and how much it holds" src="memcard.png" />
+
+A cartridge can be a **combo drive** too — a switch in the wizard — and its own
+games' saves go on its card, one button (or `M`) away from Play. The wizard's
+**Memory card** page writes one: add the games, and it finds where each saves.
+
+<img width="760" alt="The wizard's Memory card page: the drive, the card's name, and each game with the folder its saves are carried from" src="wizard-card.png" />
+
 ### Carrying the compiled shaders
 
 A game's first hour on a new machine is its worst. Every pipeline it draws with
@@ -666,7 +683,7 @@ Run the installer menu and choose **Create a cartridge**, or start it directly:
 pc-gamepak --create
 ```
 
-<img width="760" alt="The create-cartridge wizard: one screen with Games, Drive, Options and Artwork down the left, each stating what is chosen, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
+<img width="760" alt="The wizard editing a single-game cartridge: the drive, name, options including the platform, the four artwork slots and the game down the left, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
 
 The wizard lists everything installed. **Playnite** is read first when present —
 one list covering Steam, GOG, Epic, Xbox, Ubisoft, itch and emulators — and
@@ -719,7 +736,7 @@ Tick a second game and the cartridge is a collection — nothing else to press.
 The rail counts them, and the bar under it puts one band per game so you can see
 which one is taking the room:
 
-<img width="760" alt="The wizard with three games chosen: the Game card naming the collection, a Name and order group with a drag-sortable play order, and the rail titled Multicartridge above a live preview of the launcher" src="wizard-bundle.png" />
+<img width="760" alt="The wizard editing a two-game collection: the collection logo, icon and hero, the games in a drag-sortable play order with a star for the primary game, and the rail titled Multicartridge above a live preview of the launcher" src="wizard-bundle.png" />
 
 A collection is the one thing in a library with no artwork of its own, so a
 **Name and order** group appears on the same screen for the two things the wizard
@@ -747,7 +764,7 @@ whole thing again — which, with the games copied onto it, is hours.
 Select a drive that already holds a cartridge and **Edit the cartridge already
 on this drive** appears:
 
-<img width="760" alt="The edit dialog: the cartridge name, a Change artwork button, and the list of games with controls to rename, reorder and remove them" src="wizard-edit.png" />
+<img width="760" alt="The Edit page for a collection: the cartridge and its name, the combo drive and platform options, the artwork slots, and the games with controls to reorder them, pick the primary one, change a picture and remove them" src="wizard-edit.png" />
 
 You can rename the cartridge, change its artwork, rename the individual games,
 reorder them — the order is the order of the launcher's rail — and take one off
@@ -889,7 +906,7 @@ emulator entries, older GOG titles — and the launcher then shows a placeholder
 The wizard can look artwork up on [SteamGridDB](https://www.steamgriddb.com/)
 to fill those gaps.
 
-<img width="760" alt="The wizard's settings, grouped: a count of where the 87 games came from with a Rescan link, the SteamGridDB switch and its key field, and defaults for a new cartridge" src="wizard-settings.png" />
+<img width="760" alt="The wizard's settings, grouped: a count of where the 86 games came from with a Rescan link, then the online lookups — SteamGridDB with its key, Ludusavi for save folders, HowLongToBeat — and what happens when a cartridge is plugged in" src="wizard-settings.png" />
 
 **It is off by default**, and it is the only part of this project that talks to
 the network. Turn it on behind the gear in the wizard's title bar, where it also
@@ -1012,7 +1029,7 @@ Neither of these gets better with a faster cartridge.
 Press `I` on the launcher and it reports three things about the drive in front
 of it:
 
-<img width="420" alt="The details sheet for a collection with the paths unfolded: link and free space, a games count, and the steam:// URI each game launches by" src="launcher-health.png" />
+<img width="420" alt="The details sheet for a collection with the paths unfolded: link and free space, the saves on the cartridge, and the program each game launches" src="launcher-health.png" />
 
 - **Link** — 10 Gbps is what a Gen 2 enclosure should negotiate. 5 Gbps means a
   front-panel port, a hub, or a cable that is not rated for it; 480 Mbps means

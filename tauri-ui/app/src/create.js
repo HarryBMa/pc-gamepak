@@ -727,7 +727,7 @@ function driveIconPreview(rows, fallback) {
  * `rows` is the array being reordered in place. Everything is a picture: a grip
  * to say the row moves, the poster it will use, and a cross to take it off.
  */
-function renderGameRows(list, rows, { showSize = false, removable = false, onChange }) {
+function renderGameRows(list, rows, { showSize = false, removable = false, fallbackCover = "", onChange }) {
   list.replaceChildren();
   rows.forEach((game, index) => {
     const li = document.createElement("li");
@@ -748,7 +748,8 @@ function renderGameRows(list, rows, { showSize = false, removable = false, onCha
     // an empty slot waiting to be filled in.
     const thumb = document.createElement("span");
     thumb.className = "order-row__art";
-    const cover = safeSrc(game.cover);
+    // A single game's art is the cartridge's, so its row borrows that.
+    const cover = safeSrc(game.cover) || safeSrc(fallbackCover);
     if (cover) {
       const img = document.createElement("img");
       img.alt = "";
@@ -3125,6 +3126,7 @@ async function refetchArtwork() {
 function renderEditGames() {
   renderGameRows(el.editGames, editing?.games ?? [], {
     removable: true,
+    fallbackCover: editing?.isBundle ? "" : editing?.cover ?? "",
     onChange: () => {
       renderEditGames();
       renderEditArt();
@@ -3315,10 +3317,14 @@ async function openMemcardPage() {
     ...drives.map((drive) => {
       const option = document.createElement("option");
       option.value = drive.path;
-      const what = drive.hasCartridge
-        ? ` — ${drive.cartridgeTitle || "a cartridge"}`
+      // The label already names the letter ("XCOM (D:)"), and a cartridge
+      // named the same as its drive need not be said twice.
+      const name = drive.label || drive.path;
+      const title = drive.cartridgeTitle || "a cartridge";
+      const what = drive.hasCartridge && !name.toLowerCase().startsWith(title.toLowerCase())
+        ? ` — ${title}`
         : "";
-      option.textContent = `${drive.label || drive.path} (${drive.path})${what}`;
+      option.textContent = `${name}${what}`;
       return option;
     }),
   );

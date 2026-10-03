@@ -607,7 +607,10 @@
   border: 0;
   padding: 0;
   font: inherit;
-  font-size: inherit;
+  /* Every link here is a secondary action beside something larger: Rescan,
+     Clear, Cancel, Refetch. At the body size they outweighed the controls
+     they sit next to. */
+  font-size: var(--text-sm);
   color: var(--ink-soft);
   text-align: left;
   text-decoration: underline;
@@ -620,6 +623,12 @@
 .link:hover {
   color: var(--ink);
   text-decoration-color: currentColor;
+}
+
+/* The artwork group's two actions, a little apart from the slots above. */
+#btn-remove-logo,
+#btn-refetch-art {
+  margin: 10px 16px 0 0;
 }
 
 /* ==========================================================================

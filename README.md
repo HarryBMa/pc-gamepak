@@ -39,9 +39,11 @@ are no scripts to write and nothing to allowlist, because **nothing on a
 cartridge is ever executed automatically** — pressing Play is the gate.
 
 <div align="center">
-<img width="380" alt="The launcher showing one game: cover art filling the window, the title over it, and a wide Play button beside an eject icon" src="docs/launcher.png" />
+<img width="260" alt="The launcher showing Dave the Diver: cover art filling the window, the game's logo over it, and a wide Play button beside an eject icon" src="docs/launcher.png" />
 &nbsp;
-<img width="380" alt="The launcher showing a collection: a rail of games down the window with the selected one's art behind" src="docs/launcher-bundle.png" />
+<img width="260" alt="The launcher showing a two-game XCOM collection: the collection's logo in the corner, a rail of games, and the selected game's logo over one Play button" src="docs/launcher-bundle.png" />
+&nbsp;
+<img width="260" alt="The memory card view: each save as a game case on a shelf, the chosen one turned round on the stage below with when it was saved and how much it holds" src="docs/memcard.png" />
 </div>
 
 ## Features
@@ -107,7 +109,14 @@ more in the picker for a cartridge that only ever meets one kind of machine.
 
 ## Install
 
-**Windows** — [Scoop](https://scoop.sh), which is the one that works today:
+**Windows** — [WinGet](https://github.com/microsoft/winget-pkgs), which does
+the lot:
+
+```powershell
+winget install HarryBMa.PCGamePak
+```
+
+Or [Scoop](https://scoop.sh):
 
 ```powershell
 scoop bucket add harrybma https://github.com/HarryBMa/scoop-bucket
@@ -122,9 +131,7 @@ powershell -ExecutionPolicy Bypass -File "$(scoop prefix pc-gamepak)\windows\ins
 ```
 
 Or take the installer from
-[Releases](https://github.com/HarryBMa/pc-gamepak/releases) and skip Scoop
-entirely. A [WinGet](https://github.com/microsoft/winget-pkgs) package is in
-review; once it lands, `winget install HarryBMa.PCGamePak` does the lot.
+[Releases](https://github.com/HarryBMa/pc-gamepak/releases).
 
 **Linux** — the pacman package is written and tested, and waiting on the AUR
 reopening registrations. Building it by hand is a clone and a command:
@@ -151,7 +158,7 @@ registering the drive with Steam.
 Then plug the cartridge in. The launcher opens; press Play.
 
 <div align="center">
-<img width="560" alt="The cartridge wizard: the chosen game, drive, options and artwork on the left, and a preview of the launcher on the right" src="docs/wizard.png" />
+<img width="560" alt="The cartridge wizard editing Dave the Diver: the drive, name, options including the platform, the four artwork slots and the game on the left, and a preview of the launcher on the right" src="docs/wizard.png" />
 </div>
 
 To write one by hand, put a `cartridge.conf` at the drive's root:
