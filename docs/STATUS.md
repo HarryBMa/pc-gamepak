@@ -111,15 +111,14 @@ that builds both platforms from a tag, AUR and Scoop packaging, and
 
 Ranked by how much it matters.
 
-1. **The AUR, and WinGet catching up on its own.** 1.1.0 is released, on
-   Scoop, and submitted to WinGet (microsoft/winget-pkgs#446232). Publishing a
-   release is meant to submit to WinGet by itself through `winget.yml`, and for
-   1.1.0 it failed: the `WINGET_TOKEN` secret could not push to the
-   winget-pkgs fork, so the submission was made by hand. Replacing the secret
-   with a classic token holding `public_repo` is what makes the next release
-   need nobody. The AUR package is written and checksummed for 1.1.0 and waits
-   on AUR registrations reopening. `tools/check-versions.mjs` keeps every
-   version site in step and fails CI when they disagree.
+1. **The AUR, and the WinGet token.** 1.1.0 is out on GitHub, WinGet and Scoop.
+   The AUR package is written and checksummed for it and waits on AUR
+   registrations reopening. Publishing a release is meant to submit to WinGet
+   by itself through `winget.yml`; for 1.1.0 that failed because the
+   `WINGET_TOKEN` secret could not push to the winget-pkgs fork, and the
+   submission was made by hand. Until the secret holds a classic token with
+   `public_repo`, the next release will need the same. `tools/check-versions.mjs`
+   keeps every version site in step and fails CI when they disagree.
 
 2. **Real hardware: answered, and the history is worth keeping.** The project
    owner reports repeated end-to-end runs since, with the **God of War
