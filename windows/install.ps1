@@ -65,6 +65,48 @@ $LauncherTarget = Join-Path $InstallFolder "pc-gamepak.exe"
 
 $TaskName = "PC GamePak Watcher"
 
+# Put a binary in place even while the old one is running.
+#
+# A launcher can be open when this runs — a window from the last insert, or a
+# `--play` that stays up for the whole of a game to count it — and Windows
+# refuses to overwrite a running executable. It does allow renaming one, so the
+# old file is moved aside and the new one copied in; the running process keeps
+# its renamed file until it exits. Leftovers from earlier installs are removed
+# when nothing holds them any more.
+function Install-Binary {
+    param([string]$Source, [string]$Target)
+
+    Get-ChildItem -Path "$Target.old-*" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+
+    try {
+        Copy-Item -Path $Source -Destination $Target -Force
+    } catch [System.IO.IOException] {
+        $Aside = "$Target.old-$([DateTime]::Now.Ticks)"
+        Write-Host "  $(Split-Path $Target -Leaf) is running; moving it aside to replace it"
+        Move-Item -Path $Target -Destination $Aside -Force
+        Copy-Item -Path $Source -Destination $Target -Force
+    }
+}
+
+# Whatever happened above, leave a watcher running: the install stops the old
+# one first, and a failure part-way used to leave none until the next logon.
+function Confirm-WatcherRunning {
+    param([string]$Task, [string]$Exe)
+
+    for ($Try = 0; $Try -lt 10; $Try++) {
+        if (Get-Process -Name "pc-gamepak-watcher" -ErrorAction SilentlyContinue) { return }
+        if ($Try -eq 0 -or $Try -eq 5) {
+            Start-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not (Get-Process -Name "pc-gamepak-watcher" -ErrorAction SilentlyContinue) -and (Test-Path $Exe)) {
+        Write-Host "The scheduled task did not start the watcher; starting it directly."
+        Start-Process -FilePath $Exe
+    }
+}
+
 function Install-StandardWatcher {
     param(
         [string]$InstallPath,
@@ -81,63 +123,66 @@ function Install-StandardWatcher {
         Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 400
 
-    Write-Host "Installing watcher and launcher..."
-    Copy-Item -Path $WatcherExe  -Destination $WatcherTarget  -Force
-    Copy-Item -Path $LauncherSource -Destination $LauncherTarget -Force
+    try {
+        Write-Host "Installing watcher and launcher..."
+        Install-Binary -Source $WatcherExe -Target $WatcherTarget
+        Install-Binary -Source $LauncherSource -Target $LauncherTarget
 
-    # Remove tasks from previous versions, including the PowerShell monitor.
-    $OldTaskNames = @(
-        "PC GamePak Watcher",
-        "PC GamePak Monitor",
-        "Steam Game Cartridge Monitor"
-    )
+        # Remove tasks from previous versions, including the PowerShell monitor.
+        $OldTaskNames = @(
+            "PC GamePak Watcher",
+            "PC GamePak Monitor",
+            "Steam Game Cartridge Monitor"
+        )
 
-    foreach ($Old in $OldTaskNames) {
-        $Existing = Get-ScheduledTask -TaskName $Old -ErrorAction SilentlyContinue
-        if ($null -ne $Existing) {
-            Write-Host "Removing previous task: $Old"
-            Stop-ScheduledTask -TaskName $Old -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 500
-            Unregister-ScheduledTask -TaskName $Old -Confirm:$false
+        foreach ($Old in $OldTaskNames) {
+            $Existing = Get-ScheduledTask -TaskName $Old -ErrorAction SilentlyContinue
+            if ($null -ne $Existing) {
+                Write-Host "Removing previous task: $Old"
+                Stop-ScheduledTask -TaskName $Old -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 500
+                Unregister-ScheduledTask -TaskName $Old -Confirm:$false
+            }
         }
+
+        # Name the user on both the trigger and the principal.
+        #
+        # `-AtLogOn` with no `-User` means *any* user logging on, which is a
+        # machine-wide task, and registering one without elevation fails with
+        # "Access denied". The watcher is a per-user thing — it opens a window on
+        # one desktop — so the trigger fires for this user, the task runs as this
+        # user, and the whole install needs no UAC prompt.
+        $UserId = "$env:USERDOMAIN\$env:USERNAME"
+
+        $Action  = New-ScheduledTaskAction -Execute $WatcherTarget
+        $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
+
+        $Principal = New-ScheduledTaskPrincipal `
+            -UserId $UserId `
+            -LogonType Interactive `
+            -RunLevel Limited
+
+        # No execution time limit: this is meant to stay running for the session.
+        $Settings = New-ScheduledTaskSettingsSet `
+            -ExecutionTimeLimit (New-TimeSpan -Seconds 0) `
+            -RestartCount 3 `
+            -RestartInterval (New-TimeSpan -Minutes 1) `
+            -AllowStartIfOnBatteries `
+            -DontStopIfGoingOnBatteries
+
+        Register-ScheduledTask `
+            -TaskName $TaskName `
+            -Action $Action `
+            -Trigger $Trigger `
+            -Principal $Principal `
+            -Settings $Settings `
+            -Force `
+            -Description "Opens the cartridge launcher when a cartridge is plugged in" | Out-Null
+
+        Write-Host "Starting watcher..."
+    } finally {
+        Confirm-WatcherRunning -Task $TaskName -Exe $WatcherTarget
     }
-
-    # Name the user on both the trigger and the principal.
-    #
-    # `-AtLogOn` with no `-User` means *any* user logging on, which is a
-    # machine-wide task, and registering one without elevation fails with
-    # "Access denied". The watcher is a per-user thing — it opens a window on
-    # one desktop — so the trigger fires for this user, the task runs as this
-    # user, and the whole install needs no UAC prompt.
-    $UserId = "$env:USERDOMAIN\$env:USERNAME"
-
-    $Action  = New-ScheduledTaskAction -Execute $WatcherTarget
-    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
-
-    $Principal = New-ScheduledTaskPrincipal `
-        -UserId $UserId `
-        -LogonType Interactive `
-        -RunLevel Limited
-
-    # No execution time limit: this is meant to stay running for the session.
-    $Settings = New-ScheduledTaskSettingsSet `
-        -ExecutionTimeLimit (New-TimeSpan -Seconds 0) `
-        -RestartCount 3 `
-        -RestartInterval (New-TimeSpan -Minutes 1) `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries
-
-    Register-ScheduledTask `
-        -TaskName $TaskName `
-        -Action $Action `
-        -Trigger $Trigger `
-        -Principal $Principal `
-        -Settings $Settings `
-        -Force `
-        -Description "Opens the cartridge launcher when a cartridge is plugged in" | Out-Null
-
-    Write-Host "Starting watcher..."
-    Start-ScheduledTask -TaskName $TaskName
 }
 
 function Install-ExperimentalAutoplay {

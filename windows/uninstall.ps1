@@ -116,6 +116,9 @@ foreach ($InstallFolder in $InstallFolders) {
         $Path = Join-Path $InstallFolder $Name
         if (Test-Path $Path) { Remove-Item -Path $Path -Force -ErrorAction SilentlyContinue }
     }
+    # Old binaries install.ps1 moved aside because they were running.
+    Get-ChildItem -Path $InstallFolder -Filter "*.exe.old-*" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 
     # Gone entirely if nothing of the user's was in it.
     if (-not (Get-ChildItem $InstallFolder -Force -ErrorAction SilentlyContinue)) {
