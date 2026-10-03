@@ -28,7 +28,7 @@ ReleaseDate: 2026-10-03
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/HarryBMa/pc-gamepak/releases/download/v1.1.0/pc-gamepak-1.1.0-windows-x86_64.zip
-    InstallerSha256: SHA256-PENDING-RELEASE
+    InstallerSha256: 98E6F95F376C84303F5015FD316ECBED172F0B0022D556F45EC405CBF3EF21E9
 
 ManifestType: installer
 ManifestVersion: 1.6.0

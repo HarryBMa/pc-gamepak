@@ -20,6 +20,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(windows)]
+mod autoplay;
 mod launcher;
 #[cfg(not(windows))]
 mod linux;
@@ -46,7 +48,7 @@ mod windows_watcher {
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
     use std::process::Child;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -144,6 +146,10 @@ mod windows_watcher {
     /// stops holding, and the compiler is right to refuse it.
     static SEEN: Mutex<Option<HashMap<char, Instant>>> = Mutex::new(None);
 
+    /// True once AutoPlay asks the watcher before opening a drive, so there is
+    /// no Explorer window to close afterwards.
+    static AUTOPLAY_CANCELLED: AtomicBool = AtomicBool::new(false);
+
     pub fn run() {
         crate::log::line("watcher starting");
 
@@ -223,6 +229,16 @@ mod windows_watcher {
             // refuses the add without ever broadcasting anything afterwards.
             crate::log::line("could not add the tray icon yet; retrying");
             unsafe { SetTimer(hwnd, TRAY_RETRY_TIMER, TRAY_RETRY_MS, None) };
+        }
+
+        // Asked before AutoPlay acts on a new volume, so a cartridge never gets
+        // the Explorer window at all. Without it, the window is closed after it
+        // appears instead — see `on_volume_arrived`.
+        if crate::autoplay::register() {
+            AUTOPLAY_CANCELLED.store(true, Ordering::Relaxed);
+            crate::log::line("AutoPlay will ask before opening a cartridge");
+        } else {
+            crate::log::line("could not register with AutoPlay; its window will be closed instead");
         }
 
         crate::log::line("listening for volume arrivals");
@@ -503,7 +519,9 @@ mod windows_watcher {
         // Explorer window AutoPlay opens for it is closed on its own thread,
         // rather than blocking WM_DEVICECHANGE while it waits for that window
         // to exist.
-        std::thread::spawn(move || close_autoplay_window(letter));
+        if !AUTOPLAY_CANCELLED.load(Ordering::Relaxed) {
+            std::thread::spawn(move || close_autoplay_window(letter));
+        }
     }
 
     /// Close the Explorer window AutoPlay opened for `letter`, if one exists.

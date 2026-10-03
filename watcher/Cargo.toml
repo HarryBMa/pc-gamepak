@@ -31,6 +31,9 @@ windows-sys = { version = "0.52", features = [
     # GetLogicalDrives and GetVolumeInformationW, to name the cartridges the
     # tray menu offers to open.
     "Win32_Storage_FileSystem",
+    # CoInitializeEx, GetRunningObjectTable and CreateClassMoniker, to register
+    # the object AutoPlay asks before opening a cartridge in Explorer.
+    "Win32_System_Com",
 ] }
 
 # Host-gated: rc.exe ships with the MSVC toolchain, so this applies when

@@ -21,6 +21,11 @@ with the emulator your desktop uses for that file type. The cartridge also
 carries a `gamelist.xml` and a `metadata.pegasus.txt`, so Pegasus and
 ES-DE — on a PC, or on an Android phone over USB-C — list it with its art when
 pointed at the drive.
+- **No Explorer window for a cartridge.** Windows' AutoPlay used to open a
+  cartridge as a folder beside the launcher, and the watcher closed it a second
+  later. It now answers AutoPlay's own "should I?" question, through the
+  documented `IQueryCancelAutoPlay`, so the window never opens — for cartridges
+  and memory cards only. Every other drive behaves as AutoPlay is set to.
 
 ## 1.1.0 — 2026-10-03
 

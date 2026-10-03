@@ -40,9 +40,13 @@ Tags:
   - cartridge
 
 ReleaseNotes: |-
-  Saves, playtime and compiled shaders travel on the cartridge. A drive can be a
-  memory card that carries only saves, or a cartridge can be both. New
-  cartridges format as NTFS by default. Full notes: see the release page.
+  Saves, playtime and compiled shaders now travel on the cartridge, so a game
+  carries its progress between machines. Save folders are found from Ludusavi's
+  list, including Steam Cloud saves and games that save to the registry.
+
+  A drive can be a memory card that carries only saves, or a cartridge can be
+  both. New cartridges format as NTFS by default. A cartridge can say what
+  platform it is for. Eject names whatever is still using the drive.
 
   WinGet installs the two executables and puts them on PATH. It cannot register
   the watcher's logon task, so a cartridge will not open its launcher on insert
