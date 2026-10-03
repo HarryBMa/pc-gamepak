@@ -765,7 +765,7 @@ mod tests {
             .spawn()
             .expect("sleep");
         // /proc/<pid>/cwd is set by the time spawn returns.
-        let seen = running_within(&[game.clone()]);
+        let seen = running_within(std::slice::from_ref(&game));
         let elsewhere = running_within(&[other]);
         child.kill().ok();
         child.wait().ok();

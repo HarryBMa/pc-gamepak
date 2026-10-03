@@ -123,11 +123,11 @@ pub fn scan_here(title: &str) -> Option<SaveLocations> {
         };
         let top = named(&base);
         // The game's own folder, else one inside its studio's.
-        let found = top
-            .iter()
-            .find(|path| is_it(path))
-            .cloned()
-            .or_else(|| top.iter().flat_map(|studio| named(studio)).find(|p| is_it(p)));
+        let found = top.iter().find(|path| is_it(path)).cloned().or_else(|| {
+            top.iter()
+                .flat_map(|studio| named(studio))
+                .find(|p| is_it(p))
+        });
         if let Some(template) = found.and_then(|path| crate::saves::template_from_path(&path)) {
             let mut places = SaveLocations::default();
             if cfg!(windows) {
@@ -200,7 +200,9 @@ pub fn lookup_in(text: &str, title: &str, steam_id: Option<&str>) -> Option<Save
         if by_name.is_none() && normalise(&name) == wanted {
             by_name = Some(block);
         } else if by_folder.is_none()
-            && install_dirs_of(&block).iter().any(|dir| normalise(dir) == wanted)
+            && install_dirs_of(&block)
+                .iter()
+                .any(|dir| normalise(dir) == wanted)
         {
             by_folder = Some(block);
         }
@@ -275,7 +277,9 @@ fn indent(line: &str) -> usize {
 
 /// The lines under one top-level field of a game (`  steam:`), trimmed.
 fn field<'a>(block: &'a [&'a str], name: &str) -> impl Iterator<Item = &'a str> {
-    let at = block.iter().position(|line| line.trim_end() == format!("  {name}:"));
+    let at = block
+        .iter()
+        .position(|line| line.trim_end() == format!("  {name}:"));
     at.map_or(&[][..], |at| &block[at + 1..])
         .iter()
         .take_while(|line| indent(line) > 2)
@@ -355,7 +359,10 @@ fn entries(block: &[&str]) -> Vec<Entry> {
         }
         match depth {
             4 => out.push(Entry {
-                path: format!("{section}{}", unquote(text.strip_suffix(':').unwrap_or(text))),
+                path: format!(
+                    "{section}{}",
+                    unquote(text.strip_suffix(':').unwrap_or(text))
+                ),
                 ..Default::default()
             }),
             6 => list = text.trim_end_matches(':'),
@@ -577,10 +584,19 @@ Klaus Old Name:
         let cloud = Some("{steamuserdata}/204360/remote".to_string());
         assert_eq!(lookup_in(MORE, "x", Some("204360")).unwrap().windows, cloud);
         assert_eq!(lookup_in(MORE, "x", Some("999001")).unwrap().windows, cloud);
-        assert_eq!(lookup_in(MORE, "CastleCrashers", None).unwrap().windows, cloud);
-        assert_eq!(lookup_in(MORE, "klaus old name", None).unwrap().windows, cloud);
         assert_eq!(
-            lookup_in(MORE, "God of War - Ragnarok", None).unwrap().windows.as_deref(),
+            lookup_in(MORE, "CastleCrashers", None).unwrap().windows,
+            cloud
+        );
+        assert_eq!(
+            lookup_in(MORE, "klaus old name", None).unwrap().windows,
+            cloud
+        );
+        assert_eq!(
+            lookup_in(MORE, "God of War - Ragnarok", None)
+                .unwrap()
+                .windows
+                .as_deref(),
             Some("{documents}/God of War Ragnarök")
         );
         // A save kept in the registry, on Windows only.

@@ -55,24 +55,27 @@ host cannot answer.
 
 ## Releasing a new version
 
-1. Tag and let `.github/workflows/release.yml` build. It uploads
-   `pc-gamepak-<version>-windows-x86_64.zip` and a `.sha256` beside it.
-2. Take the hash from that `.sha256` file and put it in `InstallerSha256`.
-   **The committed value is a placeholder of zeroes** — a submission with it
-   will fail validation, which is the intended failure mode.
-3. Bump `PackageVersion` in all three files, `ReleaseDate` and
-   `ReleaseNotesUrl` in the ones that carry them, and the version inside both
-   `RelativeFilePath` entries — the zip nests everything under a folder named
-   for the version, so those paths move every release.
-4. Validate and submit:
+Automatic. Publishing a GitHub release runs `.github/workflows/winget.yml`,
+which uses [winget-releaser](https://github.com/vedantmgoyal9/winget-releaser)
+to copy the previous manifests, swap in the new zip's URL and hash, and open
+the pull request on microsoft/winget-pkgs. It needs, once:
 
-   ```powershell
-   winget validate --manifest packaging\winget\1.0.0
-   wingetcreate submit --token <pat> packaging\winget\1.0.0
-   ```
+- a fork of microsoft/winget-pkgs on the repository owner's account;
+- a classic token with `public_repo`, saved as the repository secret
+  `WINGET_TOKEN`.
 
-   `wingetcreate update HarryBMa.PCGamePak --version <v> --urls <zip url>` does
-   steps 2–3 on its own and is the easier path after the first submission.
+A release it missed (no secret yet, a failed run) can be sent again from
+Actions → winget → Run workflow, with the tag.
+
+By hand, from Windows, if the workflow is not an option:
+
+```powershell
+wingetcreate update HarryBMa.PCGamePak --version <v> --urls <zip url> --submit
+```
+
+The version folders here are what `check-versions.mjs` keeps in step with the
+rest of the repository; the submission itself is built from the previous
+published manifests, not from them.
 
 The first submission goes through automated validation and then a human
 reviewer. Later ones are usually automatic.

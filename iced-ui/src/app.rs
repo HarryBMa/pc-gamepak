@@ -92,9 +92,10 @@ impl Launcher {
         self.cartridge = Cartridge::Loading;
         self.note(format!("reading {}", self.drive));
         let drive = self.drive.clone();
-        Task::perform(off_thread(move || cartridge::read_cartridge_info(&drive)), |result| {
-            Message::Loaded(result.and_then(|inner| inner.map(Box::new)))
-        })
+        Task::perform(
+            off_thread(move || cartridge::read_cartridge_info(&drive)),
+            |result| Message::Loaded(result.and_then(|inner| inner.map(Box::new))),
+        )
     }
 
     fn games(&self) -> Vec<Game<'_>> {
@@ -295,7 +296,9 @@ fn play(state: &mut Launcher) -> Task<Message> {
         off_thread(move || {
             let quiet = |_: String| {};
             match launch::start(&drive, &executable, &quiet)? {
-                launch::Started::Handed => Ok(format!("{title} handed to {}", integration(&executable))),
+                launch::Started::Handed => {
+                    Ok(format!("{title} handed to {}", integration(&executable)))
+                }
                 launch::Started::Carried(mut child) => {
                     // Reaped here so it does not linger as a zombie on Linux.
                     std::thread::spawn(move || {
@@ -315,10 +318,9 @@ fn eject(state: &mut Launcher, force: bool) -> Task<Message> {
     }
     state.action = Action::Ejecting;
     let drive = state.drive.clone();
-    Task::perform(
-        off_thread(move || eject_now(&drive, force)),
-        |result| Message::Ejected(result.and_then(|inner| inner)),
-    )
+    Task::perform(off_thread(move || eject_now(&drive, force)), |result| {
+        Message::Ejected(result.and_then(|inner| inner))
+    })
 }
 
 /// Eject the way the Tauri launcher does: refuse while anything is using the
@@ -361,7 +363,10 @@ fn insert_sync(drive: &str) -> Vec<String> {
         }
     }
     if shaders::wanted(root) {
-        let pulled = shaders::pull_all(root).into_iter().filter(Result::is_ok).count();
+        let pulled = shaders::pull_all(root)
+            .into_iter()
+            .filter(Result::is_ok)
+            .count();
         notes.push(format!("shaders: {pulled} cache(s) brought in"));
     }
     notes
@@ -392,7 +397,11 @@ fn off_thread<T: Send + 'static>(
     std::thread::spawn(move || {
         let _ = sender.send(work());
     });
-    async move { receiver.await.map_err(|_| "the worker thread stopped".to_string()) }
+    async move {
+        receiver
+            .await
+            .map_err(|_| "the worker thread stopped".to_string())
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -456,7 +465,12 @@ pub fn view(state: &Launcher) -> Element<'_, Message> {
     let header = row![
         text("PC GAMEPAK").size(18),
         Space::new().width(Length::Fill),
-        text(if state.drive.is_empty() { "no drive".to_string() } else { state.drive.clone() }).size(14),
+        text(if state.drive.is_empty() {
+            "no drive".to_string()
+        } else {
+            state.drive.clone()
+        })
+        .size(14),
         text("   F12 debug").size(12),
     ]
     .align_y(Alignment::Center)
@@ -514,7 +528,11 @@ fn ready<'a>(state: &'a Launcher, info: &'a CartridgeInfo) -> Element<'a, Messag
 
     // The picked game: art, title, where it launches, what the drive knows.
     let art: Element<'_, Message> = {
-        let path = PathBuf::from(if game.cover_path.is_empty() { &info.cover_path } else { game.cover_path });
+        let path = PathBuf::from(if game.cover_path.is_empty() {
+            &info.cover_path
+        } else {
+            game.cover_path
+        });
         if path.is_file() {
             image(image::Handle::from_path(path)).height(300).into()
         } else {
@@ -530,7 +548,11 @@ fn ready<'a>(state: &'a Launcher, info: &'a CartridgeInfo) -> Element<'a, Messag
     let played = stats::for_game(Path::new(&state.drive), game.executable);
     let mut facts = vec![format!("Launches through {}", integration(game.executable))];
     if played.seconds >= 60 {
-        facts.push(format!("{} h {} min played", played.seconds / 3600, played.seconds % 3600 / 60));
+        facts.push(format!(
+            "{} h {} min played",
+            played.seconds / 3600,
+            played.seconds % 3600 / 60
+        ));
     }
     if played.launches > 0 {
         facts.push(format!("{} launch(es)", played.launches));
@@ -565,7 +587,9 @@ fn ready<'a>(state: &'a Launcher, info: &'a CartridgeInfo) -> Element<'a, Messag
         .into(),
         Action::Launching(title) => text(format!("Starting {title}…")).size(14).into(),
         Action::Launched(note) => text(note.clone()).size(14).into(),
-        Action::LaunchFailed(why) => text(format!("Could not start the game: {why}")).size(14).into(),
+        Action::LaunchFailed(why) => text(format!("Could not start the game: {why}"))
+            .size(14)
+            .into(),
         Action::Ejecting => text("Ejecting…").size(14).into(),
         Action::Ejected(message) => text(message.to_uppercase()).size(22).into(),
         Action::EjectFailed(why) => text(format!("Could not eject: {why}")).size(14).into(),
@@ -582,12 +606,19 @@ fn ready<'a>(state: &'a Launcher, info: &'a CartridgeInfo) -> Element<'a, Messag
     };
 
     column![
-        row![library, container(detail).width(Length::Fill).center_x(Length::Fill)]
-            .height(Length::Fill),
-        container(column![controls, status].spacing(12).align_x(Alignment::Center))
-            .width(Length::Fill)
-            .center_x(Length::Fill)
-            .padding(20),
+        row![
+            library,
+            container(detail).width(Length::Fill).center_x(Length::Fill)
+        ]
+        .height(Length::Fill),
+        container(
+            column![controls, status]
+                .spacing(12)
+                .align_x(Alignment::Center)
+        )
+        .width(Length::Fill)
+        .center_x(Length::Fill)
+        .padding(20),
     ]
     .into()
 }
@@ -611,7 +642,14 @@ fn debug_panel(state: &Launcher) -> Element<'_, Message> {
     let lines = [
         "Watcher: separate process (not queried)".to_string(),
         format!("GamePak: {cartridge}"),
-        format!("Drive: {}", if state.drive.is_empty() { "—" } else { &state.drive }),
+        format!(
+            "Drive: {}",
+            if state.drive.is_empty() {
+                "—"
+            } else {
+                &state.drive
+            }
+        ),
         format!("Present: {}  Ejectable: {}", state.present, state.ejectable),
         format!("Games: {games}"),
         format!("Selected: {selected}"),

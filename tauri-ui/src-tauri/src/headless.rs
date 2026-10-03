@@ -76,7 +76,11 @@ pub fn play(drive: &str, index: usize) -> i32 {
     // on finds this process and waits for it.
     let player = handoff::Player::start(drive);
 
-    if let Err(why) = launch_game(pick.executable.clone(), drive.to_string(), Some(pick.title.clone())) {
+    if let Err(why) = launch_game(
+        pick.executable.clone(),
+        drive.to_string(),
+        Some(pick.title.clone()),
+    ) {
         let _ = shaders.join();
         return fail(&why);
     }
@@ -142,7 +146,10 @@ fn watch_until_over(
             _ => Vec::new(),
         };
         let was_seen = watch.seen();
-        match watch.observe(!holders.is_empty() || !elsewhere.is_empty(), started.elapsed()) {
+        match watch.observe(
+            !holders.is_empty() || !elsewhere.is_empty(),
+            started.elapsed(),
+        ) {
             Step::Wait if !was_seen && watch.seen() => debug_log(format!(
                 "play: {title} is running after {}s: {}",
                 started.elapsed().as_secs(),
@@ -356,15 +363,25 @@ mod tests {
 
     #[test]
     fn play_takes_a_number() {
-        assert_eq!(play_index(&args(&["--drive", "D:\\", "--play", "2"])), Some(Ok(2)));
-        assert!(matches!(play_index(&args(&["--play", "two"])), Some(Err(_))));
+        assert_eq!(
+            play_index(&args(&["--drive", "D:\\", "--play", "2"])),
+            Some(Ok(2))
+        );
+        assert!(matches!(
+            play_index(&args(&["--play", "two"])),
+            Some(Err(_))
+        ));
         assert!(matches!(play_index(&args(&["--play"])), Some(Err(_))));
         assert_eq!(play_index(&args(&["--drive", "D:\\", "--show"])), None);
     }
 
     #[test]
     fn safe_eject_is_its_own_flag_not_the_elevated_one() {
-        assert!(wants_safe_eject(&args(&["--drive", "D:\\", "--safe-eject"])));
+        assert!(wants_safe_eject(&args(&[
+            "--drive",
+            "D:\\",
+            "--safe-eject"
+        ])));
         assert!(!wants_safe_eject(&args(&["--eject", "D:"])));
     }
 }
