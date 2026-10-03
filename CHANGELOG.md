@@ -12,6 +12,15 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### Emulated cartridges carry their ROM
+
+**Choose ROM…** under *Add a game by hand* makes a cartridge for an emulated
+game. The platform is set from the file type where that is unambiguous, the ROM
+is copied into the system's folder (`snes/`, `gba/`, `psx/`…), and Play opens it
+with the emulator your desktop uses for that file type. The cartridge also
+carries a `gamelist.xml` and a `metadata.pegasus.txt`, so Pegasus and
+ES-DE — on a PC, or on an Android phone over USB-C — list it with its art when
+pointed at the drive.
 - **No Explorer window for a cartridge.** Windows' AutoPlay used to open a
   cartridge as a folder beside the launcher, and the watcher closed it a second
   later. It now answers AutoPlay's own "should I?" question, through the
