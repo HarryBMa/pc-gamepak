@@ -46,8 +46,12 @@
 #     TurboGrafx16  NeoGeo  NeoGeoPocket  WonderSwan
 #     Arcade  DOS  C64  Amiga  MSX
 #
-#   An emulated game's cartridge says the system it emulates: platform=SNES
-#   with executable=retroarch://... or a carried emulator.
+#   An emulated game's cartridge says the system it emulates, and its
+#   executable is the ROM: platform=SNES with executable=snes/Game.sfc. The
+#   launcher opens a ROM with whatever the desktop plays that file type with.
+#   The wizard puts ROMs in ES-DE's folder for the system (snes/, gba/, psx/...)
+#   and writes snes/gamelist.xml and metadata.pegasus.txt beside them, so
+#   Pegasus and ES-DE can list the cartridge when pointed at the drive.
 #
 # save  (optional, repeatable)
 #   Where this game keeps its saves on the host, so they can travel with the

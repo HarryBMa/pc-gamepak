@@ -58,6 +58,9 @@ const el = {
   btnPickFolder: $("btn-pick-folder"),
   btnClearFolder: $("btn-clear-folder"),
   folderChosen: $("folder-chosen"),
+  btnPickRom: $("btn-pick-rom"),
+  btnClearRom: $("btn-clear-rom"),
+  romChosen: $("rom-chosen"),
   customTitle: $("custom-title"),
   titleHint: $("title-hint"),
   exeChoices: $("exe-choices"),
@@ -908,10 +911,11 @@ el.collectionTitle.addEventListener("input", () => {
    ========================================================================== */
 
 function enterManual() {
-  manual = manual ?? { title: "", executable: "", folder: null, choices: [], cover: null };
+  manual = manual ?? { title: "", executable: "", folder: null, rom: null, choices: [], cover: null };
   picked = [];
   showPhase("custom");
   renderFolder();
+  renderRom();
   renderExeChoices();
   renderGames();
   renderTickCount();
@@ -923,8 +927,10 @@ async function pickFolder() {
   try {
     const chosen = await invoke("pick_game_folder");
     if (!chosen) return;
-    manual = manual ?? { title: "", executable: "", folder: null, choices: [], cover: null };
+    manual = manual ?? { title: "", executable: "", folder: null, rom: null, choices: [], cover: null };
     manual.folder = chosen;
+    manual.rom = null;
+    renderRom();
     // The folder's own name is the best guess at the title, tidied.
     if (!el.customTitle.value.trim()) {
       el.customTitle.value = tidyFolderName(chosen.name || "");
@@ -971,6 +977,50 @@ function renderFolder() {
     el.folderChosen.textContent = chosen.sizeBytes
       ? `${chosen.path} · ${formatBytes(chosen.sizeBytes)}`
       : chosen.path;
+  }
+}
+
+/**
+ * An emulated game: one ROM file, copied into its system's folder on the
+ * cartridge. Its extension usually says which system, so the platform is set
+ * for the person when it is still PC; an .iso or .zip says nothing and the
+ * build waits for them to choose.
+ */
+async function pickRom() {
+  try {
+    const chosen = await invoke("pick_rom_file");
+    if (!chosen) return;
+    manual = manual ?? { title: "", executable: "", folder: null, rom: null, choices: [], cover: null };
+    manual.rom = chosen;
+    manual.folder = null;
+    manual.choices = [];
+    manual.executable = "";
+    if (!el.customTitle.value.trim()) {
+      el.customTitle.value = tidyFolderName(chosen.name || "");
+    }
+    if (chosen.platform && el.optPlatform.value === "PC") {
+      el.optPlatform.value = chosen.platform;
+    }
+    renderRom();
+    renderFolder();
+    renderExeChoices();
+    refreshRail();
+    refreshCreateButton();
+  } catch (error) {
+    status(String(error), "error");
+  }
+}
+
+function renderRom() {
+  const chosen = manual?.rom;
+  el.romChosen.hidden = !chosen;
+  el.btnClearRom.hidden = !chosen;
+  el.btnPickRom.textContent = chosen ? "Change ROM…" : "Choose ROM…";
+  // A ROM is what Play opens, so a link would only be ignored.
+  el.customExec.closest(".field").hidden = Boolean(chosen);
+  el.exeChoices.closest(".field").hidden = Boolean(chosen);
+  if (chosen) {
+    el.romChosen.textContent = `${chosen.path} · ${formatBytes(chosen.sizeBytes)}`;
   }
 }
 
@@ -1308,7 +1358,7 @@ function describeFilesystem() {
 
 /** Every game that would actually have its files copied. */
 function copyable() {
-  if (manual) return manual.folder ? [manual] : [];
+  if (manual) return manual.folder || manual.rom ? [manual] : [];
   return picked.filter((g) => g.sizeOnDisk > 0);
 }
 
@@ -1367,7 +1417,7 @@ function estimateSeconds() {
   let seconds = 0;
   if (on.format) seconds += 20;
   if (on.closeSteam) seconds += 5;
-  const size = on.copy ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0) : 0;
+  const size = on.copy ? copyable().reduce((s, g) => s + (g.sizeOnDisk || (g.folder ?? g.rom)?.sizeBytes || 0), 0) : 0;
   if (size) seconds += size / writeRate();
   if (on.verify && size) seconds += size / readRate();
   seconds += 2; // conf, launcher, manifest
@@ -1381,7 +1431,7 @@ function estimateSeconds() {
 function planSteps() {
   const steps = [];
   const size = on.copy
-    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
+    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || (g.folder ?? g.rom)?.sizeBytes || 0), 0)
     : 0;
 
   if (on.format && formatPlan) {
@@ -1724,9 +1774,11 @@ function renderBuild() {
 
   if (manual) {
     el.buildGameTitle.textContent = el.customTitle.value.trim() || manual.title || "Entered by hand";
-    el.buildGameMeta.textContent = manual.folder
-      ? `By hand · ${formatBytes(manual.folder.sizeBytes)}`
-      : "By hand";
+    el.buildGameMeta.textContent = manual.rom
+      ? `ROM · ${el.optPlatform.selectedOptions[0]?.textContent ?? ""} · ${formatBytes(manual.rom.sizeBytes)}`
+      : manual.folder
+        ? `By hand · ${formatBytes(manual.folder.sizeBytes)}`
+        : "By hand";
   } else if (collection) {
     el.buildGameTitle.textContent = cartridgeTitle() || `${picked.length} games`;
     el.buildGameMeta.textContent = `${picked.length} games · ${formatBytes(totalBytes())}`;
@@ -1789,7 +1841,7 @@ function renderBuild() {
 function refreshSpace() {
   const drive = drives.find((d) => d.path === selectedDrive);
   const list = copyable();
-  const size = list.reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0);
+  const size = list.reduce((s, g) => s + (g.sizeOnDisk || (g.folder ?? g.rom)?.sizeBytes || 0), 0);
 
   el.railSpace.hidden = !drive || size === 0;
   if (el.railSpace.hidden) return;
@@ -1805,7 +1857,7 @@ function refreshSpace() {
   // band. The bands themselves carry only their colour.
   const tracks = [];
   list.forEach((game, index) => {
-    const bytes = game.sizeOnDisk || game.folder?.sizeBytes || 0;
+    const bytes = game.sizeOnDisk || (game.folder ?? game.rom)?.sizeBytes || 0;
     tracks.push(`${Math.max(1, (bytes / drive.totalBytes) * 100)}%`);
     const band = document.createElement("div");
     // Each band a step further round the accent's hue, so they read as one
@@ -1825,7 +1877,7 @@ function renderOptions() {
   el.optCopy.checked = on.copy;
   el.optCopy.disabled = !canCopy;
   el.optCopyRow.classList.toggle("is-off", !canCopy);
-  const size = copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0);
+  const size = copyable().reduce((s, g) => s + (g.sizeOnDisk || (g.folder ?? g.rom)?.sizeBytes || 0), 0);
   el.optCopyMeta.textContent = !(picked.length || manual)
     ? ""
     : canCopy
@@ -1873,15 +1925,16 @@ el.optFilesystem.addEventListener("change", () => {
 
 function blockingReason() {
   if (picked.length === 0 && !manual) return "Choose a game";
-  if (manual && !manual.executable && !el.customExec.value.trim() && !manual.folder) {
+  if (manual && !manual.executable && !el.customExec.value.trim() && !manual.folder && !manual.rom) {
     return "Choose what Play starts";
   }
+  if (manual?.rom && el.optPlatform.value === "PC") return "Choose the ROM's platform";
   if (manual && !el.customTitle.value.trim()) return "Give it a title";
   if (!selectedDrive) return "Choose a drive";
 
   const drive = drives.find((d) => d.path === selectedDrive);
   const size = on.copy
-    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
+    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || (g.folder ?? g.rom)?.sizeBytes || 0), 0)
     : 0;
   const capacity = on.format ? drive?.totalBytes : drive?.freeBytes;
   if (size > 0 && drive && size > capacity) {
@@ -1949,7 +2002,7 @@ function refreshCreateButton() {
 
   const seconds = estimateSeconds();
   const size = on.copy
-    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || g.folder?.sizeBytes || 0), 0)
+    ? copyable().reduce((s, g) => s + (g.sizeOnDisk || (g.folder ?? g.rom)?.sizeBytes || 0), 0)
     : 0;
 
   if (on.format && formatPlan) {
@@ -2110,10 +2163,12 @@ function buildRequest() {
     return {
       ...shared,
       title: el.customTitle.value.trim(),
-      executable: el.customExec.value.trim() || manual.executable || "",
+      // A ROM decides what Play opens once it is on the cartridge.
+      executable: manual.rom ? "" : el.customExec.value.trim() || manual.executable || "",
       appId: null,
       playniteId: null,
       sourceDir: manual.folder?.path ?? null,
+      romSource: manual.rom?.path ?? null,
       copyExecutable: manual.executable || null,
       coverSource: art.cover?.path ?? null,
       iconSource: art.icon?.path ?? null,
@@ -3598,6 +3653,14 @@ el.btnCustomDone.addEventListener("click", () => {
   refreshRail();
 });
 el.btnPickFolder.addEventListener("click", pickFolder);
+el.btnPickRom.addEventListener("click", pickRom);
+el.btnClearRom.addEventListener("click", () => {
+  if (!manual) return;
+  manual.rom = null;
+  renderRom();
+  refreshRail();
+  refreshCreateButton();
+});
 el.btnClearFolder.addEventListener("click", () => {
   if (!manual) return;
   manual.folder = null;
@@ -3847,6 +3910,10 @@ function fillPlatforms(select, current = "PC") {
   select.value = entries.find(([id]) => id.toLowerCase() === String(current || "PC").toLowerCase())?.[0] ?? "PC";
 }
 fillPlatforms(el.optPlatform);
+el.optPlatform.addEventListener("change", () => {
+  refreshRail();
+  refreshCreateButton();
+});
 
 el.optMove.addEventListener("change", () => {
   moveWanted = el.optMove.checked;
@@ -4153,6 +4220,9 @@ async function demoInvoke(command, args) {
         { relative: "bin/launcher.exe", name: "launcher.exe", score: -40 },
         { relative: "unins000.exe", name: "unins000.exe", score: -400 },
       ];
+    case "pick_rom_file":
+      return { path: "B:\\ROMs\\Chrono Trigger (USA).sfc", name: "Chrono Trigger (USA)",
+               sizeBytes: 4_194_304, platform: "SNES" };
     case "pick_game_folder":
       return {
         path: "B:\\Games\\Split_Fiction v1.2",

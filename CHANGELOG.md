@@ -10,6 +10,18 @@ nothing about either changes.
 Every version in the repository is checked to agree —
 `node tools/check-versions.mjs` — because for three releases they did not.
 
+## Unreleased
+
+### Emulated cartridges carry their ROM
+
+**Choose ROM…** under *Add a game by hand* makes a cartridge for an emulated
+game. The platform is set from the file type where that is unambiguous, the ROM
+is copied into the system's folder (`snes/`, `gba/`, `psx/`…), and Play opens it
+with the emulator your desktop uses for that file type. The cartridge also
+carries a `gamelist.xml` and a `metadata.pegasus.txt`, so Pegasus and
+ES-DE — on a PC, or on an Android phone over USB-C — list it with its art when
+pointed at the drive.
+
 ## 1.1.0 — 2026-10-03
 
 The release where the cartridge stopped being only a way to carry a game and

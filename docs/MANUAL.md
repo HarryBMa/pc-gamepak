@@ -897,6 +897,28 @@ hiding them, and tidies a title out of the folder name for you to correct. There
 is no art to inherit for these, so the cover is honestly empty until you give it
 one. Any supported URI or a path on the cartridge works too.
 
+**Emulated games** are a ROM rather than a folder: **Choose ROM…** under *Add a
+game by hand*. The wizard sets the platform from the file type when it can tell
+(`.sfc` is SNES, `.gba` is GBA; an `.iso` or a `.zip` could be anything, so it
+waits for you to pick), and copies the ROM into the folder EmulationStation
+uses for that system:
+
+```text
+cartridge.conf              platform=SNES, executable=snes/Chrono Trigger.sfc
+snes/Chrono Trigger.sfc
+snes/gamelist.xml           titles and art for EmulationStation and its forks
+metadata.pegasus.txt        a collection for Pegasus
+```
+
+Play in the launcher opens the ROM with whatever your desktop plays that file
+type with, so set RetroArch or your emulator of choice as the default app for
+it once. The two extra files are for front-ends that scan folders, on a PC or on
+an Android phone with the cartridge on USB-C: add the drive as a game folder in
+Pegasus or ES-DE and it lists the game with its art. Pegasus still needs a
+`launch:` line naming your emulator before it can start anything; the file says
+where. Both files are rewritten with the cartridge and removed if it stops being
+an emulated one, and a `gamelist.xml` you made yourself is never touched.
+
 <a id="artwork-from-steamgriddb"></a>
 
 ### Artwork from SteamGridDB

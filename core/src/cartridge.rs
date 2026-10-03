@@ -205,13 +205,15 @@ pub fn skin_css(root: &Path) -> String {
 /// Does this cartridge carry the game, or just point at it?
 pub fn holds_game(root: &Path) -> bool {
     // Written by the wizard's "copy the game" step: the Steam library layout
-    // for a Steam game, or the wizard's own Games/ folder for a portable one.
+    // for a Steam game, the wizard's own Games/ folder for a portable one, or
+    // a ROM in its system's folder for an emulated one.
     root.join("steamapps").join("common").is_dir()
         || root
             .join(crate::steamlib::LIBRARY_DIR)
             .join("steamapps/common")
             .is_dir()
         || root.join("Games").is_dir()
+        || crate::emulated::carries_rom(root)
 }
 
 /// Largest cover we will base64 into the webview. A cartridge is not a trusted
