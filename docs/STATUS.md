@@ -111,23 +111,16 @@ that builds both platforms from a tag, AUR and Scoop packaging, and
 
 Ranked by how much it matters.
 
-1. **Cutting 1.1.0, and the two channels that are behind.** Three releases exist
-   — v0.1.0, v1.0.0 and v1.0.1, all published with artefacts — so this entry used
-   to be wrong in the most misleading direction available: it claimed nothing
-   downstream had anything to point at, for three releases.
+1. **The AUR, and WinGet catching up on its own.** 1.1.0 is released, on
+   Scoop, and submitted to WinGet (microsoft/winget-pkgs#446232). Publishing a
+   release is meant to submit to WinGet by itself through `winget.yml`, and for
+   1.1.0 it failed: the `WINGET_TOKEN` secret could not push to the
+   winget-pkgs fork, so the submission was made by hand. Replacing the secret
+   with a classic token holding `public_repo` is what makes the next release
+   need nobody. The AUR package is written and checksummed for 1.1.0 and waits
+   on AUR registrations reopening. `tools/check-versions.mjs` keeps every
+   version site in step and fails CI when they disagree.
 
-   What is true is narrower and was worse. AUR and WinGet were pinned at
-   **1.0.0** while the code was at 1.0.1, `package-lock.json` said **0.1.0**, and
-   nothing checked — so two of the three channels people install from offered a
-   release older than the code. `tools/check-versions.mjs` now reads all fourteen
-   places the version is written, fails CI when they disagree, and moves them
-   together on `--set`.
-
-   Everything for 1.1.0 is staged: versions, a `CHANGELOG.md`, the metainfo
-   entry, and release notes taken from the changelog rather than from commit
-   subjects. What remains cannot be done from a branch — merge, tag `v1.1.0`,
-   then put the real checksums where `SHA256-PENDING-RELEASE` is and re-run the
-   checker with `--release`. `docs/PUBLISHING.md` has the order.
 2. **Real hardware: answered, and the history is worth keeping.** The project
    owner reports repeated end-to-end runs since, with the **God of War
    Ragnarök** and **Tomb Raider** cartridges both working — so the open question
@@ -258,6 +251,22 @@ Ranked by how much it matters.
    in the design and absent here. The dialog is grouped the way the design asks
    and reports what was actually scanned instead of offering switches that would
    do nothing.
+
+## Stretch goals
+
+Not on the list above because nothing is missing without them; worth doing
+when the rest is settled.
+
+- **A 3D cartridge for every platform.** `platform=` says what a cartridge is
+  for so that something can draw the physical thing: a model per platform — a
+  PC game box, a SNES cartridge, a Game Boy cartridge and so on — with the
+  cartridge's own front, side and back artwork on it. It would serve the
+  launcher, the unboxing and the memory card's shelf, which already turns CSS
+  boxes made from a cover. The models and their artwork slots are ours to make:
+  LaunchBox's 3D box and cart pictures come from its own database, for
+  LaunchBox, and are not ours to ship. Means a back and spine image per
+  cartridge as well as the four it carries now, and a way for the wizard to
+  find or make them.
 
 ## What Kazeta settles, and what it does not
 
