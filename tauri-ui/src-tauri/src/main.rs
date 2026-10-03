@@ -49,6 +49,7 @@
 //   suggest_collection_name(titles)          -> String
 //   pick_cover_image()                       -> PickedCover | null
 //   pick_game_folder()                       -> PickedGameFolder | null
+//   pick_rom_file()                          -> PickedRom | null
 //   host_platform()                          -> "windows" | "linux" | …
 //   tuning_plan(drive_path, tweaks, applying) -> Vec<String>  (the commands)
 //   apply_tuning(drive_path, tweaks, applying) -> Vec<String>  (what was done)
@@ -1288,6 +1289,53 @@ async fn pick_game_folder(
     }))
 }
 
+/// A ROM the person chose, and the platform its file type suggests.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedRom {
+    path: String,
+    /// The file name without its extension, offered as the title.
+    name: String,
+    size_bytes: u64,
+    /// `SNES`, `GBA`... when the extension belongs to one system, else null and
+    /// the person picks.
+    platform: Option<&'static str>,
+}
+
+/// Ask for a ROM through the desktop's own file dialog, for an emulated
+/// cartridge. As with the folder picker, the window gets a path back only
+/// after the person has pointed at a file.
+#[tauri::command]
+async fn pick_rom_file(window: tauri::WebviewWindow) -> Result<Option<PickedRom>, String> {
+    let Some(file) = window
+        .dialog()
+        .file()
+        .set_title("Choose the game's ROM")
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let path = file
+        .into_path()
+        .map_err(|e| format!("That file cannot be read: {e}"))?;
+    let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !meta.is_file() {
+        return Err(format!("{} is not a file.", path.display()));
+    }
+    Ok(Some(PickedRom {
+        name: path
+            .file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        platform: path
+            .extension()
+            .and_then(|e| e.to_str())
+            .and_then(gamepak_core::emulated::platform_for_extension),
+        size_bytes: meta.len(),
+        path: path.to_string_lossy().into_owned(),
+    }))
+}
+
 /// A name for a cartridge carrying several games, worked out from what they are
 /// called. The wizard offers it; the user can always type their own.
 #[tauri::command]
@@ -1862,6 +1910,7 @@ fn main() {
             suggest_collection_name,
             pick_cover_image,
             pick_game_folder,
+            pick_rom_file,
             cartridge_health,
             read_cartridge_for_edit,
             update_cartridge,

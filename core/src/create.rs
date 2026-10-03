@@ -261,6 +261,11 @@ pub struct CartridgeRequest {
     /// nothing, which reads as PC.
     #[serde(default)]
     pub platform: Option<String>,
+    /// A ROM file to carry, for an emulated cartridge. Copied into the folder
+    /// its platform's ROMs go in (`snes/`, `gba/`...) and made what Play opens.
+    /// See [`crate::emulated`].
+    #[serde(default)]
+    pub rom_source: Option<String>,
 }
 
 /// The picture a drive icon is made from, relative to the cartridge root.
@@ -1172,6 +1177,7 @@ pub fn create_cartridge(
             .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
         result.conf_path = conf_path.to_string_lossy().into_owned();
         mirror_history(&root, &mut warnings);
+        crate::emulated::sync_files(&root, &mut warnings);
 
         // ---- autorun.inf ---------------------------------------------------
         if request.write_icon {
@@ -1257,7 +1263,40 @@ pub fn create_cartridge(
     // until the folder has been copied across.
     let mut executable = sanitize_conf_value(&request.executable);
 
-    if request.copy_game {
+    // An emulated game's ROM. Not behind `copy_game`: the file is the game,
+    // and there is nowhere else on the host it could be played from.
+    if let Some(rom) = request
+        .rom_source
+        .as_deref()
+        .map(str::trim)
+        .filter(|rom| !rom.is_empty())
+    {
+        let platform = request.platform.as_deref().unwrap_or("");
+        if !crate::emulated::is_emulated(platform) {
+            return Err("A ROM needs a platform: say which system it is for.".into());
+        }
+        progress(Progress {
+            step: "copy",
+            message: format!("Copying {title}…"),
+            done_bytes: 0,
+            total_bytes: 0,
+        });
+        let mut digests = request.verify_copy.then(|| verify::Digests::new(&root));
+        let (relative, bytes) =
+            crate::emulated::copy_rom(Path::new(rom), &root, platform, digests.as_mut())?;
+        written.extend(digests.map(|d| d.into_manifest().files).unwrap_or_default());
+        result.game_copied = true;
+        result.bytes_copied = bytes;
+        result.game_folder = relative.rsplit_once('/').map(|(dir, _)| dir.to_string());
+        executable = relative;
+    }
+
+    if request.copy_game
+        && request
+            .rom_source
+            .as_deref()
+            .is_none_or(|r| r.trim().is_empty())
+    {
         match copy_game(request, &root, progress) {
             Ok(Some(copied)) => {
                 result.game_copied = true;
@@ -1350,6 +1389,7 @@ pub fn create_cartridge(
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
     mirror_history(&root, &mut warnings);
+    crate::emulated::sync_files(&root, &mut warnings);
 
     // ---- 6. autorun.inf --------------------------------------------------
     if request.write_icon {

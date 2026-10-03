@@ -57,6 +57,14 @@ pub fn start(drive_path: &str, executable: &str, log: &dyn Fn(String)) -> Result
         return Err(format!("Executable not found: {}", full_path.display()));
     }
 
+    // A ROM is not a program. Whatever the desktop opens that file type with —
+    // RetroArch, an emulator of the person's choosing — is the right player,
+    // and choosing one is the host's business, not the cartridge's.
+    if crate::emulated::is_rom(&full_path) {
+        open_uri(&full_path.to_string_lossy())?;
+        return Ok(Started::Handed);
+    }
+
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = Command::new(&full_path);

@@ -20,6 +20,7 @@ pub mod created;
 pub mod drives;
 pub mod edit;
 pub mod eject;
+pub mod emulated;
 pub mod folders;
 pub mod format;
 pub mod frontend;

@@ -526,6 +526,8 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
             "Play history was not copied into cartridge.conf: {e}"
         ));
     }
+    // A platform changed here changes which emulator front-ends list it.
+    crate::emulated::sync_files(root, &mut warnings);
 
     // ---- autorun.inf ------------------------------------------------------
     //
