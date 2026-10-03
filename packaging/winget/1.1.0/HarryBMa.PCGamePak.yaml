@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
 #
 # Version manifest. The three files in this directory are submitted together to
-# microsoft/winget-pkgs under manifests/h/HarryBMa/PCGamePak/1.0.0/.
+# microsoft/winget-pkgs under manifests/h/HarryBMa/PCGamePak/1.1.0/.
 
 PackageIdentifier: HarryBMa.PCGamePak
 PackageVersion: 1.1.0

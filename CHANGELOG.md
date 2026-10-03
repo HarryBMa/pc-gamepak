@@ -10,7 +10,7 @@ nothing about either changes.
 Every version in the repository is checked to agree —
 `node tools/check-versions.mjs` — because for three releases they did not.
 
-## 1.1.0 — unreleased
+## 1.1.0 — 2026-10-03
 
 The release where the cartridge stopped being only a way to carry a game and
 started carrying everything around it: the saves, the hours, the compiled
@@ -211,6 +211,68 @@ Fixed along the way:
   where the cover goes, which read as the hero replacing the cover.
 - Ctrl+Enter on the Edit tab started a Create write.
 - The collection name and the Edit tab's name were plain white boxes.
+
+### Memory cards, and combo drives
+
+A drive with a `memorycard.conf` carries **saves and no games** — the other half
+of a cartridge. Plug one in and every save on it is a game case on a shelf;
+choose one and it turns round to its back cover, which says which copy is newer,
+when it was saved and how much it holds, beside the one button that does what
+it needs: copy to this PC, or to the card. Whatever a copy replaces is kept.
+
+A cartridge can be a **combo drive** too — a switch in the wizard — and its own
+games' saves go on its card, one button (or `M`) away from Play. The wizard's
+new **Memory card** page writes one: add games, and it finds where each saves.
+Writing the same game twice replaces it rather than listing it twice.
+
+### Finding where a game saves, and saves that are not folders
+
+With *Look up where games keep their saves* on, the wizard fills save lines in
+from [Ludusavi's manifest](https://github.com/mtkennerly/ludusavi-manifest),
+matching by Steam app id (including other editions'), by name with accents and
+punctuation ignored, and by install folder, and following the manifest's
+aliases. A game it does not list is looked for by folder name in the places
+games save. On one real library that took the hit rate from 58 to 65 of 86;
+the rest save inside their install folder or in their launcher's cloud.
+
+- **`{steamuserdata}`**: Steam Cloud games' saves under
+  `userdata/<account>/<app id>`.
+- **`{registry}`**: games that save into the Windows registry — Unity's
+  `PlayerPrefs` does, so plenty do, Bluey among them. The key travels as an
+  exported `.reg` file and is imported back only after every key in it is
+  checked to be inside the one declared.
+- **Link mode on Windows** falls back to a directory junction when a symlink
+  is refused, so it no longer needs Developer Mode or administrator.
+
+### `platform=`
+
+A cartridge, a collection or one game can say what it is for — `SNES`, `GBA`,
+`PS1`, about forty names listed in `cartridge.conf.example` — so a front-end
+that draws the physical cartridge can pick the right shell. The wizard has a
+picker for it on Create and Edit; skins see it as `data-platform`; the Playnite
+plugin files the cartridge under Playnite's own platform of that name.
+
+### For front-ends
+
+`--play <n>` and `--safe-eject` run a game or an eject with no window, for a
+front-end with its own buttons, and `--memcard` opens a combo cartridge on its
+saves. A game running from the cartridge is now found whatever case its path
+is in — Windows reports the case on disk, not the case the drive was named in,
+and the busy check and `--play` both missed it.
+
+### A new logo, and sharp icons
+
+The striped badge is the app, the red cartridge is the wizard, cut from the new
+logo with the upscale's edges cleaned. Each window now sets its taskbar icon
+itself at the screen's DPI: Tauri sets only the small one, so the taskbar had
+been stretching a 16 px picture.
+
+### An experiment: a native launcher
+
+`iced-ui/` is a second launcher written in [Iced](https://iced.rs), on the same
+core, to find out whether a native window is the better long-term answer. It is
+not shipped. Launch and eject moved into core to make it possible, which made
+the Tauri backend 550 lines shorter. `docs/ICED.md` has the comparison.
 
 ### Removed: NFC and tag support
 

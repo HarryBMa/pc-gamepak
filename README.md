@@ -109,8 +109,7 @@ more in the picker for a cartridge that only ever meets one kind of machine.
 
 ## Install
 
-**Windows** — [WinGet](https://github.com/microsoft/winget-pkgs), which does
-the lot:
+**Windows** — [WinGet](https://github.com/microsoft/winget-pkgs):
 
 ```powershell
 winget install HarryBMa.PCGamePak
@@ -123,15 +122,14 @@ scoop bucket add harrybma https://github.com/HarryBMa/scoop-bucket
 scoop install pc-gamepak
 ```
 
-Scoop puts both binaries on your PATH but cannot register the watcher to start
-at logon, so run the installer once to do that:
+Either puts both programs on your PATH, but a package manager cannot register
+the watcher to start at logon — that is what opens the launcher when a
+cartridge goes in — so run the installer once (it is in the package's folder,
+or take it from [Releases](https://github.com/HarryBMa/pc-gamepak/releases)):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$(scoop prefix pc-gamepak)\windows\install.ps1" -Mode Watcher
+powershell -ExecutionPolicy Bypass -File install.ps1 -Mode Watcher
 ```
-
-Or take the installer from
-[Releases](https://github.com/HarryBMa/pc-gamepak/releases).
 
 **Linux** — the pacman package is written and tested, and waiting on the AUR
 reopening registrations. Building it by hand is a clone and a command:

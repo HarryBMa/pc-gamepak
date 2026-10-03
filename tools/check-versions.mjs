@@ -62,7 +62,7 @@ const cargoToml = (file) =>
  * exactly the kind of thing nobody notices until a release is being cut.
  */
 const cargoLock = (file, pkg) => {
-  const pattern = new RegExp(`(name = "${pkg}"\\nversion = ")([^"]+)(")`);
+  const pattern = new RegExp(`(name = "${pkg}"\\r?\\nversion = ")([^"]+)(")`);
   return site(
     file,
     (text) => [text.match(pattern)?.[2]].filter(Boolean),
@@ -119,10 +119,10 @@ const SITES = [
   // package. npm rewrites whichever one is wrong, silently.
   site(
     "tauri-ui/package-lock.json",
-    (text) => [text.match(/"": \{\n {6}"name": "[^"]+",\n {6}"version": "([^"]+)"/)?.[1]].filter(Boolean),
+    (text) => [text.match(/"": \{\r?\n {6}"name": "[^"]+",\r?\n {6}"version": "([^"]+)"/)?.[1]].filter(Boolean),
     (text, _old, next) =>
       text.replace(
-        /("": \{\n {6}"name": "[^"]+",\n {6}"version": ")[^"]+(")/,
+        /("": \{\r?\n {6}"name": "[^"]+",\r?\n {6}"version": ")[^"]+(")/,
         `$1${next}$2`,
       ),
   ),

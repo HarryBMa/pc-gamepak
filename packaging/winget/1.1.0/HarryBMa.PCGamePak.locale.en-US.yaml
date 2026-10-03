@@ -40,7 +40,9 @@ Tags:
   - cartridge
 
 ReleaseNotes: |-
-  First release.
+  Saves, playtime and compiled shaders travel on the cartridge. A drive can be a
+  memory card that carries only saves, or a cartridge can be both. New
+  cartridges format as NTFS by default. Full notes: see the release page.
 
   WinGet installs the two executables and puts them on PATH. It cannot register
   the watcher's logon task, so a cartridge will not open its launcher on insert
@@ -52,7 +54,7 @@ ReleaseNotes: |-
   needs none of that and works immediately:
 
     pc-gamepak --create
-ReleaseNotesUrl: https://github.com/HarryBMa/pc-gamepak/releases/tag/v1.0.0
+ReleaseNotesUrl: https://github.com/HarryBMa/pc-gamepak/releases/tag/v1.1.0
 
 Documentations:
   - DocumentLabel: README

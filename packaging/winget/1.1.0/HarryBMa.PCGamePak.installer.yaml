@@ -23,7 +23,7 @@ NestedInstallerFiles:
     PortableCommandAlias: pc-gamepak-watcher
 
 UpgradeBehavior: install
-ReleaseDate: 2026-09-01
+ReleaseDate: 2026-10-03
 
 Installers:
   - Architecture: x64
