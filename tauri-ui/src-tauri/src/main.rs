@@ -128,12 +128,17 @@ const WIZARD_ICON: &[u8] = include_bytes!("../icons/wizard.ico");
 
 /// The picture in an `.ico` made for `size`, or the nearest larger one: the
 /// generator's shrink is cleaner than Windows' at small sizes.
+#[cfg(target_os = "windows")]
 fn ico_entry(ico: &[u8], size: u32) -> Option<&[u8]> {
     let count = u16::from_le_bytes(ico.get(4..6)?.try_into().ok()?) as usize;
     let mut best: Option<(u32, &[u8])> = None;
     for i in 0..count {
         let entry = ico.get(6 + i * 16..6 + i * 16 + 16)?;
-        let width = if entry[0] == 0 { 256 } else { u32::from(entry[0]) };
+        let width = if entry[0] == 0 {
+            256
+        } else {
+            u32::from(entry[0])
+        };
         let len = u32::from_le_bytes(entry[8..12].try_into().ok()?) as usize;
         let at = u32::from_le_bytes(entry[12..16].try_into().ok()?) as usize;
         let data = ico.get(at..at + len)?;
@@ -168,11 +173,21 @@ fn set_window_icons(window: &tauri::WebviewWindow, ico: &[u8]) {
     let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
     for (which, base) in [(ICON_SMALL, 16), (ICON_BIG, 32)] {
         let size = (base * dpi / 96) as i32;
-        let Some(png) = ico_entry(ico, size as u32) else { continue };
+        let Some(png) = ico_entry(ico, size as u32) else {
+            continue;
+        };
         // SAFETY: the bytes are a whole PNG, which Windows accepts as icon
         // resource data since Vista; 0x30000 is the icon format version it asks for.
         let icon = unsafe {
-            CreateIconFromResourceEx(png.as_ptr(), png.len() as u32, 1, 0x0003_0000, size, size, LR_DEFAULTCOLOR)
+            CreateIconFromResourceEx(
+                png.as_ptr(),
+                png.len() as u32,
+                1,
+                0x0003_0000,
+                size,
+                size,
+                LR_DEFAULTCOLOR,
+            )
         };
         if icon != 0 {
             unsafe { SendMessageW(hwnd, WM_SETICON, which as usize, icon) };
@@ -224,7 +239,6 @@ fn settle_when_it_exits(mut child: std::process::Child, _drive_path: String, _ke
         }
     });
 }
-
 
 // --------------------------------------------------------------------------
 // What the cartridge remembers: hours played, and saves
@@ -1077,7 +1091,6 @@ fn unmount(drive_path: &str) -> Result<(), String> {
 
     gamepak_core::eject::eject(drive_path)
 }
-
 
 // --------------------------------------------------------------------------
 // Wizard commands

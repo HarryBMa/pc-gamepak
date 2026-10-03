@@ -366,7 +366,10 @@ fn write_at(root: &Path, request: &CardRequest) -> Result<Vec<String>, String> {
     let mut unique: Vec<&CardGame> = Vec::new();
     for game in &request.games {
         let key = game.title.trim().to_lowercase();
-        match unique.iter().position(|g| g.title.trim().to_lowercase() == key) {
+        match unique
+            .iter()
+            .position(|g| g.title.trim().to_lowercase() == key)
+        {
             Some(at) => unique[at] = game,
             None => unique.push(game),
         }

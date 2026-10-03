@@ -331,14 +331,18 @@ mod tests {
             steam_install_dir(scratch.path(), "steam://rungameid/212680").as_deref(),
             Some("FTL Faster Than Light")
         );
-        assert_eq!(steam_install_dir(scratch.path(), "steam://rungameid/1"), None);
+        assert_eq!(
+            steam_install_dir(scratch.path(), "steam://rungameid/1"),
+            None
+        );
     }
 
     #[test]
     fn a_second_copy_in_another_library_is_the_same_game() {
         let dir = "FTL Faster Than Light";
         // The copy Steam actually ran, on another drive.
-        let elsewhere = Path::new("F:/Games/Steam/steamapps/common/FTL Faster Than Light/FTLGame.exe");
+        let elsewhere =
+            Path::new("F:/Games/Steam/steamapps/common/FTL Faster Than Light/FTLGame.exe");
         assert!(is_in_steam_install(elsewhere, dir));
         assert!(is_in_steam_install(
             Path::new("D:/SteamLibrary/steamapps/common/ftl faster than light/bin/FTLGame.exe"),
@@ -353,7 +357,10 @@ mod tests {
             Path::new("F:/steamapps/common/FTL Faster Than Light"),
             dir
         ));
-        assert!(!is_in_steam_install(Path::new("C:/Windows/explorer.exe"), dir));
+        assert!(!is_in_steam_install(
+            Path::new("C:/Windows/explorer.exe"),
+            dir
+        ));
     }
 
     #[test]

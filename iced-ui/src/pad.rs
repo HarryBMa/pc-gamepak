@@ -76,8 +76,13 @@ fn poll(sender: iced::futures::channel::mpsc::UnboundedSender<Pad>) {
                     if !stick_held && value.abs() > 0.6 {
                         stick_held = true;
                         // gilrs reports up as positive Y; up means previous.
-                        let is_y = matches!(event.event, EventType::AxisChanged(Axis::LeftStickY, ..));
-                        let step = if is_y { -value.signum() } else { value.signum() };
+                        let is_y =
+                            matches!(event.event, EventType::AxisChanged(Axis::LeftStickY, ..));
+                        let step = if is_y {
+                            -value.signum()
+                        } else {
+                            value.signum()
+                        };
                         Some(Pad::Move(step as i32))
                     } else {
                         if value.abs() < 0.3 {
