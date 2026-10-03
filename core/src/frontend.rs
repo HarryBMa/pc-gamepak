@@ -56,7 +56,7 @@ pub const HEROIC: &str = "heroic";
 pub const PEGASUS: &str = "pegasus";
 /// ES-DE, through `pc-gamepak-sync`: a "PC GamePak" system.
 pub const ESDE: &str = "esde";
-/// LaunchBox and Big Box. Designed, not written; named so the shape is visible.
+/// LaunchBox and Big Box: a cartridge slot, as in Playnite.
 pub const LAUNCHBOX: &str = "launchbox";
 
 /// Whether a front-end comes with the project or has to be installed.
@@ -95,6 +95,7 @@ pub fn known() -> Vec<FrontEnd> {
     let decky = decky_path();
     let playnite = playnite_path();
     let galaxy = galaxy_path();
+    let launchbox = launchbox_path();
     let sync = sync_path();
     // Heroic, Pegasus and ES-DE have no plugin runtime of their own: one small
     // program writes their files, so all three are installed when it is.
@@ -164,12 +165,9 @@ pub fn known() -> Vec<FrontEnd> {
             name: "LaunchBox",
             kind: Kind::Plugin,
             description: "A cartridge slot in LaunchBox and Big Box.",
-            install_path: None,
-            installed: false,
-            // Designed, not written: LaunchBox's plugin SDK ships only inside a
-            // LaunchBox install. Listed so the dialog says so rather than
-            // implying the list is complete.
-            implemented: false,
+            installed: present(&launchbox),
+            install_path: launchbox.map(|path| path.display().to_string()),
+            implemented: true,
         },
     ]
 }
@@ -242,6 +240,20 @@ fn decky_path() -> Option<PathBuf> {
             .join("plugins")
             .join("pc-gamepak-decky"),
     )
+}
+
+/// Where the LaunchBox plugin lives: `Plugins\PCGamePak` inside LaunchBox's
+/// own folder. LaunchBox installs wherever its user chose, `%USERPROFILE%\LaunchBox`
+/// unless told otherwise; `PC_GAMEPAK_LAUNCHBOX_DIR` names another install.
+fn launchbox_path() -> Option<PathBuf> {
+    let root = match std::env::var_os("PC_GAMEPAK_LAUNCHBOX_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None if cfg!(target_os = "windows") => {
+            PathBuf::from(std::env::var_os("USERPROFILE")?).join("LaunchBox")
+        }
+        None => return None,
+    };
+    Some(root.join("Plugins").join("PCGamePak"))
 }
 
 /// Where the Playnite extension lives.
@@ -442,17 +454,13 @@ mod tests {
         assert_eq!(all[0].kind, Kind::BuiltIn);
         assert!(all[0].installed, "the built-in one is always there");
 
-        for id in [DECKY, PLAYNITE, GOG_GALAXY, HEROIC, PEGASUS, ESDE] {
+        for id in [
+            DECKY, PLAYNITE, GOG_GALAXY, HEROIC, PEGASUS, ESDE, LAUNCHBOX,
+        ] {
             let plugin = all.iter().find(|f| f.id == id).expect("listed");
             assert!(plugin.implemented, "{id}");
             assert_eq!(plugin.kind, Kind::Plugin, "{id}");
         }
-
-        let launchbox = all.iter().find(|f| f.id == LAUNCHBOX).expect("listed");
-        assert!(
-            !launchbox.implemented,
-            "nothing is written; the dialog must not offer a dead switch"
-        );
 
         let mut ids: Vec<_> = all.iter().map(|f| f.id).collect();
         ids.sort_unstable();

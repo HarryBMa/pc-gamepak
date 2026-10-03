@@ -132,7 +132,7 @@ is a **plugin**, and **Settings → Where a cartridge opens** is the list:
 | **Heroic Games Launcher** | Cartridge games as sideloaded games while the cartridge is in. |
 | **Pegasus Frontend** | A PC GamePak collection of whatever is plugged in. |
 | **ES-DE** | A PC GamePak system of whatever is plugged in. |
-| **LaunchBox** | A cartridge slot in LaunchBox and Big Box. Designed, not built yet; listed so the shape is visible. |
+| **LaunchBox** | A cartridge slot as a game in a PC GamePak platform, in LaunchBox and Big Box: the cartridge's art and hours, Play through this launcher, each game of a collection as an additional app, and Eject on its menu. Through the [LaunchBox plugin](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/launchbox). |
 
 Heroic, Pegasus and ES-DE read files rather than load plugins, so one program,
 [pc-gamepak-sync](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/sync),
