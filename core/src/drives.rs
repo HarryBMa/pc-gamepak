@@ -48,6 +48,13 @@ pub struct TargetDrive {
     /// True when there is already a cartridge.conf here, so the wizard can warn
     /// before overwriting someone else's cartridge.
     pub has_cartridge: bool,
+    /// The name in its `cartridge.conf`, when it has one.
+    ///
+    /// The volume label only changes when the drive is erased, so a drive
+    /// written as "FTL" and rewritten as Cult of the Lamb is still labelled
+    /// FTL. This is what it actually holds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cartridge_title: Option<String>,
 }
 
 /// Directories a Linux desktop automounts removable media into.
@@ -240,6 +247,24 @@ fn has_cartridge(root: &Path) -> bool {
     root.join("cartridge.conf").is_file()
 }
 
+/// The cartridge's own name, read cheaply: the first `title=` in its conf.
+///
+/// Not `cartridge::read_cartridge_info`, which inlines every cover as a data
+/// URI — far too much work for a line in a drive list. The first title is the
+/// collection's on a collection, because `[collection]` is written first.
+fn cartridge_title(root: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(root.join("cartridge.conf")).ok()?;
+    title_in_conf(&text)
+}
+
+fn title_in_conf(text: &str) -> Option<String> {
+    text.lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_prefix("title="))
+        .map(|title| title.trim().to_string())
+        .filter(|title| !title.is_empty())
+}
+
 #[cfg(not(windows))]
 mod unix_impl {
     use super::*;
@@ -275,6 +300,7 @@ mod unix_impl {
             total_bytes: total,
             free_bytes: free,
             has_cartridge: super::has_cartridge(mount),
+            cartridge_title: super::cartridge_title(mount),
         }
     }
 
@@ -358,6 +384,7 @@ mod windows_impl {
                 total_bytes: total,
                 free_bytes: free,
                 has_cartridge: super::has_cartridge(&path),
+                cartridge_title: super::cartridge_title(&path),
             });
         }
 
@@ -713,6 +740,21 @@ fn free_drive_letter() -> Option<char> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_title_comes_from_the_conf_not_the_volume_label() {
+        let single =
+            "# PC GamePak\n\ntitle=Cult of the Lamb\nexecutable=steam://rungameid/1313140\n";
+        assert_eq!(title_in_conf(single).as_deref(), Some("Cult of the Lamb"));
+
+        // A collection's own name is written before any of its games.
+        let bundle = "[collection]\ntitle=Roguelikes\n\n[game]\ntitle=FTL\nexecutable=x\n";
+        assert_eq!(title_in_conf(bundle).as_deref(), Some("Roguelikes"));
+
+        assert_eq!(title_in_conf("title=  \nexecutable=x\n"), None);
+        assert_eq!(title_in_conf("executable=x\n"), None);
+    }
+
     use super::*;
 
     #[cfg(unix)]

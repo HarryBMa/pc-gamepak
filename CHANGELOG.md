@@ -27,8 +27,14 @@ carried Linux game has to be a shell script. No permissions that survive a
 replug.
 
 **Existing cartridges are unaffected**: this changes what the wizard offers to
-format a *new* drive as. exFAT is still one dropdown away, and the settings
-dialog now says what each of the three costs, at the point of choosing.
+format a *new* drive as. exFAT is still one dropdown away — and so are five more
+now: ext4, XFS, F2FS, HFS+ and APFS, for a cartridge that only ever meets one
+kind of machine. The picker says what each costs at the point of choosing: which
+desktops read it with nothing installed, whether Proton runs from it, its label
+limit, and what would have to be installed first. One list, read from the code
+that does the formatting, rather than a copy in the window that had already
+drifted. A format this machine has no `mkfs` for is shown anyway, greyed, with
+the package to install — so "why is btrfs missing?" has an answer on screen.
 
 **If a Mac has to write to the drive, pick exFAT.** macOS reads NTFS and does
 not write it, so an NTFS cartridge can be played from and copied off on a Mac
@@ -53,6 +59,10 @@ the game or points at it.
   declared, nothing copied, and no conflict possible — there is only ever one
   copy.
 
+A carried game's save is pushed to the cartridge **as soon as the game exits**,
+not only on eject. Quitting the game and pulling the drive out is what somebody
+who has finished playing does, and it used to cost them the session.
+
 Off until switched on, in Settings. It is the one thing here that writes to a
 directory in your home on the say-so of a file on a drive.
 
@@ -63,6 +73,11 @@ the count follows the cartridge between machines rather than staying on the PC
 that happened to play it. The open session re-stamps itself once a minute, so a
 crash or a pulled drive costs a minute rather than the session — and whichever
 machine sees the cartridge next settles whatever the last one abandoned.
+
+For a game the cartridge carries, the launcher started the process and so waits
+for it: the session ends when the game exits, not when the window is closed
+afterwards. A `steam://` game is somebody else's launcher's child and there is
+nothing to wait on, so the window's lifetime is still the bound there.
 
 On by default: one small file, written to the drive you just pressed Play on.
 
@@ -102,7 +117,9 @@ click, and so does a collection, which has no single game to mean. Nothing on a
 cartridge runs without a click, and a setting left switched on is not consent to
 run a stranger's binary.
 
-`notify_only` is Linux-only so far and falls back to opening the window.
+`notify_only` uses the desktop's own notification on Linux and a
+notification-area balloon on Windows. If neither can be posted, the window opens
+rather than the insert passing in silence.
 
 ### Eject now says what is in the way
 
@@ -126,6 +143,75 @@ the digest answers "is this the same cartridge somebody else built", which no
 amount of local verifying can. Put it in a `build-cart` request as
 `expectDigest` and the build fails if it does not match.
 
+### Playtime counts the game, not the window, and lives in the conf
+
+The launcher used to count from Play until its window closed. It now watches
+for the game itself — a program running from the game's folder, on the
+cartridge or wherever Steam installed it — and keeps counting after the window
+is closed, leaving when the game does. The way GameplayTimeTracker and
+GamingGaiden count.
+
+It pauses when nobody is there: ten minutes (adjustable, or off) without
+keyboard, mouse or controller input, and the idle stretch is taken back out.
+Controllers count, which the desktop's own idle clock does not.
+
+Every session is kept, and each game's figures — playtime, launches, first and
+last played, the machine, and the last thirty sessions — are written into
+`cartridge.conf` under that game, touching nothing else in the file.
+
+**How long to beat**, optional and off: the wizard can look each game up on
+HowLongToBeat while it writes the cartridge, once, and puts the figures in the
+conf beside the playtime. The launcher's ⓘ shows both, and a skin can draw
+progress through the main story from them — see
+[SKINNING.md](docs/SKINNING.md#play-stats). HowLongToBeat has no official API,
+so this may stop finding anything when the site changes; that is a warning,
+never a failed write.
+
+### The wizard asks less and gets more right
+
+One screen, in the order the questions come: **Games**, **Drive**, **Options**,
+**Artwork**. The choices that belong to one cartridge — copy the game, verify
+the copy, eject when done, erase the drive first and to which filesystem — are
+switches on that screen now, starting from the defaults in Settings and
+forgotten after the write. They used to exist only in Settings, which made
+"erase the drive" a preference that stayed on for every cartridge after it.
+Erasing always starts off, and Write asks once more, naming the drive.
+
+Settings lost most of its prose and one switch that did nothing ("Add the
+cartridge to Steam's library list" — a copied Steam game is always registered,
+or Steam could not play it).
+
+Fixed along the way:
+
+- Ticking a second game threw an error, so a collection could not be made.
+- A Hero picture chosen on Create was never written to the cartridge.
+- Saving Settings switched every front-end back to its default.
+- After a write finished, the button still said Write and would write again. It
+  now says **Make another**.
+- A game added by hand could not be given a drive: leaving that screen threw
+  the entry away. It now has **Done**, and picks the likeliest program in the
+  folder for you.
+- Artwork picked on SteamGridDB could land in the wrong slot. Each pick was
+  filed under whichever tab was open when its download *finished*, so choosing
+  quickly across Cover, Hero, Logo and Icon put the cover in the logo slot and
+  so on. A pick now belongs to the tab it was clicked on, and Write waits for
+  downloads still in flight.
+- Picking a logo, hero or icon no longer becomes the game's remembered cover.
+- The Edit tab and the drive lists name a cartridge by what its
+  `cartridge.conf` says, not by the drive's volume label — which only changes
+  when a drive is erased, so a drive rewritten from FTL to Cult of the Lamb
+  still called itself FTL. Edit also re-reads a cartridge after it has been
+  written over.
+- The Windows tuning buttons in Settings name the drive they will change, and
+  fall back to the cartridge open on Edit, or the only drive plugged in, rather
+  than refusing until a drive was chosen on another tab.
+- The artwork picker's preview shows all four pictures at once, each in its own
+  shape — the hero as a banner, the cover with the logo over it, and the drive
+  icon — with the one being chosen outlined. The Hero tab used to put the hero
+  where the cover goes, which read as the hero replacing the cover.
+- Ctrl+Enter on the Edit tab started a Create write.
+- The collection name and the Edit tab's name were plain white boxes.
+
 ### Removed: NFC and tag support
 
 About 1,200 lines of PC/SC reader and line-source code, gone.
@@ -142,7 +228,16 @@ launch a cartridge, use Zaparoo.
   what somebody typing is shown.
 - Flathub's actual requirements are documented and the manifest meets them.
 - `tools/check-versions.mjs` checks that every one of the fourteen places the
-  version is written agrees, and can move them all at once.
+  version is written agrees, and can move them all at once. It also checks that
+  this file has a section for the version being released and that its date
+  matches the one appstream publishes — two dates for one release, and nothing
+  compared them.
+- **The Linux release tarball installs.** It shipped without the icon file
+  `install.sh` listed as required, so unpacking a release and running the
+  installer stopped on its first check — and `install.sh` looked for the
+  launcher only where a source build leaves it, so a tarball carrying the
+  binary reported it as "not built yet". Both fixed; the icon is in the tarball,
+  and packaging now fails if anything the installers read is missing from it.
 
 ## 1.0.1 — 2026-09-06
 

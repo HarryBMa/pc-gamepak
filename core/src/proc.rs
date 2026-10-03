@@ -33,6 +33,26 @@ pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     command
 }
 
+/// Is a tool on PATH?
+///
+/// Used to answer "can this machine make that filesystem?" before the wizard
+/// offers it, rather than after the drive has been wiped. Looks the name up in
+/// PATH directly instead of running it: several mkfs tools take no harmless
+/// argument, and `mkfs.apfs` with none prints usage and exits non-zero, which
+/// is indistinguishable from absent.
+pub fn tool_exists(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| {
+        let candidate = dir.join(name);
+        // On Windows the name carries no extension; PATHEXT would have to be
+        // walked. Nothing calls this there — formatting goes through
+        // Format-Volume — so the plain check is enough.
+        candidate.is_file()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

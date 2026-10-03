@@ -77,9 +77,10 @@ pub enum SyncMode {
     /// Replace the host's directory with a symlink onto the cartridge, so the
     /// game writes straight to the drive and there is only ever one copy.
     ///
-    /// Faster and exact, and it has two costs that are easy to underestimate:
-    /// Windows refuses symlinks to an unprivileged process unless Developer
-    /// Mode is on, and the link dangles the moment the cartridge leaves. A
+    /// Faster and exact, and it has a cost that is easy to underestimate: the
+    /// link dangles the moment the cartridge leaves. (On Windows without
+    /// Developer Mode it is a directory junction rather than a symlink, which
+    /// needs no privilege and behaves the same.) A
     /// clean eject turns it back into a real directory; a drive pulled out of
     /// the port does not, and the game will find its save directory missing.
     Link,
@@ -116,6 +117,29 @@ pub const TOKENS: &[&str] = &[
     "appsupport",
     "prefs",
 ];
+
+/// Tokens that only resolve where a store is installed, so they are not in
+/// [`TOKENS`], which every host resolves.
+///
+/// `{steamuserdata}` is Steam's `userdata/<account id>`: where every Steam
+/// Cloud game keeps its saves, as `{steamuserdata}/<app id>/remote`.
+pub const STORE_TOKENS: &[&str] = &["steamuserdata"];
+
+/// The signed-in Steam account's `userdata` folder: the most recently written
+/// one, when more than one account has used this PC.
+fn steam_userdata() -> Option<PathBuf> {
+    // ponytail: newest account wins; a per-cartridge account id if people share PCs.
+    std::fs::read_dir(crate::steam::steam_root()?.join("userdata"))
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name != "0" && name.chars().all(|c| c.is_ascii_digit())
+        })
+        .max_by_key(|entry| entry.metadata().and_then(|m| m.modified()).ok())
+        .map(|entry| entry.path())
+}
 
 /// Resolve one token to a directory on this host.
 ///
@@ -195,6 +219,9 @@ pub fn token_path(token: &str) -> Option<PathBuf> {
                 env_path("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config"))
             }
         }
+        "steamuserdata" => return steam_userdata(),
+        // A registry key, carried as an exported file: see [`crate::registry`].
+        "registry" if cfg!(windows) => crate::registry::staging_root(),
         _ => return None,
     };
     Some(path)
@@ -296,6 +323,16 @@ pub fn resolve_template(template: &str) -> Result<PathBuf, Unusable> {
 
     let root = token_path(&token).ok_or_else(|| Unusable::UnknownToken(token.clone()))?;
 
+    if token == "registry" {
+        let parts: Vec<&str> = tail.split('/').filter(|p| !p.is_empty()).collect();
+        if parts.contains(&"..") {
+            return Err(Unusable::Escapes);
+        }
+        if !crate::registry::allowed(&parts) {
+            return Err(Unusable::TooBroad);
+        }
+    }
+
     let mut depth = 0usize;
     let mut path = root;
     for part in tail.split('/') {
@@ -325,10 +362,49 @@ pub fn resolve_template(template: &str) -> Result<PathBuf, Unusable> {
 /// [`crate::cartridge::parse_ini`]: a game with two save locations writes two
 /// `save=` lines, and a map keeps one of them.
 pub fn declared(root: &Path) -> Vec<SaveSlot> {
-    let Ok(text) = std::fs::read_to_string(root.join("cartridge.conf")) else {
-        return Vec::new();
-    };
-    parse_declarations(&text)
+    // A memory card declares its saves the same way, in its own file, and a
+    // combo drive has both. Read as one text, so slot names stay unique across
+    // the two; the card's part starts in a section of its own, so nothing it
+    // declares is taken for the cartridge's last game.
+    let cartridge = std::fs::read_to_string(root.join("cartridge.conf")).unwrap_or_default();
+    let card = std::fs::read_to_string(root.join(crate::memcard::CONF)).unwrap_or_default();
+    if card.is_empty() {
+        return parse_declarations(&cartridge);
+    }
+    let mut slots = parse_declarations(&format!("{cartridge}\n[memorycard]\n{card}"));
+    // One folder declared in both files is one save, not two blocks that
+    // would sync over each other. The cartridge's own line comes first; keep it.
+    let mut seen = std::collections::HashSet::new();
+    slots.retain(|slot| seen.insert(slot.template.to_lowercase()));
+    slots
+}
+
+/// A save folder somebody pointed at, written the portable way.
+///
+/// The reverse of [`resolve_template`]: whichever token's directory holds the
+/// folder most closely wins, so `C:\Users\h\AppData\Roaming\Foo\Saves` is
+/// `{appdata}/Foo/Saves` rather than `{home}/AppData/Roaming/Foo/Saves`, which
+/// would only ever work on Windows. `None` for a folder outside every token —
+/// one inside a game's install folder, say — because there is no way to write
+/// that down that another machine would understand.
+pub fn template_from_path(path: &Path) -> Option<String> {
+    // Reversed because `max_by_key` keeps the last of equals, and on Windows
+    // three tokens share AppData\Roaming: `appdata`, listed first, should win.
+    let (token, base) = TOKENS
+        .iter()
+        .chain(STORE_TOKENS)
+        .rev()
+        .filter_map(|token| Some((*token, token_path(token)?)))
+        .filter(|(_, base)| path.starts_with(base))
+        .max_by_key(|(_, base)| base.components().count())?;
+    let rest: Vec<String> = path
+        .strip_prefix(&base)
+        .ok()?
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    // The token's own directory is not a game's save folder.
+    (!rest.is_empty()).then(|| format!("{{{token}}}/{}", rest.join("/")))
 }
 
 /// The platform suffix this host answers to on a `save.<os>=` line.
@@ -599,7 +675,17 @@ fn declaration_lines(conf: &str) -> Vec<(String, String)> {
             owner_of_section.insert(index, crate::stats::key_for(line[eq + 1..].trim()));
             continue;
         }
-        if key == "savemode" || key == "save" || key.starts_with("save.") {
+        // HowLongToBeat's figures ride along too: they were looked up once,
+        // when the cartridge was made, and a rename is no reason to lose them.
+        // (The play history needs no carrying — `playlog` rewrites it from
+        // the stats file after every write.)
+        if key == "savemode"
+            || key == "save"
+            || key.starts_with("save.")
+            || key.starts_with("hltb_")
+            // Nothing in the editor sets the platform yet, so a rewrite would drop it.
+            || key == "platform"
+        {
             // A cartridge-wide key even when it is written inside a section.
             let index = if key == "savemode" { 0 } else { index };
             found.push((index, raw.trim_end().to_string()));
@@ -806,9 +892,16 @@ pub struct SlotStatus {
     pub detail: String,
 }
 
+/// A save kept in the registry rather than in a folder.
+fn is_registry(template: &str) -> bool {
+    template.trim().to_lowercase().starts_with("{registry}")
+}
+
 /// Look at every declared slot and say what would happen.
 ///
-/// Read-only. Nothing here creates a directory, and that matters: the launcher
+/// Read-only, but for one thing: a registry save's export is refreshed in the
+/// app's own folder, since that export is how it is compared. Nothing in the
+/// user's folders is created, and that matters: the launcher
 /// calls this to draw a panel on every insert, including for cartridges whose
 /// owner has never turned save syncing on.
 pub fn status(root: &Path) -> Vec<SlotStatus> {
@@ -839,6 +932,23 @@ fn status_of(root: &Path, slot: SaveSlot, index: &Index) -> SlotStatus {
             }
         }
     };
+
+    // A registry save's host side is its export, brought up to date first.
+    if is_registry(&slot.template) {
+        if let Err(why) = crate::registry::stage(&host) {
+            return SlotStatus {
+                slot,
+                host_path: String::new(),
+                direction: Direction::Unusable,
+                host_newest: 0,
+                cartridge_newest: 0,
+                host_bytes: 0,
+                cartridge_bytes: 0,
+                last_sync: record.last_sync,
+                detail: why,
+            };
+        }
+    }
 
     let mine = record
         .hosts
@@ -989,6 +1099,11 @@ fn links_into(host: &Path, cart: &Path) -> bool {
     let Ok(target) = std::fs::read_link(host) else {
         return false;
     };
+    // A junction reads back as `\\?\D:\...`; the same place as `D:\...`.
+    let target = match target.to_str().and_then(|t| t.strip_prefix(r"\\?\")) {
+        Some(plain) => PathBuf::from(plain),
+        None => target,
+    };
     let target = if target.is_absolute() {
         target
     } else {
@@ -1064,6 +1179,9 @@ pub fn sync_slot(root: &Path, status: &SlotStatus) -> Result<SyncOutcome, String
     let (files, bytes) = copy_tree(&source, &destination)?;
     outcome.files = files;
     outcome.bytes = bytes;
+    if matches!(status.direction, Direction::Pull) && is_registry(&status.slot.template) {
+        crate::registry::apply(&destination)?;
+    }
 
     record_sync(root, status, &destination)?;
     Ok(outcome)
@@ -1332,6 +1450,9 @@ fn copy_into(
 /// backup in place so the caller can fall back to [`SyncMode::Copy`] rather
 /// than being left with nothing.
 pub fn link_slot(root: &Path, status: &SlotStatus) -> Result<SyncOutcome, String> {
+    if is_registry(&status.slot.template) {
+        return Err("a registry save cannot be linked".to_string());
+    }
     if status.host_path.is_empty() {
         return Err(format!("{}: {}", status.slot.label, status.detail));
     }
@@ -1430,9 +1551,36 @@ fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
 
+/// A symlink when Windows allows one (Developer Mode, or elevated), else a
+/// directory junction, which any user may make. A junction only reaches a
+/// local volume, which a cartridge always is, and to everything reading it —
+/// the game, `read_link`, `remove_dir` — it behaves as the symlink would.
 #[cfg(windows)]
 fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_dir(target, link)
+    let refused = match std::os::windows::fs::symlink_dir(target, link) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    junction(target, link).map_err(|_| refused)
+}
+
+#[cfg(windows)]
+fn junction(target: &Path, link: &Path) -> std::io::Result<()> {
+    // std has no junction call; mklink is a cmd built-in.
+    let made = crate::proc::command("cmd")
+        .arg("/C")
+        .arg("mklink")
+        .arg("/J")
+        .arg(link)
+        .arg(target)
+        .output()?;
+    if made.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(
+            String::from_utf8_lossy(&made.stderr).trim().to_string(),
+        ))
+    }
 }
 
 /// Remove a symlink to a directory.
@@ -1456,6 +1604,22 @@ mod tests {
     use super::*;
     use crate::testutil::Scratch;
 
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_counts_as_a_link_into_the_cartridge_and_unlinks_cleanly() {
+        let scratch = Scratch::new("saves-junction");
+        let cart = scratch.join("cart");
+        std::fs::create_dir_all(&cart).unwrap();
+        scratch.write("cart/save.dat", b"x");
+        let host = scratch.join("host");
+        junction(&cart, &host).unwrap();
+        assert!(host.join("save.dat").is_file());
+        assert!(links_into(&host, &cart));
+        remove_link(&host).unwrap();
+        assert!(!host.exists());
+        assert!(cart.join("save.dat").is_file(), "the cartridge is untouched");
+    }
+
     /// Point the token table at a scratch directory for the duration of a test.
     ///
     /// The environment is process-wide, so these tests cannot run in parallel
@@ -1477,6 +1641,44 @@ mod tests {
 
     fn conf(scratch: &Scratch, body: &str) {
         scratch.write("cartridge.conf", body.as_bytes());
+    }
+
+    #[test]
+    fn a_picked_folder_is_written_the_portable_way() {
+        let scratch = Scratch::new("saves-template");
+        with_home(scratch.path(), || {
+            let home = scratch.path();
+            // The closest token wins over the home directory it sits in.
+            assert_eq!(
+                template_from_path(&home.join("Documents").join("My Games").join("Foo")),
+                Some("{documents}/My Games/Foo".to_string())
+            );
+            let appdata = token_path("appdata").unwrap();
+            assert_eq!(
+                template_from_path(&appdata.join("StardewValley").join("Saves")),
+                Some("{appdata}/StardewValley/Saves".to_string())
+            );
+            assert_eq!(
+                template_from_path(&home.join("Odd").join("Place")),
+                Some("{home}/Odd/Place".to_string())
+            );
+            // A token's own directory, or somewhere no token reaches, cannot be
+            // carried.
+            assert_eq!(template_from_path(home), None);
+            assert_eq!(template_from_path(Path::new("/nowhere/at/all")), None);
+        });
+    }
+
+    #[test]
+    fn a_memory_card_declares_its_saves_in_its_own_file() {
+        let scratch = Scratch::new("saves-memcard");
+        scratch.write(
+            crate::memcard::CONF,
+            b"title=Card\n\n[game]\ntitle=Stardew\nsave=Stardew|{appdata}/StardewValley/Saves\n",
+        );
+        let slots = declared(scratch.path());
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].label, "Stardew");
     }
 
     /// Say when a tree was last written, rather than sleeping until it is true.
@@ -2060,6 +2262,17 @@ mod tests {
     fn a_conf_with_nothing_to_carry_is_returned_unchanged() {
         let new = "title=X\nexecutable=x://1\n";
         assert_eq!(preserve("title=Old\nexecutable=x://1\n", new), new);
+    }
+
+    #[test]
+    fn a_platform_survives_a_rewrite_on_its_own_game() {
+        let old = "[collection]\ntitle=T\nplatform=SNES\n\n[game]\nexecutable=x://1\n\n\
+                   [game]\nexecutable=x://2\nplatform=GBA\n";
+        let new = "[collection]\ntitle=Renamed\n\n[game]\nexecutable=x://1\n\n\
+                   [game]\nexecutable=x://2\n";
+        let kept = preserve(old, new);
+        assert!(kept.starts_with("[collection]\ntitle=Renamed\nplatform=SNES\n"), "{kept}");
+        assert!(kept.contains("executable=x://2\nplatform=GBA"), "{kept}");
     }
 
     #[test]

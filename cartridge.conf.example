@@ -30,6 +30,25 @@
 #   If omitted, the launcher looks for cover.png, cover.jpg, poster.png or box.png
 #   at the root.
 #
+# platform  (optional)
+#   What the cartridge is for, so a front-end that draws the physical thing —
+#   a 3D shelf, a cartridge slot on a phone, a console-style UI — can draw the
+#   right shell. Defaults to PC. Compared without regard to case. Front-ends
+#   should recognise these names, and draw anything else as they like:
+#
+#     PC       Windows, Linux or Steam Deck game (the default)
+#     NES  SNES  N64  GameCube  Wii  WiiU  Switch
+#     GB  GBC  GBA  NDS  3DS  VirtualBoy
+#     MasterSystem  Genesis  SegaCD  32X  Saturn  Dreamcast  GameGear
+#     PS1  PS2  PS3  PSP  Vita
+#     Xbox  Xbox360
+#     Atari2600  Atari7800  Lynx  Jaguar
+#     TurboGrafx16  NeoGeo  NeoGeoPocket  WonderSwan
+#     Arcade  DOS  C64  Amiga  MSX
+#
+#   An emulated game's cartridge says the system it emulates: platform=SNES
+#   with executable=retroarch://... or a carried emulator.
+#
 # save  (optional, repeatable)
 #   Where this game keeps its saves on the host, so they can travel with the
 #   cartridge. Written as
@@ -52,6 +71,11 @@
 #                     · Linux $XDG_DATA_HOME (~/.local/share)
 #     {appsupport}    as {localappdata}, named for the macOS case
 #     {prefs}         macOS ~/Library/Preferences · %APPDATA% · ~/.config
+#     {steamuserdata} Steam's userdata/<account>, where Steam Cloud saves live:
+#                     {steamuserdata}/<app id>/remote. Only where Steam is.
+#     {registry}      Windows only: a registry key under HKCU\Software, as
+#                     {registry}/HKCU/Software/<company>/<game>. Carried as an
+#                     exported .reg file; write it on a save.windows= line.
 #
 #   A path that resolves to a whole home, Documents or AppData directory is
 #   refused: a save declaration has to name one game's saves inside one of
@@ -166,13 +190,16 @@ save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
 # Each [game] section defines one game (at least two needed for bundle mode).
 #
 # [collection] keys:
-#   title  - Collection name shown in the launcher (required)
-#   cover  - Collection cover art, relative to this file (optional)
+#   title     - Collection name shown in the launcher (required)
+#   cover     - Collection cover art, relative to this file (optional)
+#   platform  - What the cartridge is for (optional); each game's unless it
+#               says otherwise
 #
 # [game] keys:
 #   title       - Game name shown in the game list (required)
 #   executable  - What Play should start for this game (required)
 #   cover       - Per-game thumbnail, relative to this file (optional)
+#   platform    - This game's platform, if not the collection's (optional)
 #   save        - Where that game keeps its saves (optional, repeatable).
 #                 Same form as above; a save line inside a [game] section
 #                 belongs to that game.
@@ -196,3 +223,21 @@ save=Saves|{documents}/CD Projekt Red/Cyberpunk 2077
 #
 # Steam games are stored under steamapps/ as usual.
 # GOG / other games are stored under Games/<Title>/ for organisation.
+#
+# ----- Written for you -----
+#
+# The launcher keeps each game's play history here, beside its title, and
+# rewrites these keys after every session. HowLongToBeat's estimate is added
+# when the cartridge is written, if that lookup is switched on. Times are
+# seconds, dates are UTC. Everything else in this file is left alone.
+#
+# playtime=154800
+# launches=31
+# first_played=2026-03-02T19:04:11Z
+# last_played=2026-09-26T18:00:00Z
+# last_host=DESKTOP-7Q2
+# session=2026-09-26T18:00:00Z|5400|DESKTOP-7Q2
+# hltb_id=10270
+# hltb_main=97200
+# hltb_extra=154800
+# hltb_complete=226800

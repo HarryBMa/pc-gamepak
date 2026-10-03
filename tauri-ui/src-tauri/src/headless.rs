@@ -81,7 +81,10 @@ pub fn play(drive: &str, index: usize) -> i32 {
         return fail(&why);
     }
 
-    let eject_asked = if info.holds_game {
+    // A program path rather than a URI is on the drive by definition, wherever
+    // in it the cartridge keeps it; the folder layout only covers the wizard's.
+    let on_the_drive = info.holds_game || !gamepak_core::launch::is_uri(&pick.executable);
+    let eject_asked = if on_the_drive {
         let install_dir = play::steam_install_dir(root, &pick.executable);
         watch_until_over(root, install_dir.as_deref(), &player, &pick.title)
     } else {

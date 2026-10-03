@@ -38,6 +38,8 @@ windows-sys = { version = "0.52", features = [
     # the eject that cannot be done any other way.
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+    # GetDpiForWindow, to size a window's icons for the screen it is on.
+    "Win32_UI_HiDpi",
     # SHELLEXECUTEINFOW carries an HKEY, so it is gated behind the registry
     # feature even though nothing here touches the registry.
     "Win32_System_Registry",

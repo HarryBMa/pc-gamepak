@@ -182,6 +182,27 @@ function addFlatpakRelease(version) {
   return true;
 }
 
+/** The date the metainfo gives this version, which software centres show. */
+function metainfoDate(version) {
+  const escaped = version.replace(/\./g, "\\.");
+  return (
+    read(METAINFO).match(new RegExp(`<release version="${escaped}" date="([^"]+)"`))?.[1] ?? null
+  );
+}
+
+/**
+ * The changelog heading for a version, and the date in it if there is one.
+ *
+ * The release workflow cuts its notes out of the section under this heading and
+ * falls back to commit subjects when there is none — quietly, which is why it is
+ * worth checking here rather than reading the published release to find out.
+ */
+function changelogHeading(version) {
+  const escaped = version.replace(/\./g, "\\.");
+  const line = read("CHANGELOG.md").match(new RegExp(`^## ${escaped}(?: .*)?$`, "m"))?.[0];
+  return line ? { line: line.trim(), date: line.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null } : null;
+}
+
 /** The WinGet manifests, whose *directory* is named for the version. */
 function wingetDir() {
   const parent = path.join(ROOT, "packaging/winget");
@@ -333,17 +354,54 @@ for (const [file, pattern] of checksumSites(wingetName)) {
   }
 }
 
+// The changelog and the metainfo both publish a date for the same release, and
+// nothing until now compared them. Only a disagreement is drift; a section that
+// is still `unreleased`, or missing, is an unfinished step, which is `--release`
+// business rather than a reason to fail every check on the way there.
+const unreleased = [];
+const heading = changelogHeading(current);
+const dated = metainfoDate(current);
+if (!heading) {
+  unreleased.push(
+    `CHANGELOG.md has no "## ${current}" section, so the release notes would be built from commit subjects`,
+  );
+} else if (!heading.date) {
+  unreleased.push(`CHANGELOG.md still says "${heading.line}" — put the release date there`);
+} else if (dated && heading.date !== dated) {
+  console.error(
+    `CHANGELOG.md dates ${current} ${heading.date}, the metainfo dates it ${dated}. One release, one date.`,
+  );
+  bad += 1;
+}
+
 if (bad > 0) {
-  console.error(`\n${bad} place${bad === 1 ? "" : "s"} disagree. Run --set ${current} to settle them.`);
+  console.error(
+    `\n${bad} place${bad === 1 ? " disagrees" : "s disagree"}. ` +
+      `\`--set ${current}\` settles the version sites; a date has to be fixed by hand.`,
+  );
   process.exit(1);
 }
 
 console.log(`every version site says ${current}`);
+
+let stopping = false;
 if (pending > 0) {
   const message = `${pending} checksum${pending === 1 ? "" : "s"} awaiting the release artefacts`;
   if (forRelease) {
     console.error(`${message} — fill them in before publishing a manifest`);
-    process.exit(1);
+    stopping = true;
+  } else {
+    console.log(`${message} (fine until a manifest is submitted)`);
   }
-  console.log(`${message} (fine until a manifest is submitted)`);
 }
+
+for (const message of unreleased) {
+  if (forRelease) {
+    console.error(message);
+    stopping = true;
+  } else {
+    console.log(`${message} (fine until the tag)`);
+  }
+}
+
+if (stopping) process.exit(1);

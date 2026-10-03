@@ -34,8 +34,18 @@
      where the formatting warning and the Steam-close explanation live. */
   --ink-3: oklch(0.635 0.008 75);
 
+  /* A step brighter than --ink-2, for secondary text that still has to read
+     first in its row. */
+  --ink-soft: oklch(0.86 0.008 75);
+
   --hairline: oklch(1 0 0 / 0.16);
+  --hairline-mid: oklch(1 0 0 / 0.11);
   --hairline-soft: oklch(1 0 0 / 0.075);
+
+  /* Tonal layers over the shell: a faint lift for raised rows, a well for
+     inset fields and cards. Depth is tone first, shadow second. */
+  --lift: oklch(1 0 0 / 0.04);
+  --well: oklch(0 0 0 / 0.26);
 
   --accent: oklch(0.72 0.15 68);
   --accent-ink: oklch(0.16 0.02 65);
@@ -64,6 +74,14 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* `hidden` means hidden, whatever display a class gives the element. Without
+   this every component that sets `display` needed its own [hidden] rule, and
+   the one that was missed — the memory card button — showed on every
+   cartridge, doing nothing. */
+[hidden] {
+  display: none !important;
 }
 
 html,

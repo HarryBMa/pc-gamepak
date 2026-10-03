@@ -115,6 +115,17 @@ pub struct Settings {
     /// survives being carried to another machine, which a default of off would
     /// quietly undo for everybody who never found the switch.
     pub track_playtime: bool,
+    /// Stop counting playtime after this many minutes without any input —
+    /// keyboard, mouse or controller. Zero counts through. See
+    /// [`crate::playtrack`].
+    pub idle_pause_minutes: u64,
+    /// Look each game up on HowLongToBeat while a cartridge is written. **Off**:
+    /// it is a network request to a site with no official API. See
+    /// [`crate::hltb`].
+    pub hltb_enabled: bool,
+    /// Look up where each game keeps its saves, from Ludusavi's manifest.
+    /// **Off**: it downloads a 17 MB file. See [`crate::ludusavi`].
+    pub ludusavi_enabled: bool,
 }
 
 impl Default for Settings {
@@ -142,6 +153,9 @@ impl Default for Settings {
             default_format: false,
             save_sync: false,
             track_playtime: true,
+            idle_pause_minutes: crate::playtrack::DEFAULT_IDLE_MINUTES,
+            hltb_enabled: false,
+            ludusavi_enabled: false,
             frontends: crate::frontend::Frontends::default(),
             on_cartridge_insert: crate::insert::InsertAction::default(),
         }
@@ -207,6 +221,25 @@ pub fn save(settings: &Settings) -> Result<(), String> {
     save_to(&settings_path(), settings)
 }
 
+/// Save what the settings form sent, keeping the front-end switches that are
+/// already on disk.
+///
+/// The form does not carry `frontends` — the switches are saved one at a time
+/// by `set_frontend` as they are clicked — so the object it sends deserialises
+/// with an empty map. Saved as it came, that switched every plugin off whenever
+/// any other setting changed: Playnite, GOG Galaxy and the rest went quiet,
+/// silently, the next time somebody typed an API key. The switches on disk are
+/// the current ones, so those are kept.
+pub fn save_form(incoming: Settings) -> Result<Settings, String> {
+    save_form_to(&settings_path(), incoming)
+}
+
+pub fn save_form_to(path: &Path, mut incoming: Settings) -> Result<Settings, String> {
+    incoming.frontends = load_from(path).frontends;
+    save_to(path, &incoming)?;
+    Ok(incoming)
+}
+
 pub fn save_to(path: &Path, settings: &Settings) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -268,12 +301,42 @@ mod tests {
             default_format: true,
             save_sync: true,
             track_playtime: false,
+            idle_pause_minutes: 3,
+            hltb_enabled: true,
+            ludusavi_enabled: true,
             on_cartridge_insert: crate::insert::InsertAction::AutoLaunchGame,
             ..Settings::default()
         };
         save_to(&path, &chosen).unwrap();
 
         assert_eq!(load_from(&path), chosen);
+    }
+
+    #[test]
+    fn saving_the_settings_form_does_not_switch_the_plugins_off() {
+        // The form sends every setting but the front-end switches. Saving it
+        // must not turn off what `set_frontend` turned on.
+        let scratch = crate::testutil::Scratch::new("settings-form");
+        let path = scratch.join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"frontends":{"launcher":false,"playnite":true,"heroic":true}}"#,
+        )
+        .unwrap();
+
+        // What the form's JSON becomes: no `frontends` key at all.
+        let from_form: Settings =
+            serde_json::from_str(r#"{"steamgriddbApiKey":"typed just now"}"#).unwrap();
+        assert!(!from_form.frontends.is_on(crate::frontend::PLAYNITE));
+
+        let saved = save_form_to(&path, from_form).unwrap();
+        let on_disk = load_from(&path);
+        for settings in [&saved, &on_disk] {
+            assert!(settings.frontends.is_on(crate::frontend::PLAYNITE));
+            assert!(settings.frontends.is_on(crate::frontend::HEROIC));
+            assert!(!settings.frontends.is_on(crate::frontend::LAUNCHER));
+            assert_eq!(settings.steamgriddb_api_key, "typed just now");
+        }
     }
 
     #[test]

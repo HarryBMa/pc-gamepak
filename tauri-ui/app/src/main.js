@@ -29,12 +29,16 @@
  */
 
 import { connect as connectGamepad } from "./gamepad.js";
+import { createMemoryCard } from "./memcard.js";
 
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke ?? demoInvoke;
 
 const el = {
   card: document.getElementById("card"),
+  unbox: document.getElementById("unbox"),
+  memcardButton: document.getElementById("btn-memcard"),
+  sheetKeys: document.getElementById("sheet-keys"),
   face: document.getElementById("face"),
   slot: document.getElementById("slot"),
   slotLabel: document.getElementById("slot-label"),
@@ -59,7 +63,6 @@ const el = {
   openWizard: document.getElementById("btn-open-wizard"),
   sheet: document.getElementById("sheet"),
   sheetClose: document.getElementById("btn-sheet-close"),
-  sheetBack: document.getElementById("btn-sheet-back"),
   sheetThumb: document.getElementById("sheet-thumb"),
   sheetTitle: document.getElementById("sheet-title"),
   sheetSub: document.getElementById("sheet-sub"),
@@ -71,6 +74,9 @@ const el = {
   pathsLabel: document.getElementById("paths-label"),
   toast: document.getElementById("toast"),
   gameList: document.getElementById("game-list"),
+  playStatsTime: document.getElementById("play-stats-time"),
+  playStatsBeat: document.getElementById("play-stats-beat"),
+  playStatsLast: document.getElementById("play-stats-last"),
 };
 
 let cartridge = null;
@@ -214,7 +220,14 @@ function sampleAccent(img) {
     weight += w;
   }
 
-  if (weight === 0) return; // a greyscale cover keeps the default
+  // A greyscale cover gets the stock accent back. Returning without touching
+  // it kept whatever the previous game on a collection had set, so a black and
+  // white game's Play stayed the colour of the one above it on the rail.
+  if (weight === 0) {
+    document.documentElement.style.removeProperty("--accent");
+    document.documentElement.style.removeProperty("--accent-ink");
+    return;
+  }
 
   const hue = (Math.atan2(y, x) * 180) / Math.PI;
   // Floor the saturation and hold the lightness out of the pastel range so the
@@ -251,6 +264,80 @@ function showSlot(label, action) {
   // Nothing on the face is reachable once it has left the slot.
   el.face.inert = true;
 }
+
+/* ==========================================================================
+   Unboxing
+   ========================================================================== */
+
+/** Just past the last animation in style.css, in case its end is never seen. */
+const UNBOX_MS = 2750;
+
+/** Set while the unboxing plays: calling it ends the unboxing early. */
+let unboxing = null;
+
+/**
+ * Open the box, the first time this machine sees this cartridge.
+ *
+ * Asked of the backend, which records the answer, so it plays once per
+ * cartridge per PC. Skipped outright under reduced motion — the stylesheet
+ * switches animations off there, and a box that never opens is worse than none
+ * — and for a skin that says `--skin-unbox: none`.
+ */
+async function maybeUnbox(art) {
+  const style = getComputedStyle(document.documentElement);
+  if (style.getPropertyValue("--skin-unbox").trim() === "none") return;
+  let first = false;
+  try {
+    first = tauri
+      ? await invoke("first_insert", { title: cartridge?.title ?? "" })
+      : new URLSearchParams(location.search).has("unbox");
+  } catch {
+    return;
+  }
+  if (!first || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const game = currentGame();
+  const front = isCollection() ? cartridge?.cover || art : art;
+  const logo = isCollection() ? cartridge?.logo || game?.logo : cartridge?.logo;
+  showImage(el.unbox.querySelector(".unbox__front"), front);
+  showImage(el.unbox.querySelector(".unbox__label-art"), art);
+  showImage(el.unbox.querySelector(".unbox__logo"), logo);
+  el.unbox.querySelector(".unbox__title").textContent = cartridge?.title || game?.title || "";
+
+  el.unbox.hidden = false;
+  el.unbox.classList.add("is-playing");
+  await new Promise((resolve) => {
+    const timer = setTimeout(() => unboxing?.(), UNBOX_MS);
+    unboxing = () => {
+      clearTimeout(timer);
+      unboxing = null;
+      resolve();
+    };
+  });
+  el.unbox.classList.remove("is-playing");
+  el.unbox.hidden = true;
+}
+
+function showImage(img, src) {
+  const usable = Boolean(src) && /^(data:image\/|src\/)/.test(String(src));
+  img.hidden = !usable;
+  if (usable) img.src = src;
+  else img.removeAttribute("src");
+}
+
+// Any key, click or pad button skips it, and does nothing else: the Enter that
+// skips the box must not also press Play on the cartridge that comes out.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (!unboxing) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    unboxing();
+  },
+  { capture: true },
+);
+el.unbox.addEventListener("pointerdown", () => unboxing?.());
 
 /** Seat the cartridge: the entrance, mirroring the insert that just happened. */
 function seat() {
@@ -440,7 +527,11 @@ async function renderHealth() {
         label: "Link",
         value,
         unit,
-        note: health.transport || undefined,
+        // The protocol's name means nothing to a player; what it costs does.
+        note:
+          { UASP: "Fast mode (UASP)", BOT: "Slow mode (BOT)" }[health.transport] ||
+          health.transport ||
+          undefined,
         icon: slow ? "warn" : "info",
         advisory: advisoryForLink(health),
       }),
@@ -663,6 +754,7 @@ function select(index) {
   // The sheet's Played row is about the selected game, so it moves with the
   // rail rather than staying on whatever was picked when the sheet was drawn.
   if (cartridge) renderSpecs(cartridge);
+  exposePlay(el.card, list[index]);
 
   // Focus follows the selection whenever it is already in the list. A row
   // clicked with the mouse keeps the focus ring, so arrowing away from it left
@@ -717,6 +809,18 @@ function step(delta) {
   const list = games();
   if (list.length < 2) return;
   select((selected + delta + list.length) % list.length);
+}
+
+/**
+ * One press of a direction, from the keys or the pad.
+ *
+ * A rail that is a single row — a horizontal strip — has no row above or
+ * below, so a vertical step of a whole row landed back on the same game and up
+ * and down did nothing. There they move along the strip instead.
+ */
+function move(x, y) {
+  const across = columns();
+  step(x + y * (across >= games().length ? 1 : across));
 }
 
 /** Which of a game's four pictures each name asks for. `grid` is the cover. */
@@ -881,6 +985,7 @@ function renderRail(list) {
     row.tabIndex = 0;
     row.dataset.index = String(index);
     row.dataset.size = sizeBand(game.sizeBytes);
+    exposePlay(row, game);
 
     // A row is that game, so it shows that game's picture of whichever kind the
     // skin asked for and stops there — falling through to the cartridge's would
@@ -910,7 +1015,9 @@ function renderRail(list) {
     meta.className = "game-row__meta";
     // Only a game whose files are actually on the cartridge has a size worth
     // printing; a key that points at an installed copy takes no room.
-    meta.textContent = game.sizeBytes ? formatBytes(game.sizeBytes) : "";
+    // Left empty in the stock look: the size does not help choose what to
+    // play. The element stays, and the row keeps data-size, for skins.
+    meta.textContent = "";
     body.append(titleEl, meta);
 
     const dot = document.createElement("span");
@@ -984,13 +1091,12 @@ function setGameTitle(title) {
 /**
  * Point the printed logo at whatever the skin asked for.
  *
- *   --skin-logo: auto    a single game prints its logo instead of the heading;
- *                        a collection's names the collection, so it goes to the
- *                        corner mark and the heading names the pick (the
- *                        stock behaviour, and the default)
- *   --skin-logo: game    the selected game's logo, printed instead of the
- *                        heading, on a collection too — which is the piece a
- *                        hero fill and a rail of covers were missing
+ *   --skin-logo: auto    the game's own logo instead of the heading — on a
+ *                        collection, the selected game's, so the logo moves
+ *                        with the rail; a game without one keeps the heading
+ *                        (the stock behaviour, and the default)
+ *   --skin-logo: game    the same, except that a game with no logo of its own
+ *                        borrows the collection's
  *   --skin-logo: none    no logo; the heading is type
  *
  * Called again on every pick, so the logo follows the rail rather than being
@@ -1003,26 +1109,21 @@ function renderLogo() {
     .getPropertyValue("--skin-logo")
     .trim();
 
+  // A collection prints the selected game's own logo, so each game names
+  // itself as the rail moves; one without a logo falls back to the heading.
+  // The collection's logo is never printed over a game — that put Mirror's
+  // Edge's logo across Hollow Knight — unless a skin asks for `game` and the
+  // game has none.
   const logo =
     mode === "none"
       ? null
-      : mode === "game"
-        ? game?.logo || cartridge?.logo || null
-        : collected
-          ? null
+      : collected
+        ? game?.logo || (mode === "game" ? cartridge?.logo : null) || null
+        : mode === "game"
+          ? game?.logo || cartridge?.logo || null
           : cartridge?.logo || null;
 
-  // Printed *instead of* the heading only when it names the same thing the
-  // heading would have. Under `auto` on a collection it names the collection,
-  // not the pick — printing it over each one put Mirror's Edge's logo across
-  // Hollow Knight — so the heading stays and this hands the logo back.
-  const namesTheHeading = mode === "game" || !collected;
-
-  renderTitle(
-    game?.title ?? cartridge?.title,
-    logo,
-    namesTheHeading ? null : cartridge?.title,
-  );
+  renderTitle(game?.title ?? cartridge?.title, logo);
 }
 
 function renderTitle(title, logo, logoOf = null) {
@@ -1056,6 +1157,21 @@ async function init() {
     await showWindow();
     return;
   }
+  memcardDrive = drivePath;
+
+  // A memory card carries saves and no game, so the card is the whole window.
+  let card = null;
+  try {
+    card = await invoke("memory_card", { drivePath });
+  } catch (error) {
+    debugLog(`memory card: ${error}`);
+  }
+  if (card?.cardOnly) {
+    el.card.classList.add("is-memcard-only");
+    await memcard.show(drivePath, closeWindow);
+    await showWindow();
+    return;
+  }
 
   try {
     cartridge = await invoke("parse_cartridge", { drivePath });
@@ -1068,6 +1184,8 @@ async function init() {
   // Before the window is shown, so the cartridge never appears in the stock
   // look and then changes its mind a frame later.
   wearSkin(cartridge.skin_css ?? "");
+  // What the cartridge is for (`platform=`), for a skin: `#card[data-platform="snes"]`.
+  el.card.dataset.platform = String(cartridge.platform || "PC").toLowerCase();
 
   // A directory has no drive behind it, so Eject goes away rather than failing when
   // pressed. If the backend cannot answer, assume there is a drive: an old
@@ -1089,6 +1207,14 @@ async function init() {
     el.cartMark.hidden = false;
   }
   renderIdentity(cartridge);
+  // A combo drive: the same saves, as a memory card, one button away.
+  el.memcardButton.hidden = !cartridge.memory_card;
+  // Opened by a front-end's "Memory card" action: the card is what was asked
+  // for, so closing it closes the window rather than revealing the cartridge.
+  if (cartridge.memory_card && (await invoke("opens_memory_card").catch(() => false))) {
+    await memcard.show(drivePath, closeWindow);
+  }
+  renderKeys();
   try {
     played = (await invoke("cartridge_stats", { drivePath }))?.games ?? {};
   } catch (error) {
@@ -1099,6 +1225,7 @@ async function init() {
   }
   renderSpecs(cartridge);
   renderPaths(cartridge);
+  exposePlay(el.card, currentGame());
 
   // A collection: the cartridge's own name goes above, the rail picks which
   // game the one Play acts on, and the title becomes the selected game.
@@ -1127,6 +1254,7 @@ async function init() {
 
   setBusy(false);
   await showWindow();
+  await maybeUnbox(launcherArt);
   seat();
   // After the window, deliberately. Copying a save directory takes as long as
   // it takes, and the cartridge should be on screen while it happens rather
@@ -1134,6 +1262,14 @@ async function init() {
   await syncSaves(drivePath);
   // Only now is there something to point at: with a pad connected the cursor
   // starts on Play.
+}
+
+/** The shortcuts, said once in the details sheet, for this kind of cartridge. */
+function renderKeys() {
+  const keys = ["Enter play", "E eject", "I details"];
+  if (isCollection()) keys.splice(1, 0, "1–9 pick and play");
+  if (!el.memcardButton.hidden) keys.push("M memory card");
+  el.sheetKeys.textContent = `Keys: ${keys.join(" · ")}`;
 }
 
 /** What the cartridge remembers, keyed as the stats file keys it. */
@@ -1144,7 +1280,7 @@ let saveNote = "";
 function renderSpecs(info) {
   el.specs.replaceChildren();
   const list = info.games ?? [];
-  if (list.length > 1) specRow(el.specs, "Games", String(list.length));
+  renderBeat(currentGame() ?? info);
   renderPlayed(info);
   if (saveNote) specRow(el.specs, "Saves", saveNote);
 }
@@ -1169,6 +1305,84 @@ function renderPlayed(info) {
   if (entry.lastPlayed) {
     const where = entry.lastHost ? ` on ${entry.lastHost}` : "";
     specRow(el.specs, "Last played", `${since(entry.lastPlayed)}${where}`, true);
+  }
+}
+
+/** HowLongToBeat's figures, when the cartridge was written with them. */
+function renderBeat(game) {
+  const beat = game?.how_long ?? {};
+  const parts = [];
+  if (beat.main) parts.push(`Story ${hoursOf(beat.main)}`);
+  if (beat.extra) parts.push(`+Extras ${hoursOf(beat.extra)}`);
+  if (beat.complete) parts.push(`100% ${hoursOf(beat.complete)}`);
+  if (parts.length) specRow(el.specs, "To beat", parts.join(" · "));
+}
+
+/** "27 h", or "40 min" for something short. HowLongToBeat's own rounding. */
+function hoursOf(seconds) {
+  if (!seconds) return "";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  const hours = seconds / 3600;
+  return `${hours < 10 ? Math.round(hours * 2) / 2 : Math.round(hours)} h`;
+}
+
+/**
+ * The play numbers for one game, as a skin can reach them.
+ *
+ * A skin is CSS, and CSS cannot read cartridge.conf, so the launcher reads it
+ * and hands every figure over twice: as a custom property (a quoted string for
+ * `content:`, a bare number for `calc()`) and, where a skin wants cases rather
+ * than a scale, as a data attribute. Set on #card for the game Play will
+ * start, and on each .game-row for its own game.
+ */
+function playFacts(game) {
+  const entry = played[keyFor(game?.executable ?? "")] ?? {};
+  const beat = game?.how_long ?? {};
+  const seconds = entry.seconds ?? 0;
+  const progress = beat.main ? Math.min(seconds / beat.main, 1) : null;
+  return {
+    seconds,
+    launches: entry.launches ?? 0,
+    lastPlayed: entry.lastPlayed ?? 0,
+    beat,
+    progress,
+  };
+}
+
+function progressBand(facts) {
+  if (!facts.seconds) return "new";
+  if (facts.progress === null) return "unknown";
+  if (facts.progress < 0.5) return "started";
+  if (facts.progress < 0.9) return "halfway";
+  if (facts.progress < 1) return "nearly";
+  return "beaten";
+}
+
+function exposePlay(node, game) {
+  if (!node || !game) return;
+  const facts = playFacts(game);
+  const quoted = (text) => JSON.stringify(String(text ?? ""));
+  const vars = {
+    "--playtime": quoted(facts.seconds >= 60 ? duration(facts.seconds) : ""),
+    "--playtime-hours": (facts.seconds / 3600).toFixed(2),
+    "--launches": String(facts.launches),
+    "--last-played": quoted(facts.lastPlayed ? since(facts.lastPlayed) : ""),
+    "--hltb-main": quoted(hoursOf(facts.beat.main)),
+    "--hltb-extra": quoted(hoursOf(facts.beat.extra)),
+    "--hltb-complete": quoted(hoursOf(facts.beat.complete)),
+    "--hltb-main-hours": ((facts.beat.main ?? 0) / 3600).toFixed(2),
+    "--progress": (facts.progress ?? 0).toFixed(3),
+  };
+  for (const [name, value] of Object.entries(vars)) node.style.setProperty(name, value);
+  node.dataset.played = facts.seconds ? "yes" : "no";
+  node.dataset.progress = progressBand(facts);
+  node.dataset.hltb = facts.beat.main ? "yes" : "no";
+
+  // The face's own stats line, for the game Play will start.
+  if (node === el.card) {
+    el.playStatsTime.textContent = facts.seconds >= 60 ? duration(facts.seconds) : "Not played yet";
+    el.playStatsBeat.textContent = facts.beat.main ? `of ~${hoursOf(facts.beat.main)}` : "";
+    el.playStatsLast.textContent = facts.lastPlayed ? since(facts.lastPlayed) : "";
   }
 }
 
@@ -1452,7 +1666,9 @@ async function doEject() {
     // which is the whole message, so the toast stops repeating it.
     dismissToast();
     showSlot(outcome.message || "Safe to remove", null);
-    setTimeout(closeWindow, SEAT_MS + 800);
+    // Long enough to be read by someone across the room reaching for the
+    // drive: the words are the confirmation, not the animation.
+    setTimeout(closeWindow, SEAT_MS + 2600);
   } catch (error) {
     toast(String(error), true);
     setBusy(false);
@@ -1496,22 +1712,84 @@ invoke("debug_logging")
     debugPending = [];
   });
 
+/* ==========================================================================
+   Memory card
+   ========================================================================== */
+
+/** The drive this window is for, once init has it. */
+let memcardDrive = "";
+
+const memcard = createMemoryCard({ invoke, toast, formatBytes, duration, since });
+
+/** On a combo drive, swap between the cartridge and its memory card. */
+async function toggleMemoryCard() {
+  if (memcard.open) {
+    memcard.hide();
+    return;
+  }
+  if (el.memcardButton.hidden || !memcardDrive) return;
+  try {
+    await memcard.show(memcardDrive, () => memcard.hide(), { back: true });
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+el.memcardButton.addEventListener("click", toggleMemoryCard);
+
+// While the card is open its keys are its own: Enter copies a save rather than
+// pressing Play on the cartridge underneath.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (unboxing || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (memcard.open) {
+      if (memcard.key(event)) event.stopImmediatePropagation();
+      return;
+    }
+    if ((event.key === "m" || event.key === "M") && !el.memcardButton.hidden) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void toggleMemoryCard();
+    }
+  },
+  { capture: true },
+);
+
+/**
+ * Where a pad button goes: skipping the unboxing, then the memory card if it
+ * is open, then the launcher.
+ */
+const route = (action, onCard) => (...args) => {
+  if (unboxing) return unboxing();
+  if (memcard.open) return onCard?.(...args);
+  return action(...args);
+};
+
 const gamepad = connectGamepad({
-  play: doPlay,
-  eject: doEject,
-  details: () => toggleSheet(),
-  move: (x, y) => step(x + y * columns()),
+  play: route(doPlay, memcard.pad.primary),
+  // X ejects the cartridge and does nothing on the card: a button that ejects
+  // on one screen must not delete on the next. Delete is Y there, pressed twice.
+  eject: route(doEject, () => {}),
+  details: route(() => toggleSheet(), memcard.pad.remove),
+  // View opens and closes the memory card on a combo drive.
+  card: route(
+    () => void toggleMemoryCard(),
+    () => {
+      if (!el.memcardButton.hidden) void toggleMemoryCard();
+    },
+  ),
+  move: route((x, y) => move(x, y), memcard.pad.move),
   log: debugLog,
-  back: () => {
+  back: route(() => {
     if (el.sheet.classList.contains("is-open")) toggleSheet(false);
     else closeWindow();
-  },
+  }, memcard.pad.back),
 });
 
 el.close.addEventListener("click", closeWindow);
 el.details.addEventListener("click", () => toggleSheet());
 el.sheetClose.addEventListener("click", () => toggleSheet(false));
-el.sheetBack.addEventListener("click", () => toggleSheet(false));
 el.pathsToggle.addEventListener("click", () => togglePaths());
 // One way through to the wizard, which is where both making a cartridge and
 // changing a setting happen. Two links here asked the reader to know which of
@@ -1551,7 +1829,7 @@ document.addEventListener("keydown", (event) => {
   if (!sheetOpen && isCollection() && ARROWS[event.key]) {
     event.preventDefault();
     const [x, y] = ARROWS[event.key];
-    step(x + y * columns());
+    move(x, y);
     return;
   }
 
@@ -1625,6 +1903,34 @@ async function demoSkinCss() {
   }
 }
 
+/** The preview's memory card: one save in every state worth drawing. */
+const demoBlocks = (() => {
+  const now = Math.floor(Date.now() / 1000);
+  const block = (id, title, icon, direction, hostBytes, cartridgeBytes, seconds, ago) => ({
+    slot: { id, label: title, template: `{appdata}/${id}`, mode: "copy" },
+    hostPath: direction === "unusable" ? "" : `C:\\Users\\you\\AppData\\Roaming\\${id}`,
+    direction,
+    hostNewest: now - ago,
+    cartridgeNewest: now - ago - 3600,
+    hostBytes,
+    cartridgeBytes,
+    lastSync: 0,
+    detail: direction === "unusable" ? "This PC has no folder for it" : "",
+    title,
+    icon,
+    seconds,
+    launches: 3,
+  });
+  return [
+    block("stardew", "Stardew Valley", "src/demo/cover.jpg", "inSync", 2_400_000, 2_400_000, 187_200, 86_400 * 2),
+    block("gow", "God of War", "src/demo/gow-1.jpg", "pull", 31_000_000, 33_500_000, 47_520, 86_400),
+    block("ragnarok", "God of War Ragnarök", "src/demo/gow-2.jpg", "push", 41_000_000, 38_000_000, 21_000, 3_600),
+    block("tunic", "Tunic", "", "conflict", 800_000, 810_000, 9_000, 86_400 * 6),
+    block("bluey", "Bluey: The Videogame", "src/demo/gow-collection.jpg", "pull", 0, 120_000, 3_600, 86_400 * 12),
+    block("celeste", "Celeste", "", "unusable", 0, 96_000, 0, 86_400 * 30),
+  ];
+})();
+
 async function demoInvoke(command, args) {
   const state = new URLSearchParams(location.search).get("state");
   switch (command) {
@@ -1653,6 +1959,7 @@ async function demoInvoke(command, args) {
               icon: "src/demo/cover.jpg",
               cover_path: "",
               sizeBytes: 64_200_000_000,
+              how_long: { main: 75_600, extra: 118_800, complete: 183_600 },
             },
             {
               title: "God of War: Ragnarök",
@@ -1679,6 +1986,7 @@ async function demoInvoke(command, args) {
         is_bundle: false,
         holds_game: true,
         games: [],
+        memory_card: new URLSearchParams(location.search).has("combo"),
       };
     case "can_eject":
       // A cartridge on a fixed path has no drive to unmount, so the button
@@ -1697,6 +2005,11 @@ async function demoInvoke(command, args) {
             firstPlayed: Math.floor(Date.now() / 1000) - 86_400 * 40,
             lastPlayed: Math.floor(Date.now() / 1000) - 86_400 * 2,
             lastHost: "deck",
+            sessions: [
+              { started: Math.floor(Date.now() / 1000) - 86_400 * 9, seconds: 7_200, host: "workshop" },
+              { started: Math.floor(Date.now() / 1000) - 86_400 * 5, seconds: 5_400, host: "deck" },
+              { started: Math.floor(Date.now() / 1000) - 86_400 * 2, seconds: 3_900, host: "deck" },
+            ],
           },
           "steam://rungameid/1091500": {
             title: "Cyberpunk 2077",
@@ -1721,6 +2034,26 @@ async function demoInvoke(command, args) {
       return [];
     case "shader_slots":
       return [];
+    // `?state=memcard` is a memory card; `&combo` makes a cartridge one too.
+    case "memory_card":
+      return {
+        title: state === "memcard" ? "Harry's Memory Card" : "Cinder & Salt",
+        cardOnly: state === "memcard",
+        blocks: demoBlocks,
+      };
+    case "memcard_copy": {
+      const block = demoBlocks.find((b) => b.slot.id === args.slotId);
+      if (block) Object.assign(block, { direction: "inSync", hostBytes: block.cartridgeBytes || block.hostBytes, cartridgeBytes: block.cartridgeBytes || block.hostBytes });
+      return { backup: "kept" };
+    }
+    case "memcard_reveal":
+      console.log("[preview] open save folder", args.slotId);
+      return null;
+    case "memcard_remove": {
+      const block = demoBlocks.find((b) => b.slot.id === args.slotId);
+      if (block) Object.assign(block, { cartridgeBytes: 0, direction: block.hostBytes ? "push" : "empty" });
+      return null;
+    }
     case "save_slots":
       return [
         {

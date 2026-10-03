@@ -116,6 +116,16 @@ arrangement the pacman package uses.
 The frontend is static files, so `cargo build --release` is the whole build.
 There is no npm step.
 
+Or skip the build: the `.tar.gz` on
+[Releases](https://github.com/HarryBMa/pc-gamepak/releases) carries both
+binaries already, and the same two scripts run out of it unchanged.
+
+```bash
+tar -xzf pc-gamepak-*-linux-x86_64.tar.gz
+cd pc-gamepak-*-linux-x86_64
+sudo linux/install.sh      # or: linux/install-user.sh, no root
+```
+
 ---
 
 ## Automount: read this

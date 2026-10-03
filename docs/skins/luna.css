@@ -2,9 +2,15 @@
    Luna — Explorer, about 2003. Beige, blue, and a list of files.
 
    The only skin with no artwork on show: the picture is not the subject here,
-   the list is, so `#plate` is hidden outright and every game's own icon does
-   the work at 32px in a white pane. Everything else has been a poster with
-   controls over it; this is a window with a title bar.
+   the list is, so every game's own icon does the work at 32px in a white pane.
+   A single game has no list, so it is one icon on a white desktop, selected,
+   the way a file was before you double-clicked it. Everything else has been a
+   poster with controls over it; this is a window with a title bar.
+
+   What it shows about skinning, in order: sizing the window (`:root`), taking
+   artwork away (`#plate`, the scrims), drawing what the markup lacks on
+   `#skin-panel`, turning off a stock behaviour (`.has-logo`), and laying out
+   a single game and a collection differently (`#card.is-collection`).
 
    Tahoma is a system font on Windows and needs no `@font-face`, which is the
    one webfont in this project that costs nothing.
@@ -31,6 +37,11 @@
   --xp-button-line: #003c74;
   --xp-ink: #000000;
   --xp-font: Tahoma, "Segoe UI", ui-sans-serif, sans-serif;
+  --xp-title: linear-gradient(180deg, var(--xp-blue) 0%, var(--xp-blue-deep) 100%);
+
+  /* A file window has no box to open. The unboxing is the stock launcher's,
+     and this is the switch that turns it off. */
+  --skin-unbox: none;
 }
 
 /* ---------------------------------------------------------------- the window */
@@ -50,12 +61,18 @@
 }
 
 /* No artwork behind anything. The list is the window's content, not a caption
-   printed over a picture. */
-#plate,
+   printed over a picture. Logos go too: the stock window prints one in place
+   of the title, and a title bar wants the name as text. */
+#card.is-collection #plate,
 #scrim-top,
 #scrim-bottom,
-#cart-mark {
+#cart-mark,
+#title-logo {
   display: none;
+}
+
+#stage.has-logo #game-title {
+  display: block;
 }
 
 /* ---------------------------------------------------------------- the title bar
@@ -68,10 +85,36 @@
    the name printed on the bar, and #skin-panel sits below it. #chrome outranks
    both, so the window buttons stay on top of whichever is used. */
 #skin-panel {
-  inset: 0 0 auto 0;
-  height: 30px;
-  background: linear-gradient(180deg, var(--xp-blue) 0%, var(--xp-blue-deep) 100%);
+  inset: 0;
+  height: auto;
+  background: linear-gradient(180deg, var(--xp-blue) 0%, var(--xp-blue-deep) 100%)
+    top / 100% 30px no-repeat;
   border-radius: 5px 5px 0 0;
+}
+
+/* A single game has no collection name for the bar, so the bar says whose
+   window it is, and the game's name goes under its icon below. */
+#card:not(.is-collection) #skin-panel::before {
+  content: "PC GamePak";
+  position: absolute;
+  top: 0;
+  left: 10px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  font: 700 11px var(--xp-font);
+  color: #ffffff;
+  text-shadow: 1px 1px 1px rgb(0 0 0 / 0.6);
+}
+
+/* The white pane a single game's icon sits in: the same pane the collection's
+   list draws, here drawn on the panel because there is no list to draw it. */
+#card:not(.is-collection) #skin-panel::after {
+  content: "";
+  position: absolute;
+  inset: 38px 8px 59px;
+  background: var(--xp-pane);
+  border: 2px solid var(--xp-line);
 }
 
 #chrome {
@@ -260,11 +303,79 @@
   box-shadow: 0 0 4px #ff9d00;
 }
 
+/* ------------------------------------------------------------ a single game
+
+   One icon on the pane, selected. #plate is the artwork layer; with
+   `--skin-art: icon` it holds the game's icon, so shrinking it to 64px is all
+   it takes. The name under it is #game-title, highlighted the way a selected
+   file's name was. */
+
+#card:not(.is-collection) #plate {
+  inset: 96px auto auto 50%;
+  width: 64px;
+  height: 64px;
+  transform: translateX(-50%);
+  z-index: 3;
+  border-radius: 0;
+  background: transparent;
+}
+
+#card:not(.is-collection) #cover-img,
+#card:not(.is-collection) #cover-img-b {
+  object-fit: contain;
+  animation: none;
+}
+
+#card:not(.is-collection) #cover-placeholder {
+  background: var(--xp-face);
+  border: 1px solid var(--xp-line);
+}
+
+#card:not(.is-collection) #placeholder-initials {
+  font-size: 26px;
+}
+
+#card:not(.is-collection) #placeholder-name {
+  display: none;
+}
+
+#card:not(.is-collection) #game-title {
+  position: absolute;
+  top: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 280px;
+  padding: 1px 4px;
+  border: 1px dotted #ffd28a;
+  background: var(--xp-select);
+  color: #ffffff;
+  font-weight: 400;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Hours and last played, as a status line under the icon. */
+#card:not(.is-collection) #play-stats {
+  position: absolute;
+  top: 172px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  justify-content: center;
+  font-family: var(--xp-font);
+  color: #444444;
+}
+
+#card:not(.is-collection) .play-stats__time,
+#card:not(.is-collection) .play-stats__last {
+  color: inherit;
+}
+
 /* ---------------------------------------------------------------- the buttons */
 
 #button-row {
   flex: none;
-  margin: 0;
+  margin: auto 0 0;
   padding: 8px;
   gap: 8px;
   background: var(--xp-face);
@@ -317,12 +428,177 @@ body.is-gamepad :focus {
   outline-offset: -4px;
 }
 
+/* ----------------------------------------------------------- the other screens
+
+   Details, the memory card and the empty slot are screens of their own, and a
+   skin that only restyles the stage leaves them in the stock dark look — or
+   worse, half in it: #card's black ink inherited onto a dark sheet. Nearly
+   everything on them is drawn from the colour tokens, so redefining those on
+   each screen does most of the work, and the rules after it do the rest. */
+
+#sheet,
+#memcard,
+#slot {
+  --ink: #000000;
+  --ink-2: #444444;
+  --ink-3: #6d6d6d;
+  --ink-soft: #222222;
+  --panel: #ffffff;
+  --shell: var(--xp-face);
+  --sunk: #f4f3ee;
+  --hairline: #aca899;
+  --hairline-mid: #c9c6b8;
+  --hairline-soft: #d4d0c8;
+  --lift: #f7f6f0;
+  --well: rgb(0 0 0 / 0.06);
+  --scroll-thumb: #c1d2ee;
+  --scroll-thumb-hover: #9db9eb;
+  font-family: var(--xp-font);
+  color: var(--xp-ink);
+}
+
+/* The stock details set a monospace face on each reading by id, which a
+   `#sheet *` rule loses to; they are named here so Tahoma wins. */
+#sheet *,
+#memcard *,
+#sheet-sub,
+#specs dt,
+#specs dd,
+#paths dt,
+#paths dd,
+.reading__label,
+.reading__value,
+.reading__note {
+  font-family: var(--xp-font);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Both get the window's title bar, and its buttons. */
+#sheet-head,
+.mc__head {
+  min-height: 30px;
+  margin: 0;
+  padding: 0 6px 0 10px;
+  background: var(--xp-title);
+  color: #ffffff;
+  text-shadow: 1px 1px 1px rgb(0 0 0 / 0.6);
+}
+
+#sheet-head #sheet-title,
+#mc-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+#sheet-head #sheet-sub {
+  font-size: 10px;
+  color: #c9dcfb;
+  text-transform: none;
+}
+
+#sheet-head .icon-btn,
+#mc-close {
+  width: 21px;
+  height: 21px;
+  border-radius: 3px;
+  border: 1px solid #ffffff;
+  background: linear-gradient(180deg, #e76654 0%, #e04332 100%);
+  color: #ffffff;
+}
+
+#sheet-head .icon-btn:hover,
+#mc-close:hover {
+  background: linear-gradient(180deg, #f07d6c 0%, #e8543f 100%);
+}
+
+/* Details: a Properties dialog. */
+#sheet {
+  background: var(--xp-face);
+  border-radius: 0;
+}
+
+.reading {
+  border-radius: 0;
+  background: var(--xp-pane);
+  border: 1px solid var(--xp-line);
+}
+
+#sheet-body .disclosure,
+#sheet-footer .sheet-link {
+  text-transform: none;
+  color: #0046d5;
+}
+
+#sheet-footer .sheet-link:hover {
+  text-decoration: underline;
+}
+
+/* The memory card: an Explorer window onto the card, the shelf in the white
+   pane. The cases keep the stock colours — they are pictures of boxes, and
+   their spine and back-cover text is printed over the art. */
+#memcard {
+  background: var(--xp-face);
+}
+
+#mc-blocks {
+  margin: 8px;
+  background: var(--xp-pane);
+  border: 2px solid var(--xp-line);
+}
+
+#memcard .mc__cube {
+  --ink: oklch(0.97 0.006 75);
+  --ink-2: oklch(0.75 0.008 75);
+  --ink-3: oklch(0.635 0.008 75);
+  --panel: oklch(0.185 0.006 65);
+}
+
+.mc__block[aria-selected="true"] .mc__label {
+  color: #ffffff;
+  background: var(--xp-select);
+}
+
+/* The capacity bar as Windows drew a progress bar: green blocks in a well. */
+.mc__bar {
+  height: 14px;
+  border-radius: 0;
+  border: 1px solid var(--xp-line);
+  background: var(--xp-pane);
+}
+
+.mc__bar i {
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, #2fb52f 0 8px, transparent 8px 10px);
+}
+
+.mc__info {
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.mc__link {
+  color: #0046d5;
+}
+
+.mc__link:hover {
+  text-decoration: underline;
+}
+
 /* --------------------------------------------------------------- the leftovers */
 
 #slot {
   background: var(--xp-face);
   color: #444444;
   border-radius: 0;
+}
+
+#slot-label {
+  font-family: var(--xp-font);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #444444;
 }
 
 #cover-placeholder {

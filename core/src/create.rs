@@ -249,6 +249,34 @@ pub struct CartridgeRequest {
     /// clutter on a drive someone may also be using for something else.
     #[serde(default = "default_true")]
     pub write_icon: bool,
+    /// Which game of a collection the drive icon is made from, as an index
+    /// into `games`. A collection icon chosen outright still wins.
+    #[serde(default)]
+    pub primary_game: Option<usize>,
+    /// A combo drive: the launcher also offers the memory card view of its
+    /// saves. See [`crate::memcard`].
+    #[serde(default)]
+    pub memory_card: bool,
+    /// What the cartridge is for, `platform=`: SNES, GBA... Empty or `PC` writes
+    /// nothing, which reads as PC.
+    #[serde(default)]
+    pub platform: Option<String>,
+}
+
+/// The picture a drive icon is made from, relative to the cartridge root.
+///
+/// An icon chosen for the cartridge itself, else the primary game's icon, else
+/// that game's cover, else `fallback` — which is what a collection used before
+/// it had a primary game.
+pub fn drive_icon_art<'a>(
+    own: Option<&'a str>,
+    games: &'a [GameArt],
+    primary: Option<usize>,
+    fallback: Option<&'a str>,
+) -> Option<&'a str> {
+    let game = primary.and_then(|index| games.get(index));
+    own.or_else(|| game.and_then(|game| game.icon.as_deref().or(game.cover.as_deref())))
+        .or(fallback)
 }
 
 /// serde needs a function; a bare `true` is not a valid default expression.
@@ -1118,10 +1146,32 @@ pub fn create_cartridge(
             collection_logo.as_deref(),
             &tuples,
         );
+        let looked_up: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|game| (game.title.as_str(), game.executable.as_str()))
+            .collect();
+        let conf = with_estimates(conf, &looked_up, progress, &mut warnings);
+        let card_games: Vec<(&str, &str, Option<&str>)> = entries
+            .iter()
+            .map(|game| {
+                let icon = game.icon.as_deref().or(game.cover.as_deref());
+                (game.title.as_str(), game.executable.as_str(), icon)
+            })
+            .collect();
+        let conf = with_memory_card(
+            conf,
+            request.memory_card,
+            &root,
+            &card_games,
+            progress,
+            &mut warnings,
+        );
+        let conf = crate::cartridge::set_platform(&conf, request.platform.as_deref().unwrap_or(""));
         let conf_path = root.join("cartridge.conf");
         std::fs::write(&conf_path, conf)
             .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
         result.conf_path = conf_path.to_string_lossy().into_owned();
+        mirror_history(&root, &mut warnings);
 
         // ---- autorun.inf ---------------------------------------------------
         if request.write_icon {
@@ -1131,10 +1181,13 @@ pub fn create_cartridge(
                 done_bytes: 0,
                 total_bytes: 0,
             });
-            let autorun_source = collection_icon
-                .as_deref()
-                .or(collection_cover.as_deref())
-                .map(|art| root.join(art));
+            let autorun_source = drive_icon_art(
+                collection_icon.as_deref(),
+                &entries,
+                request.primary_game,
+                collection_cover.as_deref(),
+            )
+            .map(|art| root.join(art));
             match autorun::write_autorun(&root, &title, autorun_source.as_deref()) {
                 Ok(icon) => {
                     result.autorun_written = true;
@@ -1278,10 +1331,25 @@ pub fn create_cartridge(
         background_destination.as_deref(),
         logo_destination.as_deref(),
     );
+    let conf = with_estimates(conf, &[(&title, &executable)], progress, &mut warnings);
+    let conf = with_memory_card(
+        conf,
+        request.memory_card,
+        &root,
+        &[(
+            &title,
+            &executable,
+            icon_destination.as_deref().or(cover_destination.as_deref()),
+        )],
+        progress,
+        &mut warnings,
+    );
+    let conf = crate::cartridge::set_platform(&conf, request.platform.as_deref().unwrap_or(""));
     let conf_path = root.join("cartridge.conf");
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
+    mirror_history(&root, &mut warnings);
 
     // ---- 6. autorun.inf --------------------------------------------------
     if request.write_icon {
@@ -2361,6 +2429,121 @@ pub(crate) fn resolve_target(requested: &str) -> Result<PathBuf, String> {
     Ok(requested_path.to_path_buf())
 }
 
+/// Ask HowLongToBeat about each game and put its figures under that game.
+///
+/// Only when the user has switched the lookup on, and never fatal: a game it
+/// cannot find, or a site that has changed under it, is a warning and a
+/// cartridge without an estimate. The first network failure stops the rest,
+/// because the next nine requests would fail the same way, slowly.
+fn with_estimates(
+    conf: String,
+    games: &[(&str, &str)],
+    progress: &mut dyn FnMut(Progress),
+    warnings: &mut Vec<String>,
+) -> String {
+    if !crate::settings::load().hltb_enabled || games.is_empty() {
+        return conf;
+    }
+    progress(Progress {
+        step: "hltb",
+        message: "Looking up how long it takes to beat…".to_string(),
+        done_bytes: 0,
+        total_bytes: 0,
+    });
+    let mut found: std::collections::HashMap<String, Vec<String>> = Default::default();
+    for (title, executable) in games {
+        match crate::hltb::lookup(title) {
+            Ok(Some(estimate)) => {
+                found.insert(crate::stats::key_for(executable), estimate.conf_lines());
+            }
+            Ok(None) => warnings.push(format!("HowLongToBeat has no match for {title}.")),
+            Err(e) => {
+                warnings.push(format!("No HowLongToBeat figures: {e}"));
+                break;
+            }
+        }
+    }
+    crate::playlog::rewrite(&conf, &|key| key.starts_with("hltb_"), &|owner| {
+        found.get(owner).cloned()
+    })
+}
+
+/// Make a cartridge a combo drive, and put its own games on its memory card.
+///
+/// `memory_card=yes` goes at the top, where every reader looks. Each game's
+/// save folder comes from Ludusavi when that lookup is on and goes into
+/// `memorycard.conf` beside the cartridge, the one place the memory card view
+/// and the wizard both edit, so writing the card again later replaces these
+/// rather than doubling them. `games` is `(title, executable, icon)`, the icon
+/// relative to the drive.
+pub(crate) fn with_memory_card(
+    conf: String,
+    on: bool,
+    root: &Path,
+    games: &[(&str, &str, Option<&str>)],
+    progress: &mut dyn FnMut(Progress),
+    warnings: &mut Vec<String>,
+) -> String {
+    if !on {
+        return conf;
+    }
+    let conf = format!("memory_card=yes\n{conf}");
+    if !crate::settings::load().ludusavi_enabled {
+        warnings.push(
+            "Combo drive: no save folders were looked up. Switch on Ludusavi in \
+             Settings, or add the games on the Memory card page."
+                .to_string(),
+        );
+        return conf;
+    }
+    progress(Progress {
+        step: "saves",
+        message: "Finding where each game keeps its saves…".to_string(),
+        done_bytes: 0,
+        total_bytes: 0,
+    });
+    let mut card = Vec::new();
+    for (title, executable, icon) in games {
+        let steam_id = executable.strip_prefix("steam://rungameid/");
+        match crate::ludusavi::lookup(title, steam_id) {
+            Ok(Some(places)) => card.push(crate::memcard::CardGame {
+                title: title.to_string(),
+                executable: executable.to_string(),
+                icon_source: icon.map(|rel| root.join(rel).to_string_lossy().into_owned()),
+                save_windows: places.windows,
+                save_linux: places.linux,
+                ..Default::default()
+            }),
+            Ok(None) => warnings.push(format!(
+                "Ludusavi does not know where {title} keeps its saves; add it on the \
+                 Memory card page."
+            )),
+            Err(e) => {
+                warnings.push(e);
+                break;
+            }
+        }
+    }
+    if !card.is_empty() {
+        match crate::memcard::add_games(root, card) {
+            Ok(more) => warnings.extend(more),
+            Err(e) => warnings.push(format!("The memory card was not written: {e}")),
+        }
+    }
+    conf
+}
+
+/// Put back whatever play history the stats file has for the games now on the
+/// cartridge. The conf was just written from scratch, and a game played before
+/// under the same executable keeps its hours.
+fn mirror_history(root: &Path, warnings: &mut Vec<String>) {
+    if let Err(e) = crate::playlog::mirror(root) {
+        warnings.push(format!(
+            "Play history was not copied into cartridge.conf: {e}"
+        ));
+    }
+}
+
 /// Copy the chosen art to the cartridge. Returns where it landed.
 fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<String>, String> {
     let Some(source) = cover_source(
@@ -2382,7 +2565,7 @@ fn write_cover(root: &Path, request: &CartridgeRequest) -> Result<Option<String>
 /// Playnite's, or the last artwork downloaded for this game, whichever the game
 /// came from. `Ok(None)` means there is simply no art to copy, which is not an
 /// error.
-fn cover_source(
+pub(crate) fn cover_source(
     chosen: Option<&str>,
     app_id: Option<&str>,
     playnite_id: Option<&str>,
@@ -2834,6 +3017,38 @@ mod tests {
         );
         assert_eq!(sanitize_conf_value("  Hollow   Knight  "), "Hollow Knight");
         assert_eq!(sanitize_conf_value("\r\n\t "), "");
+    }
+
+    #[test]
+    fn the_drive_icon_follows_the_primary_game() {
+        let game = |cover: &str, icon: Option<&str>| GameArt {
+            cover: Some(cover.to_string()),
+            icon: icon.map(str::to_string),
+            ..Default::default()
+        };
+        let games = [
+            game(".gamepak/cover_0.png", None),
+            game(".gamepak/cover_1.png", Some(".gamepak/icon_1.png")),
+        ];
+        let fallback = Some(".gamepak/collection.png");
+
+        // Its own icon first, then its cover.
+        assert_eq!(
+            drive_icon_art(None, &games, Some(1), fallback),
+            Some(".gamepak/icon_1.png")
+        );
+        assert_eq!(
+            drive_icon_art(None, &games, Some(0), fallback),
+            Some(".gamepak/cover_0.png")
+        );
+        // A cartridge icon chosen outright wins over any game.
+        assert_eq!(
+            drive_icon_art(Some("own.png"), &games, Some(1), fallback),
+            Some("own.png")
+        );
+        // No primary, or one past the end, is the rule from before.
+        assert_eq!(drive_icon_art(None, &games, None, fallback), fallback);
+        assert_eq!(drive_icon_art(None, &games, Some(9), fallback), fallback);
     }
 
     #[test]

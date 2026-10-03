@@ -26,7 +26,8 @@ use windows_sys::Win32::UI::Shell::{
     NIM_MODIFY, NOTIFYICONDATAW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, LoadIconW, SetForegroundWindow,
+    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, GetSystemMetrics, LoadIconW,
+    LoadImageW, SetForegroundWindow, IMAGE_ICON, LR_DEFAULTCOLOR, SM_CXSMICON, SM_CYSMICON,
     TrackPopupMenu, IDI_APPLICATION, MF_SEPARATOR, MF_STRING, TPM_BOTTOMALIGN, TPM_RETURNCMD,
     TPM_RIGHTBUTTON,
 };
@@ -207,6 +208,21 @@ fn icon() -> windows_sys::Win32::UI::WindowsAndMessaging::HICON {
     // provenance rather than cast from one, which is also what stops the
     // dangling-pointer lint firing on something that is not a pointer at all.
     let instance = unsafe { GetModuleHandleW(std::ptr::null()) };
+    // At the notification area's own size — 16 at 100%, 24 at 150% — so
+    // Windows picks that entry from the .ico rather than shrinking the 32.
+    let embedded = unsafe {
+        LoadImageW(
+            instance,
+            std::ptr::without_provenance(1),
+            IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON),
+            GetSystemMetrics(SM_CYSMICON),
+            LR_DEFAULTCOLOR,
+        )
+    };
+    if embedded != 0 {
+        return embedded;
+    }
     let embedded = unsafe { LoadIconW(instance, std::ptr::without_provenance(1)) };
     if embedded != 0 {
         return embedded;

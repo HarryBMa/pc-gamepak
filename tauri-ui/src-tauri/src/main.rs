@@ -79,21 +79,18 @@ mod headless;
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::{
-    busy, create, drives, edit, format, frontend, health, home, insert, saves, settings, sgdb,
-    shaders, stats, tuning,
+    busy, create, created, drives, edit, format, frontend, health, home, idle, insert, ludusavi,
+    memcard, playlog, playtrack, saves, settings, sgdb, shaders, stats, tuning, unboxed,
 };
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
-#[cfg(target_os = "windows")]
-use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-    CM_Get_Parent, CM_Request_Device_EjectW, CR_SUCCESS,
-};
 
 // --------------------------------------------------------------------------
 // Tauri commands
@@ -115,6 +112,77 @@ fn drive_path() -> String {
     cartridge::drive_from_args(std::env::args().skip(1))
 }
 
+/// `--memcard`: open on a combo cartridge's memory card rather than the
+/// cartridge, for a front-end with a "Memory card" action of its own.
+#[tauri::command]
+fn opens_memory_card() -> bool {
+    std::env::args().any(|arg| arg == "--memcard")
+}
+
+/// Each window's icons, as `tools/make-icons.mjs` writes them: every size from
+/// 16 to 256 px, each shrunk from the artwork in steps. The wizard's is the
+/// other logo: the launcher and the wizard are one executable, and their
+/// taskbar buttons should not look the same.
+const LAUNCHER_ICON: &[u8] = include_bytes!("../icons/icon.ico");
+const WIZARD_ICON: &[u8] = include_bytes!("../icons/wizard.ico");
+
+/// The picture in an `.ico` made for `size`, or the nearest larger one: the
+/// generator's shrink is cleaner than Windows' at small sizes.
+fn ico_entry(ico: &[u8], size: u32) -> Option<&[u8]> {
+    let count = u16::from_le_bytes(ico.get(4..6)?.try_into().ok()?) as usize;
+    let mut best: Option<(u32, &[u8])> = None;
+    for i in 0..count {
+        let entry = ico.get(6 + i * 16..6 + i * 16 + 16)?;
+        let width = if entry[0] == 0 { 256 } else { u32::from(entry[0]) };
+        let len = u32::from_le_bytes(entry[8..12].try_into().ok()?) as usize;
+        let at = u32::from_le_bytes(entry[12..16].try_into().ok()?) as usize;
+        let data = ico.get(at..at + len)?;
+        let better = match best {
+            None => true,
+            Some((have, _)) if have < size => width > have,
+            Some((have, _)) => width >= size && width < have,
+        };
+        if better {
+            best = Some((width, data));
+        }
+    }
+    best.map(|(_, data)| data)
+}
+
+/// Give a window both of its icons, at the size its screen wants.
+///
+/// Windows keeps two per window: a small one for the title bar and Alt-Tab,
+/// and a big one for the taskbar. Tauri sets only the small one, made from the
+/// first picture in `icon.ico`, so the taskbar showed a stretched 16 px icon
+/// for the launcher and nothing at all for the wizard. Both are set here at the
+/// window's DPI — 16 and 32 px at 100%, 24 and 48 at 150% — from the `.ico`
+/// entry made for that size.
+#[cfg(target_os = "windows")]
+fn set_window_icons(window: &tauri::WebviewWindow, ico: &[u8]) {
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateIconFromResourceEx, SendMessageW, ICON_BIG, ICON_SMALL, LR_DEFAULTCOLOR, WM_SETICON,
+    };
+    let Ok(handle) = window.hwnd() else { return };
+    let hwnd = handle.0 as isize;
+    let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
+    for (which, base) in [(ICON_SMALL, 16), (ICON_BIG, 32)] {
+        let size = (base * dpi / 96) as i32;
+        let Some(png) = ico_entry(ico, size as u32) else { continue };
+        // SAFETY: the bytes are a whole PNG, which Windows accepts as icon
+        // resource data since Vista; 0x30000 is the icon format version it asks for.
+        let icon = unsafe {
+            CreateIconFromResourceEx(png.as_ptr(), png.len() as u32, 1, 0x0003_0000, size, size, LR_DEFAULTCOLOR)
+        };
+        if icon != 0 {
+            unsafe { SendMessageW(hwnd, WM_SETICON, which as usize, icon) };
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_window_icons(_window: &tauri::WebviewWindow, _ico: &[u8]) {}
+
 /// Launch the game.
 /// `executable` can be a URI (steam://, heroic://, ...) or a path relative
 /// to `drive_path`.
@@ -133,118 +201,98 @@ fn launch_game(
     // because a stats file could not be written is a broken launcher.
     count_the_launch(&drive_path, &executable, title.unwrap_or_default());
 
-    let known_schemes = [
-        "steam://",
-        "heroic://",
-        "gog://",
-        "epic://",
-        "playnite://",
-        "lutris://",
-        "http://",
-        "https://",
-    ];
-    let is_uri = known_schemes
-        .iter()
-        .any(|s| executable.to_lowercase().starts_with(s));
-
-    if is_uri {
-        // Started by somebody else's launcher, in somebody else's environment.
-        // Nothing here can decide where that game keeps its saves, which is
-        // what `save=` lines are for.
-        return open_uri(&executable);
+    // Starting it is core's, shared with every front-end. Only the reaping of
+    // a carried game's process is this window's.
+    let started = gamepak_core::launch::start(&drive_path, &executable, &|line| debug_log(line))?;
+    if let gamepak_core::launch::Started::Carried(child) = started {
+        settle_when_it_exits(child, drive_path, stats::key_for(&executable));
     }
-
-    let full_path = PathBuf::from(&drive_path).join(&executable);
-    if !full_path.exists() {
-        return Err(format!("Executable not found: {}", full_path.display()));
-    }
-
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = Command::new(&full_path);
-        command.current_dir(full_path.parent().unwrap_or(Path::new(".")));
-        command
-    };
-    // Through bash on purpose, not as a fallback: exFAT cannot store an
-    // executable bit, so nothing on an exFAT cartridge is executable and a
-    // carried Linux game is a shell script by necessity.
-    #[cfg(not(target_os = "windows"))]
-    let mut command = {
-        let mut command = Command::new("bash");
-        command
-            .arg(&full_path)
-            .current_dir(full_path.parent().unwrap_or(Path::new(".")));
-        command
-    };
-
-    // This is a game the cartridge carries and that this launcher is starting
-    // itself, which is the only case where its environment is ours to set — so
-    // it is the only case where the cartridge can be handed the game's whole
-    // home directory and catch every save without anyone having declared one.
-    if home::wanted(Path::new(&drive_path)) {
-        match home::prepare(Path::new(&drive_path)) {
-            Ok(portable) => {
-                for (name, value) in &portable.vars {
-                    command.env(name, value);
-                }
-                debug_log(format!("portable home: {}", portable.root));
-            }
-            // A cartridge asking for something the drive will not give it. The
-            // game still starts, in the ordinary environment, because refusing
-            // to launch would be a worse answer than saving to the host.
-            Err(why) => debug_log(format!("portable home unavailable: {why}")),
-        }
-    }
-
-    command
-        .spawn()
-        .map_err(|e| format!("Failed to launch {}: {e}", full_path.display()))?;
     Ok(())
 }
 
-fn open_uri(uri: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("cmd")
-            .args(["/c", "start", "", uri])
-            .spawn()
-            .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
-        Ok(())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(uri)
-            .spawn()
-            .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
-        Ok(())
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        Command::new("xdg-open")
-            .arg(uri)
-            .spawn()
-            .map_err(|e| format!("Failed to open URI {uri}: {e}"))?;
-        Ok(())
-    }
+/// Reap a carried game when it exits.
+///
+/// The session is not closed here any more. The tracker watches the game's
+/// folder rather than this one process, because a carried game is often a
+/// launcher stub or a shell script that starts the real executable and exits —
+/// and the session, and the save push that follows it, belong to the game, not
+/// to the stub.
+fn settle_when_it_exits(mut child: std::process::Child, _drive_path: String, _key: String) {
+    std::thread::spawn(move || {
+        if let Err(why) = child.wait() {
+            debug_log(format!("could not wait for the game to exit: {why}"));
+        }
+    });
 }
+
 
 // --------------------------------------------------------------------------
 // What the cartridge remembers: hours played, and saves
 // --------------------------------------------------------------------------
 
-/// Sessions opened by `launch_game` and not yet closed.
-///
-/// Keyed the way the stats file is keyed, so the window can close a session by
-/// naming the game it started rather than holding a handle it would have to
-/// serialise. At most a handful of entries — one per Play — and they live
-/// only as long as the launcher window does.
-fn playing() -> &'static Mutex<HashMap<String, stats::Session>> {
-    static PLAYING: OnceLock<Mutex<HashMap<String, stats::Session>>> = OnceLock::new();
+/// A session being counted, and the tracker counting it.
+struct Tracked {
+    session: stats::Session,
+    root: PathBuf,
+    /// A program the cartridge carries, as opposed to a URI handed to another
+    /// launcher — only those have their saves pushed when they end.
+    carried: bool,
+    dirs: Vec<PathBuf>,
+    tracker: Mutex<playtrack::Tracker>,
+    /// Set when the session has been closed from outside: Eject, a second
+    /// game, the window going away. The thread sees it and stops.
+    closed: AtomicBool,
+}
+
+impl Tracked {
+    fn active_seconds(&self) -> u64 {
+        self.tracker
+            .lock()
+            .map(|tracker| tracker.active_seconds())
+            .unwrap_or(0)
+    }
+
+    fn mode(&self) -> playtrack::Mode {
+        self.tracker
+            .lock()
+            .map(|tracker| tracker.mode())
+            .unwrap_or(playtrack::Mode::Window)
+    }
+
+    /// Close the session with what was counted, once.
+    fn close(&self) {
+        if self.closed.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let played = self.active_seconds();
+        match stats::record_session_played(&self.session, played) {
+            Ok(seconds) => debug_log(format!("stats: session closed, {seconds}s played")),
+            Err(why) => debug_log(format!("stats: {why}")),
+        }
+        if let Err(why) = playlog::mirror(&self.root) {
+            debug_log(format!("playlog: {why}"));
+        }
+    }
+}
+
+/// Every session being counted, by game.
+fn playing() -> &'static Mutex<HashMap<String, Arc<Tracked>>> {
+    static PLAYING: OnceLock<Mutex<HashMap<String, Arc<Tracked>>>> = OnceLock::new();
     PLAYING.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Count a launch, if the user has left that switched on.
+/// The app, once Tauri has built it, so a tracker can end the process after
+/// the window has been closed and the last game has too.
+static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// The window has been closed while a game was still being watched.
+static WINDOW_GONE: AtomicBool = AtomicBool::new(false);
+
+/// No window will ever exist: the game was started straight from an insert.
+static HEADLESS: AtomicBool = AtomicBool::new(false);
+
+/// Count a launch, if the user has left that switched on, and start watching
+/// the game.
 ///
 /// The title comes from the window rather than being re-read here. It is only
 /// decoration inside the stats file — the `executable` is what keys a row —
@@ -256,55 +304,145 @@ fn playing() -> &'static Mutex<HashMap<String, stats::Session>> {
 /// are all reasons not to have a count, and none of them is a reason not to
 /// play the game.
 fn count_the_launch(drive_path: &str, executable: &str, title: String) {
-    if !settings::load().track_playtime {
+    let settings = settings::load();
+    if !settings.track_playtime {
         return;
     }
 
     // Pressing Play on a second game means the first one is over. Without
-    // this both sessions stay open until the window closes and both are
-    // credited with the whole evening, which is worse than counting nothing.
+    // this both sessions stay open and both are credited with the evening.
     end_every_session();
 
-    match stats::record_launch(Path::new(drive_path), executable, &title) {
-        Ok(session) => {
-            if let Ok(mut open) = playing().lock() {
-                open.insert(stats::key_for(executable), session.clone());
+    let root = PathBuf::from(drive_path);
+    let session = match stats::record_launch(&root, executable, &title) {
+        Ok(session) => session,
+        Err(why) => return debug_log(format!("stats: {why}")),
+    };
+    if let Err(why) = playlog::mirror(&root) {
+        debug_log(format!("playlog: {why}"));
+    }
+
+    let steam_root = gamepak_core::steam::steam_root();
+    let dirs = playtrack::watch_dirs(&root, executable, steam_root.as_deref());
+    debug_log(format!("tracking {executable} in {dirs:?}"));
+    let tracked = Arc::new(Tracked {
+        session,
+        carried: !executable.contains("://"),
+        root,
+        dirs,
+        tracker: Mutex::new(playtrack::Tracker::new(
+            playtrack::Mode::Process,
+            stats::now_unix(),
+            settings.idle_pause_minutes,
+        )),
+        closed: AtomicBool::new(false),
+    });
+    if let Ok(mut open) = playing().lock() {
+        open.insert(stats::key_for(executable), tracked.clone());
+    }
+    track(tracked);
+}
+
+/// Watch one session until it ends, on its own thread.
+///
+/// Every tick: is the game running, and is anybody there. Every minute: write
+/// what has been counted to the drive, so a crash or a yanked cartridge costs
+/// at most a minute — the heartbeat Kazeta uses, now carrying the played
+/// seconds rather than the time since Play.
+fn track(tracked: Arc<Tracked>) {
+    std::thread::spawn(move || {
+        let mut probe = idle::IdleProbe::new();
+        let mut last_beat = stats::now_unix();
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(playtrack::TICK_SECONDS));
+            if tracked.closed.load(Ordering::SeqCst) {
+                return;
             }
-            beat(session);
+            let now = stats::now_unix();
+            let running = busy::running_within(&tracked.dirs);
+            let away = probe.idle_seconds();
+            let tick = tracked
+                .tracker
+                .lock()
+                .map(|mut tracker| tracker.tick(now, running, away))
+                .unwrap_or(playtrack::Tick::Ended);
+
+            match tick {
+                playtrack::Tick::Running => {}
+                playtrack::Tick::Ended => break,
+                playtrack::Tick::NeverSeen => {
+                    // Nothing to see: count the window instead, if there is
+                    // one. With no window there is nothing left to measure.
+                    if HEADLESS.load(Ordering::SeqCst) || WINDOW_GONE.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    debug_log("game not seen; counting while the launcher is open".to_string());
+                    if let Ok(mut tracker) = tracked.tracker.lock() {
+                        tracker.fall_back_to_window(now);
+                    }
+                }
+            }
+
+            if now.saturating_sub(last_beat) >= stats::HEARTBEAT_SECONDS {
+                last_beat = now;
+                if let Err(why) =
+                    stats::touch_session_played(&tracked.session, tracked.active_seconds())
+                {
+                    // A cartridge that has gone is the ordinary way for this
+                    // to end.
+                    debug_log(format!("stats heartbeat: {why}"));
+                    tracked.closed.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
         }
-        Err(why) => debug_log(format!("stats: {why}")),
+        finish(&tracked);
+    });
+}
+
+/// A game has stopped: close its session, put its save back, and leave if the
+/// window was only being kept for this.
+fn finish(tracked: &Arc<Tracked>) {
+    tracked.close();
+    if let Ok(mut open) = playing().lock() {
+        open.retain(|_, other| !Arc::ptr_eq(other, tracked));
+    }
+    if tracked.carried && settings::load().save_sync {
+        let results = saves::push_all(&tracked.root);
+        let pushed = results.iter().filter(|result| result.is_ok()).count();
+        debug_log(format!("game exited; pushed {pushed} save slot(s)"));
+        for why in results.into_iter().filter_map(Result::err) {
+            debug_log(format!("save push after play: {why}"));
+        }
+    }
+    if WINDOW_GONE.load(Ordering::SeqCst) && !still_watching() {
+        if let Some(app) = APP.get() {
+            app.exit(0);
+        }
     }
 }
 
-/// Re-stamp an open session on the drive, once a minute, until it is closed.
-///
-/// One thread per session, which sounds worse than it is: there is one session
-/// at a time in practice, the thread is asleep for all but a few milliseconds
-/// of each minute, and it ends itself as soon as the session leaves the table.
-/// The alternative — a timer owned by the window — would stop ticking in
-/// exactly the case this exists for, which is the window not getting to finish.
-///
-/// Without this, a crash or a power cut costs the whole session's hours. With
-/// it, the cost is whatever happened since the last beat. Kazeta does the same
-/// thing, and the sixty seconds is its number too.
-fn beat(session: stats::Session) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(stats::HEARTBEAT_SECONDS));
-        // Still the session the launcher thinks is running? If Eject or the
-        // window closing has drained the table, this thread's work is done.
-        let still_open = playing()
-            .lock()
-            .map(|open| open.contains_key(session.key()))
-            .unwrap_or(false);
-        if !still_open {
-            return;
-        }
-        if let Err(why) = stats::touch_session(&session) {
-            // A cartridge that has gone is the ordinary way for this to end.
-            debug_log(format!("stats heartbeat: {why}"));
-            return;
-        }
-    });
+/// Whether a game is being watched that outlives the window.
+fn still_watching() -> bool {
+    playing()
+        .lock()
+        .map(|open| {
+            open.values()
+                .any(|tracked| tracked.mode() == playtrack::Mode::Process)
+        })
+        .unwrap_or(false)
+}
+
+/// Block until every session has ended. For a game started straight from an
+/// insert, where this process has no window to keep it alive.
+fn wait_for_sessions() {
+    while playing()
+        .lock()
+        .map(|open| !open.is_empty())
+        .unwrap_or(false)
+    {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 }
 
 /// Everything this cartridge has recorded, for the details sheet.
@@ -319,6 +457,9 @@ fn cartridge_stats(drive_path: String) -> stats::Stats {
     let root = Path::new(&drive_path);
     if settings::load().track_playtime {
         if let Some(seconds) = stats::recover(root) {
+            if let Err(why) = playlog::mirror(root) {
+                debug_log(format!("playlog: {why}"));
+            }
             if seconds > 0 {
                 debug_log(format!(
                     "stats: recovered {seconds}s from a session that did not close"
@@ -329,21 +470,39 @@ fn cartridge_stats(drive_path: String) -> stats::Stats {
     stats::read(root)
 }
 
-/// Close every open session and add its hours.
+/// Close every open session with what it has counted.
 ///
-/// Called when the launcher window goes away, when the cartridge is ejected,
-/// and when a second game is started. The launcher does not own the game's
-/// process — on Steam it is not even a descendant of ours — so the window's
-/// own lifetime is the honest bound on what can be measured here. Watching
-/// the process itself is Phase 4's job.
-fn end_every_session() {
-    let Ok(mut open) = playing().lock() else {
-        return;
-    };
-    for (_, session) in open.drain() {
-        if let Err(why) = stats::record_session_end(&session) {
-            debug_log(format!("stats: {why}"));
+/// Called when the cartridge is ejected and when a second game is started.
+/// The window closing only calls it when nothing outlives the window — see
+/// the window's close handler.
+/// Close the sessions only the window was measuring, and leave the watched
+/// ones running.
+fn end_window_sessions() {
+    let window_only: Vec<Arc<Tracked>> = match playing().lock() {
+        Ok(mut open) => {
+            let keys: Vec<String> = open
+                .iter()
+                .filter(|(_, tracked)| tracked.mode() == playtrack::Mode::Window)
+                .map(|(key, _)| key.clone())
+                .collect();
+            keys.into_iter()
+                .filter_map(|key| open.remove(&key))
+                .collect()
         }
+        Err(_) => return,
+    };
+    for tracked in window_only {
+        tracked.close();
+    }
+}
+
+fn end_every_session() {
+    let open: Vec<Arc<Tracked>> = match playing().lock() {
+        Ok(mut open) => open.drain().map(|(_, tracked)| tracked).collect(),
+        Err(_) => return,
+    };
+    for tracked in open {
+        tracked.close();
     }
 }
 
@@ -522,7 +681,8 @@ fn collect(results: Vec<Result<saves::SyncOutcome, String>>) -> Vec<saves::SyncO
 /// because they asked for one — `--show` is how the watcher and the tray say
 /// "the user asked for this specifically".
 fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
-    if args.iter().any(|arg| arg == "--show") {
+    // Asked for by a front-end, not a cartridge arriving: always the window.
+    if args.iter().any(|arg| arg == "--show" || arg == "--memcard") {
         return None;
     }
     let settings = settings::load();
@@ -552,111 +712,44 @@ fn reaction_on_insert(args: &[String]) -> Option<insert::Reaction> {
 /// Only ever called with `Quit`, `Launch` or `Notify`: `ShowWindow` is returned
 /// to `main` as `None` so the ordinary path runs untouched.
 ///
-/// False when the reaction could not be carried out and the window should open
-/// after all — which is what a notification nobody could post falls back to.
+/// `false` means the reaction could not be carried out and the window should
+/// open after all — which today only happens when a notification cannot be
+/// posted on this desktop.
 fn act_on_insert(reaction: insert::Reaction) -> bool {
     match reaction {
-        insert::Reaction::ShowWindow => false,
-        insert::Reaction::Quit => true,
+        insert::Reaction::ShowWindow => {}
+        insert::Reaction::Quit => {}
         insert::Reaction::Launch { executable, title } => {
             let drive = cartridge::drive_from_args(std::env::args().skip(1));
             // The same call the Play button makes, counting included, so an
             // auto-launched game is not missing from the cartridge's history.
+            HEADLESS.store(true, Ordering::SeqCst);
             if let Err(why) = launch_game(executable, drive, Some(title)) {
                 eprintln!("could not start the game: {why}");
             }
-            // And closed again at once. This process is about to exit, so
-            // nothing here can measure how long the game runs — the heartbeat
-            // needs a launcher that stays up, which is what the window is. The
-            // session is closed rather than abandoned so the cartridge is not
-            // left carrying an open record that never advances and gets settled
-            // as zero on some later insert.
-            end_every_session();
-            true
+            // No window, so this process stays up only to watch the game, and
+            // exits when it does — or when it never turns up.
+            wait_for_sessions();
         }
-        insert::Reaction::Notify { title, body } => notify(&title, &body),
+        insert::Reaction::Notify { title, body } => return notify(&title, &body),
     }
+    true
 }
 
 /// Say a cartridge is there, without a window. False if nothing was shown.
 ///
-/// `notify-send` on Linux, which is the desktop's own notification and is what
-/// every distribution ships. On Windows a toast needs a resident application
-/// with a registered identity, which the launcher is not — but the watcher is
-/// resident and owns a tray icon, and a tray icon can post a balloon. So the
-/// launcher hands the text to the watcher's window, and if no watcher answers
-/// the window opens instead, as the settings dialog says it will.
+/// Both desktops are handled in [`gamepak_core::notify`], which explains what
+/// each one needs. The answer here is what to do when neither works: show the
+/// window. That is the behaviour `notify_only` was chosen *instead* of, so it is
+/// a poor outcome — but an insert that produces nothing at all looks like a
+/// cartridge that was not seen, and a setting that silently does nothing is
+/// indistinguishable from a bug.
 fn notify(title: &str, body: &str) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let shown = notify_through_watcher(title, body);
-        if !shown {
-            eprintln!("no watcher tray icon to post the notification; opening the window");
-        }
-        shown
+    if gamepak_core::notify::cartridge_arrived(title, body) {
+        return true;
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        gamepak_core::proc::command("notify-send")
-            .args(["--app-name=PC GamePak", "--icon=pc-gamepak", title, body])
-            .status()
-            .is_ok_and(|status| status.success())
-    }
-}
-
-/// Ask the watcher to show `title` and `body` as a balloon from its tray icon.
-///
-/// `WM_COPYDATA` to the watcher's hidden window, found by class name. The
-/// payload is UTF-16 `title`, a NUL, then `body`, tagged with
-/// [`NOTIFY_COPYDATA`] so nothing else sent to that window is mistaken for one.
-/// The watcher answers 1 only when the balloon was actually posted, so a
-/// watcher without a tray icon is a failure here, not a silent success.
-#[cfg(target_os = "windows")]
-fn notify_through_watcher(title: &str, body: &str) -> bool {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_COPYDATA,
-    };
-
-    /// Must match `NOTIFY_COPYDATA` in `watcher/src/main.rs`: "GPNT".
-    const NOTIFY_COPYDATA: usize = 0x4750_4E54;
-
-    #[repr(C)]
-    struct CopyDataStruct {
-        dw_data: usize,
-        cb_data: u32,
-        lp_data: *const std::ffi::c_void,
-    }
-
-    let class: Vec<u16> = "PcCartridgeWatcher\0".encode_utf16().collect();
-    let watcher = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
-    if watcher == 0 {
-        return false;
-    }
-
-    let payload: Vec<u16> = title
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .chain(body.encode_utf16())
-        .collect();
-    let data = CopyDataStruct {
-        dw_data: NOTIFY_COPYDATA,
-        cb_data: (payload.len() * 2) as u32,
-        lp_data: payload.as_ptr().cast(),
-    };
-
-    let mut answer: usize = 0;
-    let sent = unsafe {
-        SendMessageTimeoutW(
-            watcher,
-            WM_COPYDATA,
-            0,
-            std::ptr::addr_of!(data) as isize,
-            SMTO_ABORTIFHUNG,
-            2_000,
-            &mut answer,
-        )
-    };
-    sent != 0 && answer == 1
+    eprintln!("could not post a notification for {title}; opening the window instead");
+    false
 }
 
 /// Take the keyboard, not just the front of the screen.
@@ -979,589 +1072,12 @@ fn unmount(drive_path: &str) -> Result<(), String> {
     // afternoon. Errors are logged rather than raised: a save that could not
     // be written is not a reason to leave a drive mounted that the user has
     // asked to remove, and holding the cartridge hostage over it is worse.
-    let _ = push_saves(drive_path.to_string());
-    // After the saves, because a save is data and a shader cache is not: if the
-    // drive fills or the copy is slow, the thing that must already be written is
-    // the save.
-    let carried = push_shaders(drive_path.to_string());
-    if !carried.is_empty() {
-        let bytes: u64 = carried.iter().map(|synced| synced.bytes).sum();
-        debug_log(format!(
-            "shaders: carried {} caches, {bytes} bytes",
-            carried.len()
-        ));
-    }
+    gamepak_core::eject::settle(drive_path, &|line| debug_log(line));
     end_every_session();
 
-    #[cfg(target_os = "windows")]
-    {
-        eject_windows(drive_path)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        eject_linux(drive_path)
-    }
+    gamepak_core::eject::eject(drive_path)
 }
 
-/// Eject the cartridge, elevating only if it turns out to be necessary.
-///
-/// Asking PnP nicely works on a plain USB stick and prompts for nothing, so it
-/// is tried first and is usually the end of it. It cannot work on the hardware
-/// this project is actually built around: an NVMe stick in a UAS enclosure
-/// advertises no `CM_DEVCAP_EJECTSUPPORTED`, Explorer offers no Eject verb for
-/// it, and the request comes back `PNP_VetoDevice` — the device saying it does
-/// not do this — from the volume rather than from anything holding a file open.
-///
-/// So the fallback does the work by force, which needs administrator because
-/// Windows calls these disks fixed and will not hand out write access to a
-/// fixed volume otherwise. That is one UAC prompt, at the moment the user asked
-/// for something that cannot be done without one, and none at all on hardware
-/// that never needed it.
-#[cfg(target_os = "windows")]
-fn eject_windows(drive_path: &str) -> Result<(), String> {
-    let letter = drive_path.trim_end_matches(['\\', '/']);
-
-    match pnp_eject(letter) {
-        Ok(()) => Ok(()),
-        // The unelevated refusal is kept only to be shown if elevation is
-        // declined: it is the honest reason the prompt appeared.
-        Err(refusal) => elevated_eject(letter, &refusal),
-    }
-}
-
-/// Re-run this executable elevated, with `--eject`, and wait for it.
-///
-/// `ShellExecuteExW` with `runas` rather than a PowerShell hop: the elevated
-/// half is this same binary doing the same Win32 calls, so it can report what
-/// happened as an exit code instead of a parsed console message.
-#[cfg(target_os = "windows")]
-fn elevated_eject(letter: &str, refusal: &str) -> Result<(), String> {
-    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, WAIT_OBJECT_0};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, WaitForSingleObject, INFINITE,
-    };
-    use windows_sys::Win32::UI::Shell::{
-        ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
-
-    let Ok(exe) = std::env::current_exe() else {
-        return Err(refusal.to_string());
-    };
-
-    let verb = wide("runas");
-    let file = wide(&exe.to_string_lossy());
-    // Unquoted, and the letter rather than the root: `"G:\"` ends in a
-    // backslash, which the Windows command line reads as escaping the quote
-    // that closes it, so the elevated half was handed a mangled path and
-    // reported a drive that was not there. A drive letter cannot contain a
-    // space, so there is nothing for the quotes to have been protecting.
-    let parameters = wide(&format!("--eject {letter}"));
-
-    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
-    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
-    info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-    info.lpVerb = verb.as_ptr();
-    info.lpFile = file.as_ptr();
-    info.lpParameters = parameters.as_ptr();
-    info.nShow = SW_HIDE;
-
-    if unsafe { ShellExecuteExW(&mut info) } == 0 {
-        let error = unsafe { windows_sys::Win32::Foundation::GetLastError() };
-        return Err(if error == ERROR_CANCELLED {
-            "Ejecting this cartridge needs administrator, and the prompt was dismissed.".to_string()
-        } else {
-            refusal.to_string()
-        });
-    }
-
-    if info.hProcess == 0 {
-        return Err(refusal.to_string());
-    }
-
-    let waited = unsafe { WaitForSingleObject(info.hProcess, INFINITE) };
-    let mut code = EJECT_OTHER;
-    if waited == WAIT_OBJECT_0 {
-        unsafe { GetExitCodeProcess(info.hProcess, &mut code) };
-    }
-    unsafe { CloseHandle(info.hProcess) };
-
-    match code {
-        EJECT_OK => Ok(()),
-        // Administrator was already granted, so `FSCTL_LOCK_VOLUME` refusing
-        // means what it says: files are open on the volume. Not a rights
-        // problem, and not one a Defender exclusion fixes — that was tried on
-        // a cartridge that would not eject, and changed nothing.
-        //
-        // What holds it is whatever has read the cartridge since it arrived.
-        // A drive only just plugged in ejects every time; the same drive
-        // after a game has been played from it often will not, and does not
-        // let go until it is replugged. So the second half of the message is
-        // the thing that always works, rather than a second guess at who.
-        EJECT_IN_USE => Err(format!(
-            "{letter} is still in use. Close the game, Steam, or any folder open on it, \
-             or replug the cartridge — one that has just arrived always ejects."
-        )),
-        EJECT_MISSING => Err(format!("{letter} is not there any more.")),
-        _ => Err(refusal.to_string()),
-    }
-}
-
-/// Exit codes the elevated half reports back through.
-#[cfg(target_os = "windows")]
-const EJECT_OK: u32 = 0;
-#[cfg(target_os = "windows")]
-const EJECT_IN_USE: u32 = 1;
-#[cfg(target_os = "windows")]
-const EJECT_MISSING: u32 = 2;
-#[cfg(target_os = "windows")]
-const EJECT_OTHER: u32 = 3;
-
-/// The elevated half: flush the volume, dismount it, then stop the device.
-///
-/// Runs instead of the window when the executable is started with `--eject`.
-/// Locking is what needed the rights: with them, the filesystem is flushed and
-/// dismounted, and the drive is safe to unplug whether or not PnP will then
-/// take the device away — which it still declines to do on an enclosure that
-/// never claimed it could.
-#[cfg(target_os = "windows")]
-fn run_elevated_eject(drive_path: &str) -> u32 {
-    use std::time::Duration;
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE,
-    };
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    };
-    use windows_sys::Win32::System::Ioctl::{FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME};
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-
-    // Same three seconds the unelevated attempt used to allow: a cartridge
-    // whose game has just been quit is released over a second or two.
-    const ATTEMPTS: u32 = 12;
-    const RETRY_DELAY: Duration = Duration::from_millis(250);
-
-    let letter = drive_path.trim_end_matches(['\\', '/']);
-    let path = wide(&format!("\\\\.\\{letter}"));
-
-    let mut opened = false;
-
-    for attempt in 0..ATTEMPTS {
-        if attempt > 0 {
-            std::thread::sleep(RETRY_DELAY);
-        }
-
-        let handle = unsafe {
-            CreateFileW(
-                path.as_ptr(),
-                GENERIC_READ | GENERIC_WRITE,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                std::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            )
-        };
-        if handle == INVALID_HANDLE_VALUE {
-            continue;
-        }
-        opened = true;
-
-        let mut returned = 0u32;
-        let locked = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_LOCK_VOLUME,
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                0,
-                &mut returned,
-                std::ptr::null_mut(),
-            )
-        };
-        if locked == 0 {
-            unsafe { CloseHandle(handle) };
-            continue;
-        }
-
-        let dismounted = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_DISMOUNT_VOLUME,
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                0,
-                &mut returned,
-                std::ptr::null_mut(),
-            )
-        };
-        // The lock is released with the handle. Held until after the dismount
-        // so nothing can mount the volume back in between.
-        unsafe { CloseHandle(handle) };
-
-        if dismounted != 0 {
-            // Now that no filesystem is mounted there is nothing left to veto,
-            // so ask PnP again. It still refuses on an enclosure with no eject
-            // support, and that is fine: the cartridge is already safe to pull.
-            let _ = pnp_eject(letter);
-            return EJECT_OK;
-        }
-    }
-
-    if opened {
-        EJECT_IN_USE
-    } else {
-        EJECT_MISSING
-    }
-}
-
-/// Ask PnP to stop the device behind a drive letter.
-///
-/// The obvious implementation — lock the volume, dismount it — cannot work on
-/// the hardware this is for. `FSCTL_LOCK_VOLUME` needs administrator on a
-/// volume Windows considers fixed, and `GetDriveTypeW` calls an NVMe stick in a
-/// USB enclosure fixed, exactly like the internal disk. So the lock came back
-/// `ERROR_ACCESS_DENIED` every time, on a cartridge nothing was using, and
-/// `mountvol /P` behind it needed the same rights and failed the same way.
-///
-/// `CM_Request_Device_Eject` is what the notification area's own eject calls.
-/// It asks the PnP manager to stop the device rather than taking the volume by
-/// force: the filesystem is flushed and dismounted on the way, no elevation is
-/// involved, and the device is actually powered down at the end — which the
-/// dismount never did, so "safe to remove" had been describing a drive that was
-/// still spinning.
-///
-/// When something refuses, PnP says what: the veto names the application or
-/// driver holding the device, which is a better answer than any guess made from
-/// an error code.
-#[cfg(target_os = "windows")]
-fn pnp_eject(letter: &str) -> Result<(), String> {
-    let disk = device_number(letter)
-        .ok_or_else(|| format!("{letter} could not be identified as a disk."))?;
-    let devinst = disk_devinst(disk)
-        .ok_or_else(|| format!("Windows has no device for {letter} to eject."))?;
-
-    // The parent first: for a USB enclosure that is the mass-storage device,
-    // and stopping it is what "Safely Remove Hardware" stops. The disk itself
-    // is the fallback for anything shaped differently — a card reader slot, or
-    // a device that is its own parent as far as PnP is concerned.
-    let mut parent = 0u32;
-    let targets = if unsafe { CM_Get_Parent(&mut parent, devinst, 0) } == CR_SUCCESS {
-        vec![parent, devinst]
-    } else {
-        vec![devinst]
-    };
-
-    let mut refusal = None;
-    for target in targets {
-        match request_eject(target) {
-            Ok(()) => return Ok(()),
-            Err(why) => refusal = refusal.or(Some(why)),
-        }
-    }
-
-    Err(refusal.unwrap_or_else(|| format!("Windows would not eject {letter}.")))
-}
-
-/// Ask PnP to stop one device node.
-#[cfg(target_os = "windows")]
-fn request_eject(devinst: u32) -> Result<(), String> {
-    // Aliased in upper case because they are matched on as patterns, and a
-    // constant named in camel case there is read as a fresh binding that
-    // matches everything — the lint that fires on it is warning about a match
-    // arm that would silently swallow every other veto.
-    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        PNP_VetoDevice, PNP_VetoDriver, PNP_VetoOutstandingOpen, PNP_VetoPendingClose,
-        PNP_VetoWindowsApp, PNP_VetoWindowsService,
-    };
-    const VETO_APP: i32 = PNP_VetoWindowsApp;
-    const VETO_SERVICE: i32 = PNP_VetoWindowsService;
-    const VETO_OPEN: i32 = PNP_VetoOutstandingOpen;
-    const VETO_CLOSING: i32 = PNP_VetoPendingClose;
-    const VETO_DEVICE: i32 = PNP_VetoDevice;
-    const VETO_DRIVER: i32 = PNP_VetoDriver;
-
-    let mut veto_type = 0;
-    let mut veto_name = [0u16; 260];
-
-    let result = unsafe {
-        CM_Request_Device_EjectW(
-            devinst,
-            &mut veto_type,
-            veto_name.as_mut_ptr(),
-            veto_name.len() as u32,
-            0,
-        )
-    };
-    if result == CR_SUCCESS {
-        return Ok(());
-    }
-
-    let end = veto_name
-        .iter()
-        .position(|c| *c == 0)
-        .unwrap_or(veto_name.len());
-    let name = String::from_utf16_lossy(&veto_name[..end]);
-    let name = name.trim();
-
-    // The veto name is a process name or a driver's, so it is worth printing
-    // verbatim: "Steam is still using the cartridge" is the whole answer, where
-    // an error number would send someone looking for a fault that is not there.
-    Err(match veto_type {
-        VETO_APP | VETO_SERVICE | VETO_OPEN if !name.is_empty() => {
-            format!("{name} is still using the cartridge. Close it, then Eject.")
-        }
-        VETO_APP | VETO_SERVICE | VETO_OPEN => {
-            "Something is still using the cartridge. Quit the game or Steam, then Eject."
-                .to_string()
-        }
-        VETO_CLOSING => "The cartridge is still finishing up. Try Eject again.".to_string(),
-        VETO_DEVICE | VETO_DRIVER if !name.is_empty() => {
-            format!("{name} would not release the cartridge.")
-        }
-        _ => "Windows would not release the cartridge. Unplug it once the drive light settles."
-            .to_string(),
-    })
-}
-
-/// Which physical disk a drive letter sits on.
-///
-/// Opened with no access rights at all, which is enough for a query and is the
-/// reason none of this prompts: asking for read or write on a fixed volume is
-/// what needed administrator in the first place.
-#[cfg(target_os = "windows")]
-fn device_number(letter: &str) -> Option<u32> {
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    };
-    use windows_sys::Win32::System::Ioctl::{
-        IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_DEVICE_NUMBER,
-    };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-
-    let path = wide(&format!("\\\\.\\{letter}"));
-    let handle = unsafe {
-        CreateFileW(
-            path.as_ptr(),
-            0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            std::ptr::null(),
-            OPEN_EXISTING,
-            0,
-            0,
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return None;
-    }
-
-    let mut number: STORAGE_DEVICE_NUMBER = unsafe { std::mem::zeroed() };
-    let mut returned = 0u32;
-    let ok = unsafe {
-        DeviceIoControl(
-            handle,
-            IOCTL_STORAGE_GET_DEVICE_NUMBER,
-            std::ptr::null(),
-            0,
-            &mut number as *mut _ as *mut std::ffi::c_void,
-            std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
-            &mut returned,
-            std::ptr::null_mut(),
-        )
-    };
-    unsafe { CloseHandle(handle) };
-
-    (ok != 0).then_some(number.DeviceNumber)
-}
-
-/// The device node for a physical disk, found by matching its number.
-///
-/// There is no call from a disk number to a device node, so this walks the disk
-/// interfaces, opens each one and asks which disk it is — the same question
-/// `device_number` asked of the volume, from the other end.
-#[cfg(target_os = "windows")]
-fn disk_devinst(disk: u32) -> Option<u32> {
-    use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW,
-        SetupDiGetDeviceInterfaceDetailW, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT,
-        SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA_W, SP_DEVINFO_DATA,
-    };
-
-    // Written out because windows-sys 0.52 does not export it. It is a fixed
-    // interface class id — {53F56307-B6BF-11D0-94F2-00A0C91EFB8B}, the one
-    // every disk registers — not a value that varies by machine or version.
-    const GUID_DEVINTERFACE_DISK: windows_sys::core::GUID = windows_sys::core::GUID {
-        data1: 0x53F5_6307,
-        data2: 0xB6BF,
-        data3: 0x11D0,
-        data4: [0x94, 0xF2, 0x00, 0xA0, 0xC9, 0x1E, 0xFB, 0x8B],
-    };
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    };
-    use windows_sys::Win32::System::Ioctl::{
-        IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_DEVICE_NUMBER,
-    };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
-
-    let set = unsafe {
-        SetupDiGetClassDevsW(
-            &GUID_DEVINTERFACE_DISK,
-            std::ptr::null(),
-            0,
-            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
-        )
-    };
-    if set == INVALID_HANDLE_VALUE {
-        return None;
-    }
-
-    let mut found = None;
-
-    for index in 0.. {
-        let mut interface: SP_DEVICE_INTERFACE_DATA = unsafe { std::mem::zeroed() };
-        interface.cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DATA>() as u32;
-
-        if unsafe {
-            SetupDiEnumDeviceInterfaces(
-                set,
-                std::ptr::null(),
-                &GUID_DEVINTERFACE_DISK,
-                index,
-                &mut interface,
-            )
-        } == 0
-        {
-            break;
-        }
-
-        // The detail struct is variable length: a fixed head and the device
-        // path running off the end of it. `cbSize` describes the head only,
-        // which is why it is not the size of the buffer being passed.
-        let mut buffer = [0u8; 1024];
-        let detail = buffer.as_mut_ptr() as *mut SP_DEVICE_INTERFACE_DETAIL_DATA_W;
-        unsafe {
-            (*detail).cbSize = std::mem::size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
-        }
-
-        let mut info: SP_DEVINFO_DATA = unsafe { std::mem::zeroed() };
-        info.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
-
-        if unsafe {
-            SetupDiGetDeviceInterfaceDetailW(
-                set,
-                // Read, not written: the interface identifies which detail to
-                // fetch, and `info` on the end is the out-parameter.
-                &interface,
-                detail,
-                buffer.len() as u32,
-                std::ptr::null_mut(),
-                &mut info,
-            )
-        } == 0
-        {
-            continue;
-        }
-
-        let handle = unsafe {
-            CreateFileW(
-                (*detail).DevicePath.as_ptr(),
-                0,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                std::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            )
-        };
-        if handle == INVALID_HANDLE_VALUE {
-            continue;
-        }
-
-        let mut number: STORAGE_DEVICE_NUMBER = unsafe { std::mem::zeroed() };
-        let mut returned = 0u32;
-        let ok = unsafe {
-            DeviceIoControl(
-                handle,
-                IOCTL_STORAGE_GET_DEVICE_NUMBER,
-                std::ptr::null(),
-                0,
-                &mut number as *mut _ as *mut std::ffi::c_void,
-                std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
-                &mut returned,
-                std::ptr::null_mut(),
-            )
-        };
-        unsafe { CloseHandle(handle) };
-
-        if ok != 0 && number.DeviceNumber == disk {
-            found = Some(info.DevInst);
-            break;
-        }
-    }
-
-    unsafe { SetupDiDestroyDeviceInfoList(set) };
-    found
-}
-
-#[cfg(target_os = "windows")]
-fn wide(s: &str) -> Vec<u16> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
-    OsStr::new(s)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn eject_linux(drive_path: &str) -> Result<(), String> {
-    let findmnt = Command::new("findmnt")
-        .args(["-n", "-o", "SOURCE", drive_path])
-        .output()
-        .map_err(|e| format!("findmnt failed: {e}"))?;
-
-    let device = String::from_utf8_lossy(&findmnt.stdout).trim().to_string();
-
-    if device.is_empty() {
-        return Err(format!("Cannot find block device for {drive_path}"));
-    }
-
-    let unmount = Command::new("udisksctl")
-        .args(["unmount", "-b", &device, "--no-user-interaction"])
-        .status()
-        .map_err(|e| format!("udisksctl unmount failed: {e}"))?;
-
-    if !unmount.success() {
-        let _ = Command::new("umount").arg(&device).status();
-    }
-
-    let parent = get_parent_device(&device);
-    let _ = Command::new("udisksctl")
-        .args(["power-off", "-b", &parent, "--no-user-interaction"])
-        .status();
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_parent_device(partition: &str) -> String {
-    let out = Command::new("lsblk")
-        .args(["-no", "PKNAME", partition])
-        .output();
-    if let Ok(o) = out {
-        let parent_name = String::from_utf8_lossy(&o.stdout).trim().to_string();
-        if !parent_name.is_empty() {
-            return format!("/dev/{parent_name}");
-        }
-    }
-    partition.to_string()
-}
 
 // --------------------------------------------------------------------------
 // Wizard commands
@@ -1590,10 +1106,13 @@ fn get_settings() -> settings::Settings {
 
 /// Store the settings and hand back what was stored, so the window and the file
 /// cannot drift apart.
+///
+/// The front-end switches are kept as they are on disk: the settings form does
+/// not send them, and `set_frontend` is what changes them. See
+/// [`settings::save_form`].
 #[tauri::command]
 fn set_settings(settings: settings::Settings) -> Result<settings::Settings, String> {
-    settings::save(&settings)?;
-    Ok(settings)
+    settings::save_form(settings)
 }
 
 /// How well this cartridge is actually connected.
@@ -1804,6 +1323,16 @@ fn list_target_drives() -> Vec<drives::TargetDrive> {
     create::target_drives()
 }
 
+/// Every filesystem a cartridge can be made with, and what each one costs.
+///
+/// The wizard used to carry its own two-entry list, with the label limit
+/// written out a second time and already disagreeing with the one in core. This
+/// is the single place that knows.
+#[tauri::command]
+fn list_filesystems() -> Vec<format::FilesystemInfo> {
+    format::all_filesystems()
+}
+
 /// Readable volumes Windows has left without a drive letter.
 ///
 /// Listed separately from `list_target_drives` because they are not targets
@@ -1905,12 +1434,152 @@ async fn create_cartridge(
     gamepak_core::throttle::set_limit_mb_s(settings::load().default_copy_rate_mb_s);
 
     tauri::async_runtime::spawn_blocking(move || {
-        create::create_cartridge(&request, &mut |progress| {
+        let mut result = create::create_cartridge(&request, &mut |progress| {
             let _ = window.emit("cartridge://progress", progress);
-        })
+        })?;
+        // Here rather than in the window, so a write is on the shelf even if
+        // the window is closed before it hears back.
+        let label = drives::list_drives()
+            .into_iter()
+            .find(|drive| drive.path == request.drive_path)
+            .map(|drive| drive.label)
+            .unwrap_or_default();
+        if let Err(e) = created::record(&request.drive_path, &label, result.bytes_copied) {
+            result
+                .warnings
+                .push(format!("Not added to Created cartridges: {e}"));
+        }
+        Ok(result)
     })
     .await
     .map_err(|e| format!("the build thread failed: {e}"))?
+}
+
+// --------------------------------------------------------------------------
+// Memory cards
+// --------------------------------------------------------------------------
+
+/// The memory card view of a drive: every save on it, as blocks. `cardOnly`
+/// says whether the drive is a memory card and nothing else.
+#[tauri::command]
+fn memory_card(drive_path: String) -> memcard::CardView {
+    memcard::view(Path::new(&drive_path))
+}
+
+/// Copy one save to the PC (`to: "pc"`) or onto the card (`to: "card"`).
+/// Whatever it replaces is moved aside and kept.
+#[tauri::command]
+fn memcard_copy(
+    drive_path: String,
+    slot_id: String,
+    to: String,
+) -> Result<saves::SyncOutcome, String> {
+    memcard::copy(Path::new(&drive_path), &slot_id, &to)
+}
+
+/// Take one save off the card. Moved aside on the card, never deleted.
+#[tauri::command]
+fn memcard_remove(drive_path: String, slot_id: String) -> Result<(), String> {
+    memcard::remove(Path::new(&drive_path), &slot_id)
+}
+
+/// Show one save's folder in the file manager. The window names the save, not
+/// a path: the backend works the folder out, so nothing on the page can point
+/// Explorer anywhere else.
+#[tauri::command]
+fn memcard_reveal(drive_path: String, slot_id: String) -> Result<(), String> {
+    let folder = memcard::folder(Path::new(&drive_path), &slot_id)?;
+    #[cfg(target_os = "windows")]
+    let opener = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let opener = "xdg-open";
+    Command::new(opener)
+        .arg(&folder)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not open {}: {e}", folder.display()))
+}
+
+/// The games already on a memory card, for the wizard to add to.
+#[tauri::command]
+fn memcard_games(drive_path: String) -> Vec<memcard::CardGameView> {
+    memcard::games(Path::new(&drive_path))
+}
+
+/// Write a memory card. Returns what was left off, and why.
+#[tauri::command]
+fn create_memory_card(request: memcard::CardRequest) -> Result<Vec<String>, String> {
+    memcard::write(&request)
+}
+
+/// Where a game keeps its saves, from Ludusavi. Refused unless switched on,
+/// because the first call downloads the list.
+#[tauri::command]
+async fn lookup_save_location(
+    title: String,
+    executable: String,
+) -> Result<Option<ludusavi::SaveLocations>, String> {
+    if !settings::load().ludusavi_enabled {
+        return Err("Ludusavi lookups are off in Settings.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let steam_id = executable.strip_prefix("steam://rungameid/");
+        ludusavi::lookup(&title, steam_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedSaveFolder {
+    path: String,
+    /// The portable form, or empty when the folder is somewhere no other
+    /// machine could find — inside a game's install folder, say.
+    template: String,
+}
+
+/// Point at a game's save folder by hand.
+#[tauri::command]
+async fn pick_save_folder(
+    window: tauri::WebviewWindow,
+) -> Result<Option<PickedSaveFolder>, String> {
+    let Some(folder) = window
+        .dialog()
+        .file()
+        .set_title("Choose the folder the game saves into")
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let path = folder
+        .into_path()
+        .map_err(|e| format!("That folder cannot be read: {e}"))?;
+    Ok(Some(PickedSaveFolder {
+        template: saves::template_from_path(&path).unwrap_or_default(),
+        path: path.to_string_lossy().into_owned(),
+    }))
+}
+
+/// Whether this machine is seeing this cartridge for the first time, which is
+/// when the launcher plays the unboxing. Asking records the answer.
+#[tauri::command]
+fn first_insert(title: String) -> bool {
+    unboxed::first_time(&title)
+}
+
+/// Every cartridge this wizard has written, newest first.
+#[tauri::command]
+fn list_created() -> Vec<created::CreatedView> {
+    created::list()
+}
+
+/// Take a cartridge off that list. Touches no drive.
+#[tauri::command]
+fn forget_created(id: String) -> Result<(), String> {
+    created::forget(&id)
 }
 
 // --------------------------------------------------------------------------
@@ -2025,14 +1694,14 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         return Ok(());
     }
 
-    // Resizable, unlike the popup: 880x660 is logical pixels, so at 150% or
+    // Resizable, unlike the popup: 1030x660 is logical pixels, so at 150% or
     // 200% desktop scaling the wizard is taller than the screen it opens on and
     // a fixed window leaves the title bar and the game list off the edge with
-    // no way back. The minimum keeps both columns usable.
+    // no way back. The minimum keeps the sidebar and both columns usable.
     let wizard = WebviewWindowBuilder::new(app, "create", WebviewUrl::App("create.html".into()))
         .title("Create cartridge")
-        .inner_size(880.0, 660.0)
-        .min_inner_size(720.0, 520.0)
+        .inner_size(1030.0, 660.0)
+        .min_inner_size(870.0, 520.0)
         .resizable(true)
         .decorations(false)
         // Opaque on purpose. Transparency is what made the corner artefact
@@ -2070,6 +1739,7 @@ fn open_wizard(app: &tauri::AppHandle, open_settings: bool) -> tauri::Result<()>
         .build()?;
 
     round_dwm_corners(&wizard);
+    set_window_icons(&wizard, WIZARD_ICON);
 
     // The popup comes back when the wizard goes away, whichever way it goes:
     // create.js closes the window, so this is a destroy rather than a hide.
@@ -2103,7 +1773,7 @@ fn main() {
     #[cfg(target_os = "windows")]
     if let Some(index) = args.iter().position(|arg| arg == "--eject") {
         let drive = args.get(index + 1).cloned().unwrap_or_default();
-        std::process::exit(run_elevated_eject(&drive) as i32);
+        std::process::exit(gamepak_core::eject::run_elevated(&drive) as i32);
     }
 
     // Play and Eject for a front-end with its own buttons. Before the insert
@@ -2140,6 +1810,8 @@ fn main() {
             if act_on_insert(reaction) {
                 return;
             }
+            // Falls through to the window, which is what a reaction that could
+            // not be carried out asked for by returning false.
         }
     }
 
@@ -2147,6 +1819,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             drive_path,
+            opens_memory_card,
             parse_cartridge,
             launch_game,
             eject_drive,
@@ -2169,6 +1842,7 @@ fn main() {
             push_shaders,
             resolve_save_conflict,
             list_games,
+            list_filesystems,
             game_cover,
             get_settings,
             set_settings,
@@ -2197,10 +1871,22 @@ fn main() {
             register_with_steam,
             unregister_from_steam,
             create_cartridge,
+            list_created,
+            forget_created,
+            first_insert,
+            memory_card,
+            memcard_copy,
+            memcard_remove,
+            memcard_reveal,
+            memcard_games,
+            create_memory_card,
+            lookup_save_location,
+            pick_save_folder,
             open_wizard_settings,
             open_wizard_window,
         ])
         .setup(move |app| {
+            let _ = APP.set(app.handle().clone());
             if wizard {
                 // The same door the launcher's Settings link uses, rather than
                 // a second builder that had drifted to a fixed size the
@@ -2220,18 +1906,23 @@ fn main() {
                         .visible(false)
                         .build()?;
                 round_dwm_corners(&launcher);
-                // The window closing is the last chance to add the hours to
-                // the drive. Play does not block — the game is a process we do
-                // not own — so the session is open from the click until the
-                // launcher goes away, which is the honest bound on what this
-                // can measure without watching processes.
-                launcher.on_window_event(|event| {
-                    if matches!(
-                        event,
-                        tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. }
-                    ) {
+                set_window_icons(&launcher, LAUNCHER_ICON);
+                // Closing the window while a game it can see is running only
+                // hides it: the process stays to watch the game, and exits when
+                // the game does (see `finish`). A session counted by the window
+                // alone ends with the window, as it always has.
+                let hideable = launcher.clone();
+                launcher.on_window_event(move |event| match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } if still_watching() => {
+                        api.prevent_close();
+                        WINDOW_GONE.store(true, Ordering::SeqCst);
+                        let _ = hideable.hide();
+                        end_window_sessions();
+                    }
+                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
                         end_every_session();
                     }
+                    _ => {}
                 });
             }
             Ok(())

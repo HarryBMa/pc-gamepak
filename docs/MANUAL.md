@@ -87,8 +87,8 @@ The window is 420 × 560 — the 3:4 of a cover — and the artwork fills it. Th
 window is the slot and the cover is the cartridge seated in it: press Eject and
 the whole face rides out, leaving the empty slot behind.
 
-<img width="420" alt="The launcher showing Stardew Valley: cover art filling the window, the title over it, a line reading On the cartridge, and a wide Play button beside an eject icon" src="launcher.png" />
-<img width="420" alt="The details sheet for a single-game cartridge: the link speed and the free space as two large figures side by side, above a folded Show file paths disclosure" src="launcher-details.png" />
+<img width="420" alt="The launcher showing Dave the Diver: cover art filling the window, the game's logo over it, and a wide Play button beside an eject icon" src="launcher.png" />
+<img width="420" alt="The details sheet for a single-game cartridge: the link speed and the free space as two large figures side by side, how long the game takes to beat, and a folded Show file paths disclosure" src="launcher-details.png" />
 
 The accent colour is sampled from the cover art at load, so the Play button
 belongs to whatever game is in the dock. At rest almost nothing else is on
@@ -102,7 +102,7 @@ launcher grows a rail: **picking a game is what Play acts on**, and the artwork
 behind it cross-fades to whichever one is selected — no menu, no submenu,
 nothing to learn.
 
-<img width="420" alt="The launcher showing a ten-game Tomb Raider cartridge: the selected game's art filling the window, the collection name above a rail of games, and the selected game's title over one shared Play button" src="launcher-bundle.png" />
+<img width="420" alt="The launcher showing a two-game XCOM cartridge: the selected game's art filling the window, the collection's logo in the corner, a rail of games, and the selected game's logo over one shared Play button" src="launcher-bundle.png" />
 
 Each row carries the game's own art and size, and the first nine answer to the
 number keys — pressing one selects that game and starts it, so the window shows
@@ -128,8 +128,16 @@ is a **plugin**, and **Settings → Where a cartridge opens** is the list:
 | **PC GamePak launcher** | The cartridge's own window. Built in, on by default. |
 | **Steam Deck row** | Cartridge games as a row on the Steam home screen, through [Decky](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/decky). |
 | **Playnite library** | A cartridge slot as the first tile in Playnite's library: empty with no cartridge in, the cartridge's art with one. Play starts a single game directly and opens this launcher to choose from a collection; the tile's menu ejects. Through the [Playnite extension](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/playnite). |
+| **GOG Galaxy library** | Cartridge games owned in GOG Galaxy once seen, installed while the cartridge is in; Play goes through this launcher. Through the [Galaxy integration](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/gog-galaxy). |
+| **Heroic Games Launcher** | Cartridge games as sideloaded games while the cartridge is in. |
+| **Pegasus Frontend** | A PC GamePak collection of whatever is plugged in. |
+| **ES-DE** | A PC GamePak system of whatever is plugged in. |
+| **LaunchBox** | A cartridge slot in LaunchBox and Big Box. Designed, not built yet; listed so the shape is visible. |
 
-Both plugins live in [pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins).
+Heroic, Pegasus and ES-DE read files rather than load plugins, so one program,
+[pc-gamepak-sync](https://github.com/HarryBMa/pc-gamepak-plugins/tree/main/sync),
+writes all three; each is installed when it is. Every plugin lives in
+[pc-gamepak-plugins](https://github.com/HarryBMa/pc-gamepak-plugins).
 
 A plugin has to be installed before its switch does anything, and the dialog says
 so rather than offering a dead control. More than one may be on: a desktop that
@@ -241,6 +249,62 @@ machines: a cartridge yanked out of one PC mid-game has those hours settled by
 whichever machine sees it next. Borrowed from Kazeta, which does the same thing
 with the same sixty seconds.
 
+**What counts as playing.** The launcher watches for the game itself: a
+program running from the game's folder — on the cartridge, or for a Steam game
+wherever Steam installed it. (Under Proton the program is Wine, so a process
+whose working folder is the game's counts too.) Time only counts while it is
+running, and closing the launcher does not stop the count: the window hides,
+and the launcher leaves when the game does. A game it cannot see at all — a
+cartridge pointing at a game installed somewhere it cannot name — is counted
+while the launcher is open, as before.
+
+It also stops counting when nobody is there. After ten minutes with no
+keyboard, mouse **or controller** input (Settings → *Pause when nobody is
+playing for*), the time since the last input is taken back out and nothing more
+is counted until someone touches something. Controllers are read directly —
+XInput on Windows, `/dev/input/js*` on Linux — because the desktop's own idle
+clock does not see them, and a game played on a pad would otherwise look idle
+from the first minute. On Linux the keyboard and mouse come from logind's idle
+hint; a desktop that never sets it means nothing pauses.
+
+**Every figure is in `cartridge.conf`,** under each game, after every session:
+
+```ini
+[game]
+title=Hollow Knight
+executable=steam://rungameid/367520
+playtime=154800
+launches=31
+first_played=2026-03-02T19:04:11Z
+last_played=2026-09-26T18:00:00Z
+last_host=DESKTOP-7Q2
+session=2026-09-26T18:00:00Z|5400|DESKTOP-7Q2
+hltb_id=10270
+hltb_main=97200
+hltb_extra=154800
+hltb_complete=226800
+```
+
+Times are seconds and dates are UTC. `session` is start, seconds and machine,
+newest first, the last thirty. The `hltb_` keys are HowLongToBeat's main story,
+main plus extras, and completionist figures.
+
+A single-game cartridge carries the same keys at the top. `stats.json` stays
+the working copy — the open session and the minute-by-minute heartbeat live
+there — and the conf is rewritten from it when a session ends; only those keys
+are touched, and everything else in the file stays as it was. A skin reads the
+same numbers through CSS variables; see [SKINNING.md](SKINNING.md#play-stats).
+
+**How long to beat** comes from [HowLongToBeat](https://howlongtobeat.com),
+looked up once per game while the cartridge is written, and only with Settings →
+*Look up how long games take to beat* switched on — it is off by default, like
+SteamGridDB. HowLongToBeat has no official API: the wizard asks the way the
+site's own search page does, as the `howlongtobeatpy` project worked out, and
+when the site changes that, the lookup finds nothing until this is updated. A
+failed lookup is a warning in the write log and a cartridge without an estimate,
+never a failed write. The launcher shows the figures under the ⓘ, and — with a
+skin that asks for it — a bar of how far through the main story you are.
+
 The save is the harder half, and the one that makes a second machine feel like
 starting over. Steam Cloud covers the games that are in it and nothing covers a
 GOG game, an emulator, or a folder copied onto a drive by hand. A cartridge can
@@ -255,6 +319,69 @@ save=Stardew Valley|{appdata}/StardewValley/Saves
 `{appdata}` is the point: the three platforms disagree about where saves go, so
 a cartridge names a *role* and the host resolves it. The full list of tokens is
 in `cartridge.conf.example`.
+
+`{steamuserdata}` is the one token that needs a store: Steam's
+`userdata/<account>` folder, where every Steam Cloud game keeps its saves, as
+`{steamuserdata}/<app id>/remote`. When more than one Steam account has used
+the PC it means the one used most recently.
+
+`{registry}` is for the games that save into the Windows registry — Unity's
+`PlayerPrefs` does, so plenty of small games do, Bluey: The Videogame among
+them:
+
+```ini
+save.windows=Bluey|{registry}/HKCU/Software/Outright Games Ltd/Bluey The Videogame
+```
+
+The key is exported to a `.reg` file, which is what the cartridge carries and
+compares, and imported back when the cartridge's copy is the newer one — the
+key replaced, not merged, with the PC's previous export kept as the backup. Only
+a key under `HKCU\Software` with at least the company and game below it is
+accepted, and a `.reg` file that names any key outside the one declared is
+refused before anything is imported: it came off a drive. Link mode does not
+apply to a registry save; it is always copied.
+
+#### Finding where a game saves
+
+Nobody should have to type those lines. With Settings → *Look up where games
+keep their saves* switched on, the wizard fills them in, trying in order:
+
+1. **[Ludusavi's manifest](https://github.com/mtkennerly/ludusavi-manifest)**,
+   PCGamingWiki's save locations for tens of thousands of games, downloaded
+   once and refreshed monthly. A game is matched by its Steam app id (including
+   the ids of its other editions), then by name — accents and punctuation
+   ignored, so "God of War - Ragnarok" finds "God of War Ragnarök" — then by the
+   folder it installs into, which is what a game found in a folder is called.
+2. **A look round this PC**, for a game the manifest does not list: a folder
+   with the game's name in Documents, Documents\My Games, Saved Games, or
+   AppData's Roaming, Local and LocalLow, directly or one level down under the
+   studio's name. This only finds a game that has already saved here.
+
+What neither finds, and why:
+
+- **A game that saves inside its own install folder** (older games, some
+  Unreal ones). If it is carried on the cartridge its saves already are too;
+  if it is installed on the PC there is no path another machine would share.
+- **A registry save under a different key than Ludusavi lists** — an older
+  build of the game, say. Bluey's was `DefaultCompany/Project biscuits` before
+  it was renamed. Write the line by hand.
+- **A game whose launcher keeps the saves** — Battle.net, the Xbox app,
+  Ubisoft Connect. Their clouds carry them.
+- **A shortened name** — "TMNT", "DC" for Director's Cut. Pick the folder by hand.
+
+Every lookup can be overridden: the Memory card page's *Choose folder* writes
+the folder you point at.
+
+#### Linking instead of copying
+
+`savemode=link` replaces the PC's save folder with a link onto the cartridge,
+so the game writes straight to the drive and there is one copy. On Windows that
+is a symbolic link when Developer Mode is on or the launcher runs elevated, and
+otherwise a **directory junction**, which any user may create and which behaves
+the same way for a game. The link is made on the PC, pointing at the drive, so
+the cartridge's own filesystem does not matter. A clean eject turns the link back into
+a real folder; a drive pulled out without ejecting leaves the game a dangling
+link until the cartridge returns.
 
 #### A carried game needs no save line at all
 
@@ -314,6 +441,23 @@ aside first and kept, three deep, as `<name>.gamepak-backup-<time>` beside it.
 A conflict is refused rather than resolved. Picking a winner silently is how a
 save-sync tool eats an eighty-hour run.
 
+### Memory cards
+
+A drive with a `memorycard.conf` carries saves and no games — the other half
+of a cartridge, the way a console's memory card was. Plug one in and every save
+on it is a game case on a shelf; choose one and it turns round to its back
+cover, which says which copy is newer, when it was saved and how much it holds,
+beside the one button that does what it needs: copy to this PC, or to the card.
+Anything a copy replaces is kept, as with every other save here.
+
+<img width="420" alt="The memory card view: each save as a game case on a shelf, the chosen one turned round on the stage below with when it was saved and how much it holds" src="memcard.png" />
+
+A cartridge can be a **combo drive** too — a switch in the wizard — and its own
+games' saves go on its card, one button (or `M`) away from Play. The wizard's
+**Memory card** page writes one: add the games, and it finds where each saves.
+
+<img width="760" alt="The wizard's Memory card page: the drive, the card's name, and each game with the folder its saves are carried from" src="wizard-card.png" />
+
 ### Carrying the compiled shaders
 
 A game's first hour on a new machine is its worst. Every pipeline it draws with
@@ -359,9 +503,9 @@ launcher to choose from — a cartridge either brings a stylesheet or it does no
 which is the same arrangement the artwork already had. The look belongs to the
 cartridge and travels with it.
 
-Fifteen worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
-wood-grain television, a neon split, black-and-gold, a desktop of icons, an
-arcade cabinet, a cream one, and a Big Picture couch launcher. Copy one to
+Fourteen worked examples are in [`docs/skins/`](skins/): a 2003 file window, a
+wood-grain television, a neon split, black-and-gold, a desktop of icons, a
+cream one, and a Big Picture couch launcher. Copy one to
 `.gamepak/skin.css` and edit it. [SKINNING.md](SKINNING.md) is the reference:
 which elements exist, what states they take, and what the content security
 policy forbids.
@@ -539,7 +683,7 @@ Run the installer menu and choose **Create a cartridge**, or start it directly:
 pc-gamepak --create
 ```
 
-<img width="760" alt="The create-cartridge wizard: one screen with Game, Media, Artwork and Written to as four groups down the left, each stating what is chosen with a Change button beside it, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
+<img width="760" alt="The wizard editing a single-game cartridge: the drive, name, options including the platform, the four artwork slots and the game down the left, and a rail on the right previewing the launcher the cartridge will open" src="wizard.png" />
 
 The wizard lists everything installed. **Playnite** is read first when present —
 one list covering Steam, GOG, Epic, Xbox, Ubisoft, itch and emulators — and
@@ -559,10 +703,16 @@ can point the wizard at the right directory.
 > it once before using the wizard. Any extension that writes a `library.json` or
 > `games.json` file will work.
 
-Pick a game, pick the media, press Write. It is **one screen**: Game, Media,
-Artwork and what gets written, each stating what is currently chosen with a
-**Change** beside it — so nothing has to be finished before the next thing can
-be looked at, and there is no step to go back to.
+Pick a game, pick the drive, press Write. It is **one screen**: Games, Drive,
+Options and Artwork, each stating what is currently chosen with a **Change**
+beside it — so nothing has to be finished before the next thing can be looked
+at, and there is no step to go back to.
+
+**Options** are switches for this cartridge only: copy the games onto the drive,
+verify the copy, eject when done, and erase the drive first (with the
+filesystem beside it). They start from the defaults in Settings and are
+forgotten after the write. Erasing always starts off, and Write asks once more,
+naming the drive, before anything is touched.
 
 **Change** opens the library as a dialog, and it is a real list with tick boxes:
 selection is always multiple, so ticking a second game is all it takes. The rail
@@ -571,7 +721,7 @@ no mode to enter.
 
 <img width="760" alt="Choose the media: a dialog listing every removable drive with its free space, and a note against each one that already holds a cartridge" src="wizard-media.png" />
 
-Media is the same dialog asking the same kind of question. Every removable drive
+Drive is the same dialog asking the same kind of question. Every removable drive
 is listed with the room on it, and one that already holds a cartridge says so
 before you overwrite it.
 
@@ -586,7 +736,7 @@ Tick a second game and the cartridge is a collection — nothing else to press.
 The rail counts them, and the bar under it puts one band per game so you can see
 which one is taking the room:
 
-<img width="760" alt="The wizard with three games chosen: the Game card naming the collection, a Name and order group with a drag-sortable play order, and the rail titled Multicartridge above a live preview of the launcher" src="wizard-bundle.png" />
+<img width="760" alt="The wizard editing a two-game collection: the collection logo, icon and hero, the games in a drag-sortable play order with a star for the primary game, and the rail titled Multicartridge above a live preview of the launcher" src="wizard-bundle.png" />
 
 A collection is the one thing in a library with no artwork of its own, so a
 **Name and order** group appears on the same screen for the two things the wizard
@@ -614,7 +764,7 @@ whole thing again — which, with the games copied onto it, is hours.
 Select a drive that already holds a cartridge and **Edit the cartridge already
 on this drive** appears:
 
-<img width="760" alt="The edit dialog: the cartridge name, a Change artwork button, and the list of games with controls to rename, reorder and remove them" src="wizard-edit.png" />
+<img width="760" alt="The Edit page for a collection: the cartridge and its name, the combo drive and platform options, the artwork slots, and the games with controls to reorder them, pick the primary one, change a picture and remove them" src="wizard-edit.png" />
 
 You can rename the cartridge, change its artwork, rename the individual games,
 reorder them — the order is the order of the launcher's rail — and take one off
@@ -756,7 +906,7 @@ emulator entries, older GOG titles — and the launcher then shows a placeholder
 The wizard can look artwork up on [SteamGridDB](https://www.steamgriddb.com/)
 to fill those gaps.
 
-<img width="760" alt="The wizard's settings, grouped: a count of where the 87 games came from with a Rescan link, the SteamGridDB switch and its key field, and defaults for a new cartridge" src="wizard-settings.png" />
+<img width="760" alt="The wizard's settings, grouped: a count of where the 86 games came from with a Rescan link, then the online lookups — SteamGridDB with its key, Ludusavi for save folders, HowLongToBeat — and what happens when a cartridge is plugged in" src="wizard-settings.png" />
 
 **It is off by default**, and it is the only part of this project that talks to
 the network. Turn it on behind the gear in the wizard's title bar, where it also
@@ -772,7 +922,9 @@ artwork…** opens the desktop's own file dialog and copies whatever you point a
 
 <img width="760" alt="Every option with formatting enabled: options grouped by what they touch, with the destructive one alone under its own heading" src="wizard-format.png" />
 
-Formatting is opt-in per cartridge and gated three ways: the target must be on
+Formatting is the **Erase the drive first** switch under Options. It is off
+every time the wizard opens, Write asks to confirm it by the drive's name, and
+it is gated three ways: the target must be on
 the removable-drive allowlist the wizard re-derives itself, it must not be the
 system drive, and it must have been asked for explicitly. All three are checked
 in the backend, which re-derives them rather than trusting the window's idea of
@@ -877,7 +1029,7 @@ Neither of these gets better with a faster cartridge.
 Press `I` on the launcher and it reports three things about the drive in front
 of it:
 
-<img width="420" alt="The details sheet for a collection with the paths unfolded: link and free space, a games count, and the steam:// URI each game launches by" src="launcher-health.png" />
+<img width="420" alt="The details sheet for a collection with the paths unfolded: link and free space, the saves on the cartridge, and the program each game launches" src="launcher-health.png" />
 
 - **Link** — 10 Gbps is what a Gen 2 enclosure should negotiate. 5 Gbps means a
   front-panel port, a hub, or a cable that is not rated for it; 480 Mbps means

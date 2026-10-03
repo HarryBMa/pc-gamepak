@@ -14,6 +14,7 @@
  *   X (west)             Eject
  *   Y (north)            Details
  *   B (east)             back out of details, or dismiss the window
+ *   View / Select        the memory card, on a combo drive
  *   Start                Play
  *
  * The window used to move focus between its controls instead, so reaching Eject
@@ -37,7 +38,7 @@
  */
 
 /** Standard-layout indices, named so the mapping below reads as English. */
-const BUTTON = { SOUTH: 0, EAST: 1, WEST: 2, NORTH: 3, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
+const BUTTON = { SOUTH: 0, EAST: 1, WEST: 2, NORTH: 3, SELECT: 8, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 
 /** Sticks rest slightly off centre; below this a pad is being held, not moved. */
 const DEADZONE = 0.55;
@@ -173,6 +174,9 @@ export function connect(actions) {
             break;
           case BUTTON.EAST:
             actions.back();
+            break;
+          case BUTTON.SELECT:
+            actions.card?.();
             break;
           case BUTTON.UP:
           case BUTTON.DOWN:

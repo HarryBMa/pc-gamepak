@@ -45,6 +45,10 @@ pub struct Editable {
     /// True when the games live on the cartridge, which is what makes removing
     /// one from the list worth a warning.
     pub holds_game: bool,
+    /// A combo drive: shown as a memory card too.
+    pub memory_card: bool,
+    /// The cartridge's `platform=`, `PC` when it has none.
+    pub platform: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -87,6 +91,20 @@ pub struct UpdateRequest {
     /// The games, in the order they should appear. A single-game cartridge has
     /// exactly one; removing the last one is refused.
     pub games: Vec<UpdateGame>,
+    /// Take the cartridge's own logo off. For a collection that is the mark in
+    /// the launcher's corner; `logo_source` absent only ever keeps it.
+    #[serde(default)]
+    pub remove_logo: bool,
+    /// Make it a combo drive, or stop it being one. Absent keeps what it was.
+    #[serde(default)]
+    pub memory_card: Option<bool>,
+    /// A new `platform=` for the cartridge. Absent keeps what it was.
+    #[serde(default)]
+    pub platform: Option<String>,
+    /// Which game the drive icon is made from, as an index into `games`.
+    /// Absent keeps the old rule: the icon slot, else the cover.
+    #[serde(default)]
+    pub primary_game: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -171,6 +189,8 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         background_path: info.background_path,
         is_bundle: info.is_bundle,
         holds_game: info.holds_game,
+        memory_card: info.memory_card,
+        platform: info.platform.clone(),
         games,
     }
 }
@@ -222,6 +242,10 @@ pub fn refetch_artwork(drive_path: &str) -> Result<UpdateResult, String> {
             icon_source: None,
             background_source: None,
             games,
+            primary_game: None,
+            remove_logo: false,
+            memory_card: None,
+            platform: None,
         },
     )?;
 
@@ -422,6 +446,15 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
                 }
             }
         }
+        _ if request.remove_logo => {
+            if let Some(old) = existing_logo
+                .as_deref()
+                .filter(|name| is_ours_to_delete(name))
+            {
+                let _ = std::fs::remove_file(root.join(old));
+            }
+            None
+        }
         _ => existing_logo.clone(),
     };
 
@@ -454,13 +487,45 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
     // this editor can write one, so a rewrite would drop the lines somebody
     // typed in by hand and orphan the saves already on the drive.
     let conf_path = root.join("cartridge.conf");
-    let conf = match std::fs::read_to_string(&conf_path) {
-        Ok(previous) => crate::saves::preserve(&previous, &conf),
-        Err(_) => conf,
+    let previous = std::fs::read_to_string(&conf_path).ok();
+    let conf = match &previous {
+        Some(previous) => crate::saves::preserve(previous, &conf),
+        None => conf,
+    };
+    // Combo drive: as asked, else as it was. The render above starts from
+    // nothing, so without this a rename quietly turned a combo back into a
+    // plain cartridge.
+    let combo = request
+        .memory_card
+        .unwrap_or_else(|| previous.as_deref().is_some_and(crate::memcard::is_combo));
+    let turned_on = combo && !previous.as_deref().is_some_and(crate::memcard::is_combo);
+    let conf = if turned_on {
+        // Newly a combo: its games go onto its card, the way Create does it.
+        let games: Vec<(&str, &str, Option<&str>)> = entries
+            .iter()
+            .map(|game| (game.title.as_str(), game.executable.as_str(), None))
+            .collect();
+        crate::create::with_memory_card(conf, true, root, &games, &mut |_| {}, &mut warnings)
+    } else if combo {
+        format!("memory_card=yes\n{conf}")
+    } else {
+        conf
+    };
+    // The platform as asked; absent, the line `preserve` carried over stays.
+    let conf = match &request.platform {
+        Some(platform) => crate::cartridge::set_platform(&conf, platform),
+        None => conf,
     };
     std::fs::write(&conf_path, conf)
         .map_err(|e| format!("Could not write {}: {e}", conf_path.display()))?;
     result.conf_path = conf_path.to_string_lossy().into_owned();
+    // And the play history, which the stats file holds and the render above
+    // knows nothing about.
+    if let Err(e) = crate::playlog::mirror(root) {
+        warnings.push(format!(
+            "Play history was not copied into cartridge.conf: {e}"
+        ));
+    }
 
     // ---- autorun.inf ------------------------------------------------------
     //
@@ -478,7 +543,10 @@ pub fn update_at(root: &Path, request: &UpdateRequest) -> Result<UpdateResult, S
         }
         _ => None,
     };
-    let cover_full = icon_source.or_else(|| cover_name.as_ref().map(|name| root.join(name)));
+    let cover_full = icon_source.or_else(|| {
+        create::drive_icon_art(None, &entries, request.primary_game, cover_name.as_deref())
+            .map(|art| root.join(art))
+    });
     match autorun::write_autorun(root, &title, cover_full.as_deref()) {
         Ok(icon) => {
             result.autorun_written = true;
@@ -540,7 +608,7 @@ fn file_name_relative(root: &Path, absolute: &str) -> Option<String> {
 /// if `cover=` happened to point at it.
 fn is_ours_to_delete(name: &str) -> bool {
     let stem = name.rsplit('/').next().unwrap_or(name);
-    stem.starts_with("cover") || stem.starts_with("collection")
+    stem.starts_with("cover") || stem.starts_with("collection") || stem.starts_with("logo")
 }
 
 #[cfg(test)]
@@ -572,6 +640,10 @@ mod tests {
                     ..Default::default()
                 })
                 .collect(),
+            primary_game: None,
+            remove_logo: false,
+            memory_card: None,
+            platform: None,
         }
     }
 
@@ -609,6 +681,57 @@ mod tests {
         // The picture was not touched, and the conf still points at it.
         assert!(conf.contains("cover=cover.jpg"), "{conf}");
         assert!(scratch.join("cover.jpg").is_file());
+    }
+
+    #[test]
+    fn a_combo_drive_stays_one_until_asked() {
+        let scratch = Scratch::new("edit-combo");
+        scratch.write(
+            "cartridge.conf",
+            b"memory_card=yes\ntitle=Stardew\nexecutable=steam://rungameid/413150\n",
+        );
+        let games = [("Stardew", "steam://rungameid/413150")];
+
+        update_at(scratch.path(), &request("Stardew Valley", &games)).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(
+            crate::memcard::is_combo(&conf),
+            "a rename dropped it: {conf}"
+        );
+        assert!(read(&scratch.path().to_string_lossy()).unwrap().memory_card);
+
+        let mut req = request("Stardew Valley", &games);
+        req.memory_card = Some(false);
+        update_at(scratch.path(), &req).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(!crate::memcard::is_combo(&conf), "{conf}");
+    }
+
+    #[test]
+    fn a_collection_logo_can_be_taken_off() {
+        let scratch = Scratch::new("edit-remove-logo");
+        scratch.write(".gamepak/logo.png", b"bluey");
+        scratch.write(
+            "cartridge.conf",
+            b"[collection]\ntitle=Mixed\nlogo=.gamepak/logo.png\n\n\
+              [game]\ntitle=Bluey\nexecutable=steam://rungameid/1\n\n[game]\ntitle=Blanc\nexecutable=steam://rungameid/2\n",
+        );
+        let games = [
+            ("Bluey", "steam://rungameid/1"),
+            ("Blanc", "steam://rungameid/2"),
+        ];
+
+        // Absent keeps it, as it always did.
+        update_at(scratch.path(), &request("Mixed", &games)).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(conf.contains("logo=.gamepak/logo.png"), "{conf}");
+
+        let mut req = request("Mixed", &games);
+        req.remove_logo = true;
+        update_at(scratch.path(), &req).unwrap();
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(!conf.contains("logo="), "{conf}");
+        assert!(!scratch.join(".gamepak/logo.png").exists());
     }
 
     #[test]
@@ -824,6 +947,30 @@ mod tests {
         // None of that touched the cartridge.
         let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
         assert!(conf.contains("title=Hollow Knight"), "{conf}");
+    }
+
+    #[test]
+    fn a_rename_keeps_the_estimate_and_the_play_history() {
+        let scratch = Scratch::new("edit-keeps-play");
+        scratch.write(
+            "cartridge.conf",
+            b"title=Hollow Knight\nexecutable=steam://rungameid/367520\nhltb_id=9\nhltb_main=97200\n",
+        );
+        let session =
+            crate::stats::record_launch(scratch.path(), "steam://rungameid/367520", "HK").unwrap();
+        crate::stats::record_session_played(&session, 1800).unwrap();
+
+        update_at(
+            scratch.path(),
+            &request("HK", &[("HK", "steam://rungameid/367520")]),
+        )
+        .unwrap();
+
+        let conf = std::fs::read_to_string(scratch.join("cartridge.conf")).unwrap();
+        assert!(conf.contains("title=HK"), "{conf}");
+        assert!(conf.contains("hltb_main=97200"), "{conf}");
+        assert!(conf.contains("playtime=1800"), "{conf}");
+        assert!(conf.contains("launches=1"), "{conf}");
     }
 
     #[test]

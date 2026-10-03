@@ -59,13 +59,15 @@ focus ring that is always drawn. Details behind the ⓘ, leading with link and
 free space and folding the paths away. Nothing on a cartridge runs without a
 click.
 
-**Wizard** — search your library, tick one game or several, pick the drive,
-choose what goes on it, Write. Selection is always multiple: one ticked is a
-cartridge, more is a multicartridge, and the second step for a name and a face
-only exists for the latter. The third step groups the options by what they touch
-and turns them into a numbered plan with a time estimate; the write itself
-happens in the same window, as a log that ticks itself off. Formatting, copying,
-artwork by file picker or SteamGridDB, per-cartridge Windows tuning.
+**Wizard** — one screen: Games, Drive, Options, Artwork, Write. Selection is
+always multiple: one ticked is a cartridge, more is a multicartridge, which adds
+a name and a drag-sortable play order under the Games card. Options are this
+cartridge's switches — copy, verify, eject, erase and to which filesystem —
+starting from the defaults in Settings; erasing always starts off and is
+confirmed by name. The rail previews the launcher and turns the choices into a
+numbered plan with a time estimate; the write happens in the same window, as a
+log that ticks itself off. Artwork by file picker or SteamGridDB, per-cartridge
+Windows tuning.
 
 ### `watcher/` — both platforms, 6 tests
 
@@ -197,19 +199,27 @@ Ranked by how much it matters.
    per-machine settings will start at its defaults the first time on each host,
    and on exFAT any game that creates a symlink inside its config directory will
    fail to, the filesystem having none.
-5. **`auto_launch_game` counts launches but not hours.** The launcher starts
-   the game and exits, so there is no process left to re-stamp the heartbeat —
-   measuring a session needs a launcher that stays up, which is what the window
-   is. The session is closed at once rather than abandoned, so the cartridge is
-   not left carrying a record that never advances. Fixing it properly means
-   watching the game's process, which is what `busy` now knows how to do.
-6. **`notify_only` on Windows needs the watcher.** A toast there needs a
-   resident application with a registered identity, and the launcher is a
-   process that exists for ten seconds, so the launcher hands the text to the
-   watcher's window with `WM_COPYDATA` and the watcher posts it as a balloon from
-   its tray icon. No watcher, or a watcher with no icon, and the window opens
-   instead — checked on hardware both ways on 2026-09-12. It is a balloon, not a
-   toast: it has no action button, and Focus Assist hides it like any other.
+5. **`auto_launch_game` counts launches but not hours.** It only ever starts a
+   `steam://`-class URI, which is somebody else's launcher's child and not ours,
+   so there is nothing to wait on and no process left to re-stamp the heartbeat.
+   The session is closed at once rather than abandoned, so the cartridge is not
+   left carrying a record that never advances. Fixing it means watching a process
+   this launcher did not start, which is what `busy` now knows how to find.
+
+   A game the cartridge *carries* is a different case and is now measured
+   properly: the launcher started it, so it waits for it, and the session ends
+   when the game does rather than when the window closes.
+6. **`notify_only` on Windows has not been seen working on Windows.** It used
+   to do nothing there at all — not the notification, and not the window it was
+   documented as falling back to. It now posts a notification-area balloon from
+   a message-only window it creates for the purpose, which is the mechanism that
+   works from a process with no window and no registered identity; a real toast
+   needs an `AppUserModelID` against an installed shortcut, and this project
+   installs by unzipping into `%LOCALAPPDATA%`. The Linux path is tested against
+   a fake `notify-send`. The Windows path compiles and is unverified on
+   hardware — it is about a hundred lines of Win32 that no test here can reach.
+   A notification that cannot be posted now opens the window, which is what the
+   old comment claimed and the old code did not do.
 7. **The unmount guard has never met a real running game.** It is tested
    against child processes this repository spawns — one holding an open file,
    one ignoring the polite signal and needing to be killed — and against this

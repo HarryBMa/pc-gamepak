@@ -95,7 +95,27 @@ pub struct OpenSession {
     /// and plugged into another, where the second one settles the first one's
     /// session.
     pub host: String,
+    /// Seconds actually played so far, as the tracker counts them — the game
+    /// seen running and somebody at the controls. Absent in a record written
+    /// before the tracker existed, which settles the old way, by wall clock.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub played: Option<u64>,
 }
+
+/// One finished session, for the history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SessionRecord {
+    /// Unix seconds when Play was pressed.
+    pub started: u64,
+    /// Seconds played.
+    pub seconds: u64,
+    /// Which machine.
+    pub host: String,
+}
+
+/// How many sessions a game keeps in the stats file. Newest are kept.
+pub const MAX_HISTORY: usize = 200;
 
 /// One game's history, across every host that has played it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +135,24 @@ pub struct GameStats {
     /// The machine that recorded `last_played`, so "where did I leave off" has
     /// an answer. Best-effort and cosmetic: an empty string is fine.
     pub last_host: String,
+    /// Finished sessions, oldest first, capped at [`MAX_HISTORY`].
+    pub sessions: Vec<SessionRecord>,
+}
+
+impl GameStats {
+    /// Add a finished session to the total and the history.
+    fn add_session(&mut self, started: u64, seconds: u64, host: &str) {
+        self.seconds = self.seconds.saturating_add(seconds);
+        self.sessions.push(SessionRecord {
+            started,
+            seconds,
+            host: host.to_string(),
+        });
+        let excess = self.sessions.len().saturating_sub(MAX_HISTORY);
+        if excess > 0 {
+            self.sessions.drain(..excess);
+        }
+    }
 }
 
 /// A launch that has been counted and whose duration is still running.
@@ -242,6 +280,7 @@ pub fn record_launch(root: &Path, executable: &str, title: &str) -> Result<Sessi
         started: now,
         heartbeat: now,
         host,
+        played: None,
     });
     write(root, &stats)?;
 
@@ -260,6 +299,19 @@ pub fn record_launch(root: &Path, executable: &str, title: &str) -> Result<Sessi
 /// names this session, is not an error worth surfacing — the session is simply
 /// no longer being counted.
 pub fn touch_session(session: &Session) -> Result<(), String> {
+    touch(session, None)
+}
+
+/// A heartbeat that also records how much of the session was play.
+///
+/// What the tracker calls: a crash after this point is settled with the
+/// seconds counted here, not the wall-clock time since Play — which would count
+/// the hour the game sat paused as an hour played.
+pub fn touch_session_played(session: &Session, played: u64) -> Result<(), String> {
+    touch(session, Some(played))
+}
+
+fn touch(session: &Session, played: Option<u64>) -> Result<(), String> {
     let mut stats = read(&session.root);
     let Some(open) = stats.open_session.as_mut() else {
         return Ok(());
@@ -269,6 +321,9 @@ pub fn touch_session(session: &Session) -> Result<(), String> {
         return Ok(());
     }
     open.heartbeat = now_unix();
+    if played.is_some() {
+        open.played = played;
+    }
     write(&session.root, &stats)
 }
 
@@ -299,12 +354,12 @@ pub fn recover(root: &Path) -> Option<u64> {
 fn settle(stats: &mut Stats) -> Option<u64> {
     let open = stats.open_session.take()?;
     let played = open
-        .heartbeat
-        .saturating_sub(open.started)
+        .played
+        .unwrap_or_else(|| open.heartbeat.saturating_sub(open.started))
         .min(MAX_SESSION_SECONDS);
     if played > 0 {
         let entry = stats.games.entry(open.key).or_default();
-        entry.seconds = entry.seconds.saturating_add(played);
+        entry.add_session(open.started, played, &open.host);
     }
     Some(played)
 }
@@ -317,9 +372,14 @@ fn settle(stats: &mut Stats) -> Option<u64> {
 /// around a `u64`, and no single session may contribute more than
 /// [`MAX_SESSION_SECONDS`].
 pub fn record_session_end(session: &Session) -> Result<u64, String> {
-    let played = now_unix()
-        .saturating_sub(session.started_unix)
-        .min(MAX_SESSION_SECONDS);
+    let played = now_unix().saturating_sub(session.started_unix);
+    record_session_played(session, played)
+}
+
+/// Close a session with the seconds the tracker counted, rather than the wall
+/// clock since Play.
+pub fn record_session_played(session: &Session, played: u64) -> Result<u64, String> {
+    let played = played.min(MAX_SESSION_SECONDS);
     if played == 0 {
         return Ok(0);
     }
@@ -345,7 +405,7 @@ pub fn record_session_end(session: &Session) -> Result<u64, String> {
         stats.open_session = None;
     }
     let entry = stats.games.entry(session.key.clone()).or_default();
-    entry.seconds = entry.seconds.saturating_add(played);
+    entry.add_session(session.started_unix, played, &host_name());
     write(&session.root, &stats)?;
     Ok(played)
 }
@@ -456,6 +516,50 @@ mod tests {
         let scratch = Scratch::new("stats-corrupt");
         scratch.write(".gamepak/stats.json", b"{ this is not json");
         assert_eq!(read(scratch.path()).games.len(), 0);
+    }
+
+    #[test]
+    fn a_crash_is_settled_with_what_was_played_not_what_elapsed() {
+        // Two hours on the clock, of which forty minutes were play: the game
+        // sat paused for the rest, and the tracker said so at its heartbeat.
+        let scratch = Scratch::new("stats-played");
+        let session = record_launch(scratch.path(), "x://1", "X").expect("record");
+        touch_session_played(&session, 2400).expect("heartbeat");
+        ran_for(scratch.path(), 7200);
+        drop(session);
+
+        assert_eq!(recover(scratch.path()), Some(2400));
+        assert_eq!(for_game(scratch.path(), "x://1").seconds, 2400);
+    }
+
+    #[test]
+    fn every_finished_session_goes_into_the_history() {
+        let scratch = Scratch::new("stats-history");
+        let first = record_launch(scratch.path(), "x://1", "X").expect("record");
+        record_session_played(&first, 600).expect("close");
+        let second = record_launch(scratch.path(), "x://1", "X").expect("record");
+        record_session_played(&second, 1200).expect("close");
+
+        let game = for_game(scratch.path(), "x://1");
+        assert_eq!(game.seconds, 1800);
+        let lengths: Vec<u64> = game.sessions.iter().map(|s| s.seconds).collect();
+        assert_eq!(lengths, vec![600, 1200]);
+        assert_eq!(game.sessions[0].started, first.started_unix());
+    }
+
+    #[test]
+    fn the_history_keeps_the_newest() {
+        let mut game = GameStats::default();
+        for i in 0..(MAX_HISTORY as u64 + 5) {
+            game.add_session(i, 1, "h");
+        }
+        assert_eq!(game.sessions.len(), MAX_HISTORY);
+        assert_eq!(game.sessions[0].started, 5);
+        assert_eq!(
+            game.seconds,
+            MAX_HISTORY as u64 + 5,
+            "the total keeps everything"
+        );
     }
 
     #[test]
@@ -625,6 +729,7 @@ mod tests {
             started: now - 3600,
             heartbeat: now - 60,
             host: "workshop".to_string(),
+            played: None,
         });
         write(scratch.path(), &stats).expect("seed");
 
@@ -702,6 +807,7 @@ mod tests {
                 first_played: 1_700_000_000,
                 last_played: 1_700_003_600,
                 last_host: "deck".into(),
+                sessions: Vec::new(),
             },
         );
         write(scratch.path(), &carried).expect("seed");

@@ -23,7 +23,7 @@ It is read by the backend, capped at 256 KB, and inlined into the window as
 text — the window never opens a path on the drive, which is the same arrangement
 the artwork already had.
 
-Fifteen worked examples are in [`skins/`](skins/). Copy one and edit it.
+Fourteen worked examples are in [`skins/`](skins/). Copy one and edit it.
 
 **What this trades away.** A stylesheet cannot run code, but it can move, cover
 and restyle anything on screen, including making Eject look like Play or putting
@@ -75,19 +75,32 @@ then the game's cover, then the cartridge's, then the game's initials. A row is
 that game, so it takes that game's picture and stops — otherwise a grid of ten
 shortcuts is ten copies of one cover.
 
-`--skin-logo: auto` is the stock behaviour: a single game prints its logo
-instead of the heading, and a collection's logo names the collection rather than
-the pick, so it goes to `#cart-mark` in the corner and the heading names the
-game. `game` prints the **selected game's** logo instead of the heading on a
-collection too, following the rail as it moves — pair it with `--skin-art: hero`
-and `--skin-row-art: grid` and you have a couch launcher. `none` keeps the
-heading as type. Whenever a logo is printed, `#stage` gains `.has-logo` and the
+`--skin-logo: auto` is the stock behaviour: a game prints its own logo instead
+of the heading — on a collection the **selected game's**, following the rail as
+it moves, and a game with no logo keeps the heading. The collection's own logo
+names the collection, not the pick, so it is never printed over a game; it goes
+to `#cart-mark` in the corner. `game` is the same except that a game with no logo
+borrows the collection's — pair it with `--skin-art: hero` and
+`--skin-row-art: grid` and you have a couch launcher. `none` keeps the heading
+as type. Whenever a logo is printed, `#stage` gains `.has-logo` and the
 base hides `#game-title`, so nothing repeats the name.
 
 `icon` is really `autorun.inf`'s and is 256px, so it makes a poor fill. It is on
 the list because a skin maker with a reason is better served by having it.
 
 ---
+
+**The unboxing.** The first time a PC sees a cartridge, the launcher opens it
+like a new game: `#unbox` shows the box (`.unbox__lid` with the cover as
+`.unbox__front` and the shrink-wrap gloss as `.unbox__wrap`), the lid swings
+open, and `.unbox__cart` — ridges, then a `.unbox__label` carrying the art, the
+logo or the title — lifts out before the cartridge seats. It plays once per
+cartridge per machine; any key, click or pad button skips it. A skin can restyle
+any of those parts, or turn it off:
+
+```css
+:root { --skin-unbox: none; }
+```
 
 ## The markup a skin styles
 
@@ -140,7 +153,7 @@ A row in `#game-list`, built at runtime:
 │                                 holding the game's initials when it has no picture
 ├── .game-row__body
 │   ├── .game-row__title
-│   └── .game-row__meta           size, only for a game whose files are on the cartridge
+│   └── .game-row__meta           empty in the stock look; the row's data-size carries the band
 └── .game-row__dot                lit for the selected row
 ```
 
@@ -205,6 +218,62 @@ class, so it beat every skin's `#scrim-bottom` and blacked out the whole window
 the moment a cartridge held more than one game. Both that and the long-title
 squeeze now set variables the one-id rule reads. If you find a state that still
 wins against you, that is a bug in the base, not something to out-specify.
+
+---
+
+## Play stats
+
+What the cartridge has recorded about each game — playtime, launches, when it
+was last played, and HowLongToBeat's estimate if the cartridge was written with
+one — lives in `cartridge.conf` (see the [manual](MANUAL.md#hours-and-saves-that-travel)).
+A skin cannot read files, so the launcher reads it and hands it over three ways.
+
+**Custom properties**, on `#card` for the game Play will start and on each
+`.game-row` for its own game. Strings are quoted, for `content:`; the `-hours`
+and `--progress` values are bare numbers, for `calc()`:
+
+| Property | Example | |
+|---|---|---|
+| `--playtime` | `"13 h 12 min"` | empty under a minute |
+| `--playtime-hours` | `13.20` | |
+| `--launches` | `9` | a number: `counter-reset: n var(--launches)` prints it |
+| `--last-played` | `"2 days ago"` | empty if never |
+| `--hltb-main` `--hltb-extra` `--hltb-complete` | `"21 h"` | empty without an estimate |
+| `--hltb-main-hours` | `21.00` | `0` without one |
+| `--progress` | `0.629` | playtime ÷ main story, capped at 1; `0` without an estimate |
+
+**Data attributes**, on the same elements, for a skin that wants cases rather
+than a scale:
+
+| Attribute | Values |
+|---|---|
+| `data-progress` | `new` (never played), `unknown` (no estimate), `started` under half, `halfway` under 90%, `nearly`, `beaten` |
+| `data-played` | `yes` `no` |
+| `data-hltb` | `yes` `no` |
+
+**What the cartridge is for.** `#card` carries `data-platform`, the
+cartridge's `platform=` in lower case — `pc` when it does not say. A skin that
+dresses a Super Nintendo cartridge differently from a PC game box keys on it:
+
+```css
+#card[data-platform="snes"] #plate { border-radius: 4px 4px 18px 18px }
+```
+
+The names are listed in `cartridge.conf.example`.
+
+**A stats line**, `#play-stats`, under the title — hidden in the stock window,
+because the details sheet already says all of it. Show it and style it:
+
+```css
+#play-stats { display: flex }             /* 13 h 12 min  of ~21 h  · 2 days ago */
+.play-stats__fill { background: gold }    /* the progress bar, sized by --progress */
+.game-row::after { content: var(--playtime) }        /* each row's own hours */
+.game-row[data-progress="beaten"] .game-row__title::after { content: " ✓" }
+```
+
+Its parts are `.play-stats__time`, `.play-stats__beat`, `.play-stats__last` and
+`.play-stats__bar` holding `.play-stats__fill`. The bar hides itself when there
+is no estimate.
 
 ---
 
@@ -333,4 +402,4 @@ window closes on eject, so this is the only way to see inside it.
 The examples in [`skins/`](skins/) are the other reference, and they are worth
 reading in the order they diverge from the stock window: `cozy` recolours it,
 `luna` and `bricolage` rebuild it as a document, `akihabara` and `phantom` move
-the furniture, and `arcade` and `cyberpunk` change what shape the list is.
+the furniture, and `cyberpunk` changes what shape the list is.

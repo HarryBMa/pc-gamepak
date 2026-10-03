@@ -1,0 +1,24 @@
+[package]
+name = "pc-gamepak-iced"
+version = "0.1.0"
+edition = "2021"
+description = "Experimental native launcher for PC GamePak, built with Iced on the shared core"
+license = "MIT"
+
+[[bin]]
+name = "pc-gamepak-iced"
+path = "src/main.rs"
+
+[dependencies]
+# Everything the launcher does — reading a cartridge, starting a game, taking
+# the volume away, syncing saves — is core's, shared with the Tauri launcher.
+gamepak-core = { path = "../core" }
+iced = { version = "0.14", features = ["image", "tokio"] }
+# Controllers, cross-platform (XInput / evdev / IOKit), for a launcher that has
+# to work from a sofa as well as a desk.
+gilrs = "0.11"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

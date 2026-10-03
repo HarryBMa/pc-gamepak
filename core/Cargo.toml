@@ -38,13 +38,30 @@ windows-sys = { version = "0.52", features = [
     # SHChangeNotify, to tell Explorer the drive's icon has changed. Without it
     # a rewritten cartridge keeps the icon Explorer cached the first time.
     "Win32_UI_Shell",
-    # busy.rs walks the process list to find what is running from the cartridge:
-    # the snapshot comes from ToolHelp, the image path from Threading.
+    # Asking which programs are running before a volume is taken away:
+    # CreateToolhelp32Snapshot walks the process list, and OpenProcess plus
+    # QueryFullProcessImageNameW turn a pid into the path of its executable.
+    # Both were used without being enabled, which compiles on Linux, where the
+    # whole module is behind a cfg, and fails on Windows only.
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Threading",
+    # Posting a cartridge-arrival balloon from a process with no window: the
+    # message-only window the notification area's icon belongs to, and the
+    # message pump that has to run while the balloon is up.
+    "Win32_UI_WindowsAndMessaging",
+    # How long since the last input, for the playtime tracker's idle pause:
+    # GetLastInputInfo against GetTickCount for the keyboard and mouse, and
+    # XInput for pads, which the first cannot see.
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Input_XboxController",
+    # Ejecting, moved here from the launcher: CM_Request_Device_Eject and the
+    # SetupDi walk from a disk number to its device node, and ShellExecuteExW
+    # for the elevated retry (its info struct carries an HKEY, hence Registry).
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_System_Registry",
     # health.rs asks the hub a cartridge is plugged into what speed it
     # negotiated: the hub's interface path from cfgmgr32, the answer from a USB
     # IOCTL.
-    "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_Devices_Usb",
 ] }

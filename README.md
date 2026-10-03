@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/icon.png" width="96" alt="" />
+<img src="docs/pc-gamepak-logo_0004_Lager-1.png" height="120" alt="" />
 
 # PC GamePak
 
@@ -22,6 +22,7 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 [![Works offline](https://img.shields.io/badge/Works-offline-2e7d52)](docs/MANUAL.md)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](#build-from-source)
 [![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8B8?logo=tauri&logoColor=white)](#build-from-source)
+[![iced](https://img.shields.io/badge/iced-red?logo=iced&logoColor=white)](#build-from-source)
 
 <img width="560" alt="A cartridge going into a USB-C port and the launcher opening with it" src="docs/cartridge-demo.gif" />
 
@@ -38,9 +39,11 @@ are no scripts to write and nothing to allowlist, because **nothing on a
 cartridge is ever executed automatically** — pressing Play is the gate.
 
 <div align="center">
-<img width="380" alt="The launcher showing one game: cover art filling the window, the title over it, and a wide Play button beside an eject icon" src="docs/launcher.png" />
+<img width="260" alt="The launcher showing Dave the Diver: cover art filling the window, the game's logo over it, and a wide Play button beside an eject icon" src="docs/launcher.png" />
 &nbsp;
-<img width="380" alt="The launcher showing a collection: a rail of games down the window with the selected one's art behind" src="docs/launcher-bundle.png" />
+<img width="260" alt="The launcher showing a two-game XCOM collection: the collection's logo in the corner, a rail of games, and the selected game's logo over one Play button" src="docs/launcher-bundle.png" />
+&nbsp;
+<img width="260" alt="The memory card view: each save as a game case on a shelf, the chosen one turned round on the stage below with when it was saved and how much it holds" src="docs/memcard.png" />
 </div>
 
 ## Features
@@ -59,7 +62,7 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   so do the arrow keys, Enter, `E` and `I`.
 - **Skinnable, by the cartridge.** A `.gamepak/skin.css` on the drive restyles
   the launcher — its size, layout, and which of the four artworks it shows in
-  each place. Fifteen worked examples with screenshots in
+  each place. Fourteen worked examples with screenshots in
   [docs/skins/](docs/skins/); [SKINNING.md](docs/SKINNING.md) is the reference.
 - **Artwork from SteamGridDB**, optional and off until you add a key. Covers,
   heroes, logos and icons are written onto the cartridge, so it looks the same
@@ -76,6 +79,13 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   kept beside it. A game the cartridge *carries* needs none of that: one line
   gives it its whole home directory on the drive, and every save it writes goes
   there whether or not anyone knew where it would put them.
+- **Memory cards.** A drive with a `memorycard.conf` carries saves and no
+  games: plug it in and every save shows as a block, the way a console's memory
+  card browser showed them, with which copy is newer and a button to copy it
+  either way. The wizard makes one — it finds where each game saves from
+  [Ludusavi](https://github.com/mtkennerly/ludusavi-manifest)'s list if you
+  switch that on, or you point at the folder. A cartridge can be a *combo drive*
+  too, and keep its memory card one button away.
 - **Not an NFC project.** If you want to tap a card, a toy or a QR code to
   launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
   platforms and this does not do it at all.
@@ -92,13 +102,21 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 | macOS | Not yet — the drive layer needs a rewrite |
 
 Any removable drive works: NVMe in a USB enclosure, a portable SSD, or a USB
-stick. NTFS by default — it is the only one of the three that can hold the
-symlinks Steam needs to install Proton onto a cartridge; exFAT when a Mac has to
-write to the drive, btrfs for Linux-only cartridges.
+stick. NTFS by default — the one format that both Windows and Linux write and
+that holds the symlinks Steam needs to install Proton onto a cartridge. exFAT
+when a Mac has to write to the drive, btrfs for Linux-only cartridges, and five
+more in the picker for a cartridge that only ever meets one kind of machine.
 
 ## Install
 
-**Windows** — [Scoop](https://scoop.sh), which is the one that works today:
+**Windows** — [WinGet](https://github.com/microsoft/winget-pkgs), which does
+the lot:
+
+```powershell
+winget install HarryBMa.PCGamePak
+```
+
+Or [Scoop](https://scoop.sh):
 
 ```powershell
 scoop bucket add harrybma https://github.com/HarryBMa/scoop-bucket
@@ -113,9 +131,7 @@ powershell -ExecutionPolicy Bypass -File "$(scoop prefix pc-gamepak)\windows\ins
 ```
 
 Or take the installer from
-[Releases](https://github.com/HarryBMa/pc-gamepak/releases) and skip Scoop
-entirely. A [WinGet](https://github.com/microsoft/winget-pkgs) package is in
-review; once it lands, `winget install HarryBMa.PCGamePak` does the lot.
+[Releases](https://github.com/HarryBMa/pc-gamepak/releases).
 
 **Linux** — the pacman package is written and tested, and waiting on the AUR
 reopening registrations. Building it by hand is a clone and a command:
@@ -142,7 +158,7 @@ registering the drive with Steam.
 Then plug the cartridge in. The launcher opens; press Play.
 
 <div align="center">
-<img width="560" alt="The cartridge wizard: a list of installed games on the left and the target drive on the right" src="docs/wizard.png" />
+<img width="560" alt="The cartridge wizard editing Dave the Diver: the drive, name, options including the platform, the four artwork slots and the game on the left, and a preview of the launcher on the right" src="docs/wizard.png" />
 </div>
 
 To write one by hand, put a `cartridge.conf` at the drive's root:
@@ -174,7 +190,7 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 ## More
 
 [Installing on Linux](docs/INSTALL.md) · [The manual](docs/MANUAL.md) ·
-[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) ·
+[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) · [Tauri and Iced](docs/ICED.md) ·
 [Where the project is](docs/STATUS.md) · [What changed](CHANGELOG.md) ·
 [Contributing](CONTRIBUTING.md)
 
