@@ -228,8 +228,11 @@ checksum names an artefact, so it cannot be written until the artefact exists.
 10. **Scoop** needs nothing: `checkver` and `autoupdate` in
    [HarryBMa/scoop-bucket](https://github.com/HarryBMa/scoop-bucket) read the
    `.sha256` themselves.
-11. **WinGet** via `wingetcreate` for a first submission, the `winget-releaser`
-    action thereafter. **AUR** from the tarball with the real checksum — the
+11. **WinGet** needs nothing either: publishing the draft runs
+    `.github/workflows/winget.yml`, which opens the pull request on
+    microsoft/winget-pkgs. It needs a fork of winget-pkgs on the owner's account
+    and a classic `public_repo` token in the `WINGET_TOKEN` secret; a release it
+    missed can be sent again from Actions → winget → Run workflow. **AUR** from the tarball with the real checksum — the
     plain name, since the `-git` suffix is what the AUR reserves for a package
     tracking a branch.
 
