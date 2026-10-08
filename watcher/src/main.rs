@@ -154,7 +154,6 @@ mod windows_watcher {
 
     pub fn run() {
         crate::log::line("watcher starting");
-        crate::nfc::start();
 
         // Every logon starts this fresh, and a crash-restart from the
         // scheduled task can overlap the old instance for a moment — without
@@ -168,6 +167,7 @@ mod windows_watcher {
         }
 
         *SEEN.lock().expect("no other thread to poison it") = Some(HashMap::new());
+        crate::nfc::start();
 
         let class_name = wide("PcCartridgeWatcher");
 

@@ -89,8 +89,8 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 - **Tap to select a GamePak.** Write its stable ID as an NDEF URI and use a
   PC/SC-compatible PN532 reader. The card selects the launcher entry; Play is
   still required to start the game.
-- **Works offline.** Nothing phones home. The only network call is the artwork
-  lookup you asked for.
+- **Works offline.** Nothing phones home. Network use is limited to optional
+  artwork lookup and any Wake-on-LAN/readiness checks you configure for a host.
 
 ## Supported platforms
 

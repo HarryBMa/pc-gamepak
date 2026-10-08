@@ -97,17 +97,24 @@ pub fn id_from_ndef(message: &[u8]) -> Result<GamePakId, String> {
                 if prefix == 0 {
                     let uri = std::str::from_utf8(body)
                         .map_err(|_| "NDEF URI is not valid UTF-8".to_string())?;
-                    if let Some(id) = uri.strip_prefix("gamepak://") {
-                        if id.contains(['/', '?', '#']) {
-                            return Err("GamePak URI must contain only a GamePak ID".into());
-                        }
-                        return GamePakId::parse(id);
-                    }
-                    if uri
+                    let gamepak_id = if let Some(id) = uri.strip_prefix("gamepak://") {
+                        Some(id)
+                    } else if uri
                         .get(..10)
                         .is_some_and(|scheme| scheme.eq_ignore_ascii_case("gamepak://"))
                     {
-                        return GamePakId::parse(&uri[10..]);
+                        Some(&uri[10..])
+                    } else {
+                        None
+                    };
+                    if let Some(id) = gamepak_id {
+                        if id.contains(['/', '?', '#']) {
+                            return Err("GamePak URI must contain only a GamePak ID".into());
+                        }
+                        if !end || cursor != message.len() {
+                            return Err("GamePak URI must be the only NDEF record".into());
+                        }
+                        return GamePakId::parse(id);
                     }
                 }
             }
@@ -346,5 +353,24 @@ mod tests {
         assert!(chunks
             .iter()
             .all(|part| *part == [0x00, 0x11, 0x22, 0x33, 0x44, 0x55]));
+    }
+
+    #[test]
+    fn resolves_a_registered_gamepak_directory() {
+        let scratch = crate::testutil::Scratch::new("nfc-registry");
+        let root = scratch.path().join("games/demo");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("cartridge.conf"), "title=Demo\n").unwrap();
+        let registry = scratch.path().join("gamepaks.json");
+        std::fs::write(
+            &registry,
+            r#"{"gamepaks":[{"id":"gp_demo","path":"games/demo"}]}"#,
+        )
+        .unwrap();
+        let id = GamePakId::parse("gp_demo").unwrap();
+        assert_eq!(
+            resolve_from(&registry, &id).unwrap(),
+            root.canonicalize().unwrap()
+        );
     }
 }

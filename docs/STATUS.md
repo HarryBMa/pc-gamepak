@@ -69,7 +69,7 @@ numbered plan with a time estimate; the write happens in the same window, as a
 log that ticks itself off. Artwork by file picker or SteamGridDB, per-cartridge
 Windows tuning.
 
-### `watcher/` — both platforms, 6 tests
+### `watcher/` — both platforms, 15 tests
 
 **Windows:** a hidden top-level window blocking on `WM_DEVICECHANGE`. No polling,
 no timer, about 2 MB resident.

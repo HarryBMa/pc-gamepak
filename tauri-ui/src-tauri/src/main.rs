@@ -13,7 +13,7 @@
 //   pc-gamepak --drive <path> --safe-eject [--force]  eject, report on stdout
 //
 // Launcher commands:
-//   drive_path()                             -> String
+//   drive_path()                             -> String | error
 //   parse_cartridge(drive_path)              -> CartridgeInfo (cover included)
 //   launch_game(executable, drive_path)      -> ()
 //   eject_drive(drive_path)                  -> ()   (refuses while in use)
@@ -112,7 +112,7 @@ fn parse_cartridge(drive_path: String) -> Result<CartridgeInfo, String> {
 async fn drive_path() -> Result<String, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(index) = args.iter().position(|arg| arg == "--nfc-ndef") else {
-        return Ok(cartridge::drive_from_args(args));
+        return Ok(cartridge::drive_from_args(args.into_iter()));
     };
     let encoded = args
         .get(index + 1)
