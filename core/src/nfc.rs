@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const NDEF_HEX_LIMIT: usize = 8192;
 
@@ -129,6 +129,17 @@ pub fn id_from_ndef(message: &[u8]) -> Result<GamePakId, String> {
     Err("NDEF message is incomplete".into())
 }
 
+pub fn ndef_uri(id: &str) -> Result<Vec<u8>, String> {
+    let id = GamePakId::parse(id)?;
+    let uri = format!("gamepak://{}", id.as_str());
+    let payload_len = uri.len() + 1;
+    let payload_len = u8::try_from(payload_len)
+        .map_err(|_| "GamePak URI is too long for an NDEF short record".to_string())?;
+    let mut message = vec![0xd1, 0x01, payload_len, b'U', 0];
+    message.extend_from_slice(uri.as_bytes());
+    Ok(message)
+}
+
 fn take_byte(message: &[u8], cursor: &mut usize) -> Result<u8, String> {
     let byte = *message
         .get(*cursor)
@@ -157,13 +168,13 @@ fn take_bytes<'a>(
     Ok(bytes)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Registry {
     #[serde(default)]
     gamepaks: Vec<Entry>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Entry {
     id: String,
@@ -172,10 +183,12 @@ struct Entry {
     host: Option<Host>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Host {
+    #[serde(skip_serializing_if = "Option::is_none")]
     wake_on_lan: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     ready_address: Option<String>,
 }
 
@@ -217,6 +230,85 @@ fn entries(registry: &Path) -> Result<Vec<Entry>, String> {
         }
     }
     Ok(parsed.gamepaks)
+}
+
+pub fn register_from(
+    registry: &Path,
+    id: &str,
+    path: &Path,
+    wake_on_lan: Option<&str>,
+    ready_address: Option<&str>,
+) -> Result<(), String> {
+    let id = GamePakId::parse(id)?;
+    let path = path
+        .canonicalize()
+        .map_err(|error| format!("GamePak path {} is unavailable: {error}", path.display()))?;
+    if !path.is_dir()
+        || !(path.join("cartridge.conf").is_file() || path.join("autorun.inf").is_file())
+    {
+        return Err("selected folder does not contain a GamePak manifest".into());
+    }
+    let host = match (wake_on_lan, ready_address) {
+        (None, None) => None,
+        (Some(mac), Some(address)) => {
+            magic_packet(mac)?;
+            address
+                .parse::<SocketAddr>()
+                .map_err(|_| format!("invalid host readiness address: {address}"))?;
+            Some(Host {
+                wake_on_lan: Some(mac.to_owned()),
+                ready_address: Some(address.to_owned()),
+            })
+        }
+        _ => return Err("provide both Wake-on-LAN and readiness address, or neither".into()),
+    };
+
+    let mut gamepaks = if registry.exists() {
+        entries(registry)?
+    } else {
+        Vec::new()
+    };
+    if let Some(existing) = gamepaks.iter_mut().find(|entry| entry.id == id.as_str()) {
+        let existing_path = if existing.path.is_absolute() {
+            existing.path.clone()
+        } else {
+            registry
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(&existing.path)
+        };
+        let existing_path = existing_path.canonicalize().map_err(|error| {
+            format!(
+                "registered GamePak path {} is unavailable: {error}",
+                existing_path.display()
+            )
+        })?;
+        if existing_path != path {
+            return Err(format!(
+                "GamePak ID {} is already registered to another folder",
+                id.as_str()
+            ));
+        }
+        existing.host = host;
+    } else {
+        gamepaks.push(Entry {
+            id: id.as_str().to_owned(),
+            path,
+            host,
+        });
+    }
+
+    if let Some(parent) = registry.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let bytes = serde_json::to_vec_pretty(&Registry { gamepaks })
+        .map_err(|error| format!("could not serialize GamePak registry: {error}"))?;
+    std::fs::write(registry, bytes).map_err(|error| {
+        format!(
+            "could not write GamePak registry {}: {error}",
+            registry.display()
+        )
+    })
 }
 
 pub fn resolve_from(registry: &Path, id: &GamePakId) -> Result<PathBuf, String> {
@@ -327,6 +419,13 @@ mod tests {
     }
 
     #[test]
+    fn creates_an_ndef_uri_for_a_gamepak_id() {
+        let message = ndef_uri("gp_demo").unwrap();
+        assert_eq!(id_from_ndef(&message).unwrap().as_str(), "gp_demo");
+        assert!(ndef_uri("not-an-id").is_err());
+    }
+
+    #[test]
     fn rejects_invalid_identifiers_and_uris() {
         assert!(GamePakId::parse("gp_").is_err());
         assert!(GamePakId::parse("gp_Upper").is_err());
@@ -372,5 +471,25 @@ mod tests {
             resolve_from(&registry, &id).unwrap(),
             root.canonicalize().unwrap()
         );
+    }
+
+    #[test]
+    fn registers_a_gamepak_and_refuses_to_reassign_its_id() {
+        let scratch = crate::testutil::Scratch::new("nfc-register");
+        let root = scratch.path().join("games/demo");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("cartridge.conf"), "title=Demo\n").unwrap();
+        let other = scratch.path().join("games/other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("cartridge.conf"), "title=Other\n").unwrap();
+        let registry = scratch.path().join("state/gamepaks.json");
+
+        register_from(&registry, "gp_demo", &root, None, None).unwrap();
+        let id = GamePakId::parse("gp_demo").unwrap();
+        assert_eq!(
+            resolve_from(&registry, &id).unwrap(),
+            root.canonicalize().unwrap()
+        );
+        assert!(register_from(&registry, "gp_demo", &other, None, None).is_err());
     }
 }
