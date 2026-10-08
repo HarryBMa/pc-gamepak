@@ -24,6 +24,9 @@
  *   suggest_collection_name({ titles }) -> string
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
+ *   nfc_readers()                     -> [reader name]
+ *   register_nfc_gamepak(...)          -> ()
+ *   write_nfc_card(reader_name, id)     -> ()
  *   create_cartridge({ request })    -> { confPath, formatted, gameCopied, ... }
  *
  * The backend re-derives the list of writable drives and re-checks the format
@@ -134,6 +137,16 @@ const el = {
   tabCreated: $("tab-created"),
   tabMemcard: $("tab-memcard"),
   panelMemcard: $("panel-memcard"),
+  tabNfc: $("tab-nfc"),
+  panelNfc: $("panel-nfc"),
+  nfcDrive: $("nfc-drive"),
+  nfcId: $("nfc-id"),
+  nfcUri: $("nfc-uri"),
+  nfcWol: $("nfc-wol"),
+  nfcReadyAddress: $("nfc-ready-address"),
+  nfcReader: $("nfc-reader"),
+  nfcStatus: $("nfc-status"),
+  nfcWrite: $("btn-nfc-write"),
   optMemcard: $("opt-memcard"),
   editMemcard: $("edit-memcard"),
   optPlatform: $("opt-platform"),
@@ -2778,7 +2791,7 @@ function applyDefaults() {
    Create / Edit
    ========================================================================== */
 
-const TABS = ["create", "edit", "created", "memcard"];
+const TABS = ["create", "edit", "created", "memcard", "nfc"];
 
 /**
  * Which panel is showing. The rail belongs to Create and Edit and never moves;
@@ -2793,14 +2806,23 @@ async function showTab(name) {
     [el.tabEdit, el.panelEdit, "edit"],
     [el.tabCreated, el.panelCreated, "created"],
     [el.tabMemcard, el.panelMemcard, "memcard"],
+    [el.tabNfc, el.panelNfc, "nfc"],
   ]) {
     const on = id === activeTab;
     tab.setAttribute("aria-selected", String(on));
     tab.tabIndex = on ? 0 : -1;
     panel.hidden = !on;
   }
-  el.columns.classList.toggle("is-shelf", activeTab === "created" || activeTab === "memcard");
+  el.columns.classList.toggle(
+    "is-shelf",
+    activeTab === "created" || activeTab === "memcard" || activeTab === "nfc",
+  );
 
+  if (activeTab === "nfc") {
+    el.barText.textContent = "NFC cards";
+    await openNfcPage();
+    return;
+  }
   if (activeTab === "memcard") {
     el.barText.textContent = "Memory card";
     await openMemcardPage();
@@ -3393,6 +3415,123 @@ async function openMemcardPage() {
   await loadMemcardDrive();
 }
 
+let nfcIdTouched = false;
+
+function suggestNfcId(title) {
+  const slug = String(title || "gamepak")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");
+  return `gp_${slug || "gamepak"}`;
+}
+
+function updateNfcUri() {
+  const id = el.nfcId.value.trim();
+  el.nfcUri.textContent = id ? `gamepak://${id}` : "gamepak://gp_…";
+  el.nfcWrite.disabled =
+    !el.nfcDrive.value ||
+    !el.nfcReader.value ||
+    !/^gp_[a-z0-9_-]{1,64}$/.test(id) ||
+    Boolean(el.nfcWol.value.trim()) !== Boolean(el.nfcReadyAddress.value.trim());
+}
+
+async function openNfcPage() {
+  el.nfcStatus.textContent = "";
+  await refreshDrives({ quick: true });
+  const available = drives.filter((drive) => drive.hasCartridge);
+  const previous = el.nfcDrive.value;
+  el.nfcDrive.replaceChildren();
+  const drivePlaceholder = document.createElement("option");
+  drivePlaceholder.value = "";
+  drivePlaceholder.textContent = available.length ? "Choose a cartridge…" : "No mounted GamePaks";
+  el.nfcDrive.append(drivePlaceholder);
+  for (const drive of available) {
+    const option = document.createElement("option");
+    option.value = drive.path;
+    option.textContent = drive.cartridgeTitle || drive.label || drive.path;
+    el.nfcDrive.append(option);
+  }
+  el.nfcDrive.value = available.some((drive) => drive.path === previous)
+    ? previous
+    : available[0]?.path || "";
+  if (!nfcIdTouched && el.nfcDrive.value) {
+    const drive = available.find((item) => item.path === el.nfcDrive.value);
+    el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
+  }
+
+  const previousReader = el.nfcReader.value;
+  el.nfcReader.replaceChildren();
+  const readerPlaceholder = document.createElement("option");
+  readerPlaceholder.value = "";
+  readerPlaceholder.textContent = "Looking for readers…";
+  el.nfcReader.append(readerPlaceholder);
+  try {
+    const readers = await invoke("nfc_readers");
+    el.nfcReader.replaceChildren();
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = readers.length ? "Choose a reader…" : "No PC/SC readers found";
+    el.nfcReader.append(empty);
+    for (const reader of readers) {
+      const option = document.createElement("option");
+      option.value = reader;
+      option.textContent = reader;
+      el.nfcReader.append(option);
+    }
+    el.nfcReader.value = readers.includes(previousReader) ? previousReader : "";
+    if (!readers.length) el.nfcStatus.textContent = "No PC/SC readers found.";
+  } catch (error) {
+    el.nfcReader.replaceChildren();
+    const failed = document.createElement("option");
+    failed.value = "";
+    failed.textContent = "PC/SC unavailable";
+    el.nfcReader.append(failed);
+    el.nfcStatus.textContent = String(error);
+  }
+  if (!available.length) {
+    el.nfcStatus.textContent = "Connect a GamePak cartridge to register it.";
+  } else if (!el.nfcStatus.textContent) {
+    el.nfcStatus.textContent = "Choose a cartridge, then hold a blank tag near the reader.";
+  }
+  updateNfcUri();
+}
+
+async function writeNfcCard() {
+  const id = el.nfcId.value.trim();
+  const drivePath = el.nfcDrive.value;
+  const readerName = el.nfcReader.value;
+  const wakeOnLan = el.nfcWol.value.trim();
+  const readyAddress = el.nfcReadyAddress.value.trim();
+  if (!/^gp_[a-z0-9_-]{1,64}$/.test(id)) {
+    el.nfcStatus.textContent = "Use gp_ followed by lowercase letters, digits, _ or -.";
+    return;
+  }
+  if (Boolean(wakeOnLan) !== Boolean(readyAddress)) {
+    el.nfcStatus.textContent = "Enter both remote host fields, or leave both blank.";
+    return;
+  }
+  if (!drivePath || !readerName) return;
+
+  el.nfcWrite.disabled = true;
+  el.nfcStatus.textContent = "Registering GamePak and writing tag…";
+  try {
+    await invoke("register_nfc_gamepak", {
+      id,
+      drivePath,
+      wakeOnLan: wakeOnLan || null,
+      readyAddress: readyAddress || null,
+    });
+    await invoke("write_nfc_card", { readerName, id });
+    el.nfcStatus.textContent = `Written gamepak://${id}. The tag can now select this GamePak.`;
+  } catch (error) {
+    el.nfcStatus.textContent = String(error);
+  } finally {
+    updateNfcUri();
+  }
+}
+
 /** Read what the chosen drive already is. */
 async function loadMemcardDrive() {
   const drive = drives.find((d) => d.path === el.mcwDrive.value);
@@ -3703,6 +3842,20 @@ el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.tabCreated.addEventListener("click", () => showTab("created"));
 el.tabMemcard.addEventListener("click", () => showTab("memcard"));
+el.tabNfc.addEventListener("click", () => showTab("nfc"));
+el.nfcDrive.addEventListener("change", () => {
+  const drive = drives.find((item) => item.path === el.nfcDrive.value);
+  if (!nfcIdTouched) el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
+  updateNfcUri();
+});
+el.nfcId.addEventListener("input", () => {
+  nfcIdTouched = true;
+  updateNfcUri();
+});
+el.nfcReader.addEventListener("change", updateNfcUri);
+el.nfcWol.addEventListener("input", updateNfcUri);
+el.nfcReadyAddress.addEventListener("input", updateNfcUri);
+el.nfcWrite.addEventListener("click", writeNfcCard);
 // Drives are read again when the picker opens and when Create is shown, not on
 // window focus. A refresh on focus took the foreground back from a launcher
 // that had just opened on top of the wizard, so its arrow keys went here.
@@ -4214,6 +4367,11 @@ async function demoInvoke(command, args) {
           totalBytes: 128_035_676_160, freeBytes: 18_253_611_008, hasCartridge: true,
           cartridgeTitle: "God of War Collection" },
       ];
+    case "nfc_readers":
+      return ["Demo PN532 PC/SC Reader"];
+    case "register_nfc_gamepak":
+    case "write_nfc_card":
+      return undefined;
     case "executable_choices":
       return [
         { relative: "TUNIC.exe", name: "TUNIC.exe", score: 120 },

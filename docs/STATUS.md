@@ -77,8 +77,9 @@ no timer, about 2 MB resident.
 **NFC:** a PC/SC monitor reads Type 2 and Type 4 NDEF cards in a worker thread.
 It passes the bounded NDEF message to the launcher as a selection request; the
 launcher resolves the ID in the host registry and waits for any configured host
-readiness check. Reading a tag does not launch a game. The watcher does not link
-`gamepak-core`.
+readiness check. The wizard registers mounted GamePaks and writes their stable
+IDs as NDEF URIs to blank Type 2 / NTAG tags. Reading or writing a tag does not
+launch a game. The watcher does not link `gamepak-core`.
 
 **Linux:** blocks in `poll()` on `/proc/self/mountinfo`, which the kernel wakes on
 any mount activity. Used only by the rootless install — the system install has
