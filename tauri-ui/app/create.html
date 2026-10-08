@@ -93,6 +93,15 @@
           </svg>
           <span>Memory card</span>
         </button>
+        <button id="tab-actions" class="side-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-actions" tabindex="-1">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
+               aria-hidden="true">
+            <path d="M4 10h9M10 6l4 4-4 4" />
+          </svg>
+          <span>GamePak actions</span>
+        </button>
         <button id="tab-nfc" class="side-tab" type="button" role="tab"
                 aria-selected="false" aria-controls="panel-nfc" tabindex="-1">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
@@ -496,7 +505,46 @@
           </div>
         </div>
 
-        <!-- NFC cards — register a GamePak and write its stable ID to a tag. -->
+        <!-- GamePak actions — register a stable gp_ ID against an action.
+             Knows nothing about how the ID will be delivered. -->
+        <div id="panel-actions" role="tabpanel" aria-labelledby="tab-actions" hidden>
+          <div class="build-group">
+            <label class="field">
+              <span class="field__label">Name</span>
+              <input id="act-title" type="text" class="field__input--lead" autocomplete="off"
+                     spellcheck="false" placeholder="Cyberpunk 2077" />
+            </label>
+          </div>
+          <div class="build-group">
+            <p class="build-label">Action</p>
+            <select id="act-kind" class="mcw-select" aria-label="Action type">
+              <option value="steam">Steam game</option>
+              <option value="moonlight">Moonlight stream</option>
+              <option value="local">Local file (movie, media)</option>
+              <option value="exec">Program</option>
+              <option value="service">Service</option>
+              <option value="open">URL</option>
+            </select>
+          </div>
+          <div class="build-group">
+            <label class="field">
+              <span id="act-a-label" class="field__label">Steam app ID</span>
+              <input id="act-a" type="text" autocomplete="off" spellcheck="false" />
+            </label>
+            <label id="act-b-field" class="field">
+              <span id="act-b-label" class="field__label"></span>
+              <input id="act-b" type="text" autocomplete="off" spellcheck="false" />
+            </label>
+          </div>
+          <div class="mcw-foot">
+            <p id="act-status" class="hint mono" role="status" aria-live="polite"></p>
+            <button id="btn-act-create" class="btn btn--primary" type="button">
+              <span class="btn__label">Create</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- NFC cards (optional example adapter) — register a GamePak and write its stable ID to a tag. -->
         <div id="panel-nfc" role="tabpanel" aria-labelledby="tab-nfc" hidden>
           <div class="build-group">
             <p class="build-label">GamePak</p>
