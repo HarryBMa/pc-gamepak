@@ -109,8 +109,29 @@ fn parse_cartridge(drive_path: String) -> Result<CartridgeInfo, String> {
 /// declared in tauri.conf.json and loads `index.html` with no parameters, so
 /// there is nothing in the URL to read.
 #[tauri::command]
-fn drive_path() -> String {
-    cartridge::drive_from_args(std::env::args().skip(1))
+async fn drive_path() -> Result<String, String> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let Some(index) = args.iter().position(|arg| arg == "--nfc-ndef") else {
+        return Ok(cartridge::drive_from_args(args));
+    };
+    let encoded = args
+        .get(index + 1)
+        .cloned()
+        .ok_or_else(|| "NFC selection is missing its NDEF message".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = gamepak_core::nfc::id_from_ndef_hex(&encoded)?;
+        let registry = gamepak_core::nfc::registry_path();
+        let path = gamepak_core::nfc::resolve_from(&registry, &id)?;
+        gamepak_core::nfc::prepare_host(&registry, &id)?;
+        Ok(path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|error| format!("NFC selection failed: {error}"))?
+}
+
+#[tauri::command]
+fn nfc_selection() -> bool {
+    std::env::args().any(|arg| arg == "--nfc-ndef")
 }
 
 /// `--memcard`: open on a combo cartridge's memory card rather than the
@@ -1866,7 +1887,8 @@ fn main() {
     // things do: the resident watcher, the udev helper on a system install, and
     // the tray menu. A setting honoured by one of those and not the others
     // would be worse than no setting.
-    if !wizard {
+    let is_nfc_selection = args.iter().any(|arg| arg == "--nfc-ndef");
+    if !wizard && !is_nfc_selection {
         if let Some(reaction) = reaction_on_insert(&args) {
             if act_on_insert(reaction) {
                 return;
@@ -1880,6 +1902,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             drive_path,
+            nfc_selection,
             opens_memory_card,
             parse_cartridge,
             launch_game,

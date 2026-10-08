@@ -40,6 +40,8 @@ finish-args:
   - --filesystem=/run/media
   - --filesystem=/media
   - --filesystem=/mnt
+  # PC/SC Lite's host daemon exposes the card reader here.
+  - --filesystem=/run/pcscd
 
   # Play hands a steam:// (or heroic://, gog://…) URI to the host through the
   # OpenURI portal. Nothing is executed inside the sandbox.

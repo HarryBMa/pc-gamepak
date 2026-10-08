@@ -74,11 +74,11 @@ Windows tuning.
 **Windows:** a hidden top-level window blocking on `WM_DEVICECHANGE`. No polling,
 no timer, about 2 MB resident.
 
-**Tags:** removed. A PC/SC reader and a line source used to be a second
-doorbell here, about 1,200 lines of it. [Zaparoo](https://zaparoo.org/) does
-tokens across nine platforms and does them better; a thinner version living
-inside a cartridge launcher was not going to catch up, and it split the idea.
-A drive is the only doorbell now.
+**NFC:** a PC/SC monitor reads Type 2 and Type 4 NDEF cards in a worker thread.
+It passes the bounded NDEF message to the launcher as a selection request; the
+launcher resolves the ID in the host registry and waits for any configured host
+readiness check. Reading a tag does not launch a game. The watcher does not link
+`gamepak-core`.
 
 **Linux:** blocks in `poll()` on `/proc/self/mountinfo`, which the kernel wakes on
 any mount activity. Used only by the rootless install — the system install has

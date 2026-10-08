@@ -1049,12 +1049,8 @@ function renderRail(list) {
  */
 async function resolveDrivePath() {
   if (tauri) {
-    try {
-      const fromArgs = await invoke("drive_path");
-      if (fromArgs) return fromArgs;
-    } catch {
-      // fall through to the query string
-    }
+    const fromArgs = await invoke("drive_path");
+    if (fromArgs) return fromArgs;
   }
   return new URLSearchParams(location.search).get("drive") ?? "";
 }
@@ -1150,7 +1146,15 @@ async function init() {
   el.card.classList.add("is-ejected");
   el.face.inert = true;
 
-  const drivePath = await resolveDrivePath();
+  const nfcSelection = await invoke("nfc_selection").catch(() => false);
+  let drivePath;
+  try {
+    drivePath = await resolveDrivePath();
+  } catch (error) {
+    fail("GamePak unavailable", String(error));
+    await showWindow();
+    return;
+  }
 
   if (!drivePath) {
     fail("No cartridge", "The launcher was started without a --drive path.");
@@ -1246,6 +1250,9 @@ async function init() {
     el.notice.hidden = false;
     el.notice.textContent =
       "No executable set in cartridge.conf, so there is nothing to play. Eject is still available.";
+  } else if (nfcSelection) {
+    el.notice.hidden = false;
+    el.notice.textContent = "READY — press Play to start.";
   }
 
   const launcherArt = artFor(currentGame());

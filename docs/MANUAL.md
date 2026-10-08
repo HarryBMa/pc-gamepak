@@ -1211,60 +1211,51 @@ takes, not how the game runs.
 
 <a id="tags"></a>
 <details>
-<summary><b>Tags instead of drives</b> — use Zaparoo, not this</summary>
+<summary><b>NFC cards</b> — select a registered GamePak with a tap</summary>
 <br />
 
-A cartridge carries the game. A token only points at one that is already
-installed, which is the right answer for a shelf of thirty titles or a 150 GB
-install that would never fit on a 2230.
+An NFC card contains only a stable GamePak ID as an NDEF URI record:
 
-This used to ship a PC/SC reader for that — about 1,200 lines handling ACR122U
-and friends. It has been removed, because
-**[StreamLight](https://github.com/FoggyBytes/StreamLight)** and
-**[ArtMoon](https://github.com/onaiaku/ArtMoon)** (both GPL-3.0) are
-gamepad-first forks of [Moonlight](https://github.com/moonlight-stream/moonlight-qt),
-each paired with a host-side companion — StreamTweak and ArtLight. They stream a
-PC to a television rather than carrying it on a drive, so they are not the same
-idea; what they are is the most careful work anywhere on the question this
-project's launcher also has to answer, which is *what a game menu should feel
-like from a sofa*.
+```text
+gamepak://gp_stardew-valley
+```
 
-Three things they get right. **Every action is reachable from the pad** — host
-tabs, library, settings tabs and dialogs, with the dialogs navigable by
-construction rather than one at a time. **A prompt bar along the bottom** says
-what each button does on the screen you are on, and is clickable. And **the
-prompts follow the device in your hands**: touch the keyboard and each glyph
-becomes the key to press; pick the pad back up and they return to controller
-icons, with the brand detected.
+The ID resolves against the host registry at
+`~/.local/state/pc-gamepak/gamepaks.json` on Linux or
+`%LOCALAPPDATA%\PC-GamePak\gamepaks.json` on Windows. It maps the ID to a local
+GamePak directory and may optionally configure a host:
 
-That last one is now this launcher's behaviour too, and it was a real fault
-before: `is-gamepad` went on when a pad *connected*, so a PC with a controller
-attached showed pad icons to whoever was typing. It follows the button presses
-now.
+```json
+{
+  "gamepaks": [
+    {
+      "id": "gp_stardew-valley",
+      "path": "/home/you/Games/Stardew",
+      "host": {
+        "wakeOnLan": "00:11:22:33:44:55",
+        "readyAddress": "192.168.1.20:47984"
+      }
+    }
+  ]
+}
+```
 
-The other two are not taken, and the reason is the shape of the thing. This
-launcher has exactly four actions, so they sit on the four face buttons and the
-prompt is drawn on each button rather than in a bar — there is nothing to
-navigate *to*. Where their model would earn its keep here is the wizard, which
-has tabs, lists, dialogs and text fields and no pad support at all. Note both
-are GPL-3.0 against this project's MIT, so no code can move between them; these
-are ideas, read and reimplemented.
+Each path must contain a `cartridge.conf` or `autorun.inf`. Omit `host` for a
+local game. A remote host needs both `wakeOnLan` and `readyAddress`; the launcher
+sends a Wake-on-LAN packet and waits up to 90 seconds for the TCP readiness
+endpoint before showing READY.
 
-**[Zaparoo](https://zaparoo.org/)** does the same job properly: NFC cards, QR
-codes, barcodes, discs, Amiibo and Skylanders, USB sticks and SD cards, across
-Windows, Linux, SteamOS, Bazzite, ChimeraOS, Batocera, MiSTer and more. There
-was no version of this project that was going to beat that, and keeping a
-thinner one only split the idea.
+The watcher reads NFC Forum Type 2 and Type 4 cards through PC/SC. Use a
+PN532-based reader that exposes a PC/SC interface; direct UART-only modules are
+not supported. Linux requires PC/SC Lite and a running `pcscd`; Windows uses
+the Smart Card service. On Linux, NFC monitoring is available through the
+rootless watcher or Flatpak install; the udev-only system install does not keep
+a watcher running.
 
-The two coexist without overlapping. Zaparoo's token is an **identifier** —
-it names a game already installed on the machine. A GamePak cartridge is a
-**container** — the files, the artwork and the look travel on the drive, so it
-works on a machine that has never seen the game. Run both if you want both.
-
-Also worth seeing:
-**[TheStockPot/NFC-Cartridge-Player](https://github.com/TheStockPot/NFC-Cartridge-Player)**,
-an ESP32 and an RC522 in a 3D-printed shell reporting tag IDs to Home
-Assistant.
+Tapping a card or leaving it in the reader selects the same GamePak. Detection
+does not launch the game: the launcher waits at READY until **Play** is pressed.
+Play uses the existing backend flow for local executables, emulator ROMs,
+Steam, Moonlight URI handlers, and other supported targets.
 
 </details>
 

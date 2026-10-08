@@ -32,6 +32,7 @@ pub mod insert;
 pub mod launch;
 pub mod ludusavi;
 pub mod memcard;
+pub mod nfc;
 pub mod notify;
 pub mod play;
 pub mod playlog;
