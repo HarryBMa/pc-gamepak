@@ -28,6 +28,8 @@ mod linux;
 mod log;
 #[cfg(not(windows))]
 mod mounts;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+mod nfc;
 #[cfg(windows)]
 mod tray;
 
@@ -165,6 +167,7 @@ mod windows_watcher {
         }
 
         *SEEN.lock().expect("no other thread to poison it") = Some(HashMap::new());
+        crate::nfc::start();
 
         let class_name = wide("PcCartridgeWatcher");
 

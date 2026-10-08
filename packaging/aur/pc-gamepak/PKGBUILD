@@ -36,6 +36,7 @@ depends=(
   'polkit'
   'udisks2'
   'xdg-utils'
+  'pcsclite'
 )
 optdepends=(
   'steam: play Steam games from the cartridge'

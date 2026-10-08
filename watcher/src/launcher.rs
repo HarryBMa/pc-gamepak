@@ -59,6 +59,38 @@ pub fn open(path: &Path, why: Why) -> Option<Child> {
     }
 }
 
+/// Open the launcher with the selected card's bounded NDEF message.
+pub fn open_nfc(message: &[u8]) -> Option<Child> {
+    if message.is_empty() || message.len() > 4096 {
+        log::line("NFC NDEF message is outside the supported size");
+        return None;
+    }
+    let Some(launcher) = installed_at() else {
+        log::line("pc-gamepak is not installed anywhere I can find it");
+        return None;
+    };
+    let encoded = message
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    match Command::new(&launcher)
+        .args(["--nfc-ndef", &encoded])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => {
+            log::line(&format!("NFC launcher started, pid {}", child.id()));
+            Some(child)
+        }
+        Err(error) => {
+            log::line(&format!("could not start NFC launcher: {error}"));
+            None
+        }
+    }
+}
+
 /// Open the wizard, on its first page or straight on Settings.
 ///
 /// The tray is the only door to the wizard that is always there: the launcher

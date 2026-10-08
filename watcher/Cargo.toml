@@ -2,7 +2,7 @@
 name = "pc-gamepak-watcher"
 version = "1.1.0"
 edition = "2021"
-description = "Waits for a cartridge to be plugged in and opens the launcher"
+description = "Watches cartridge inserts and PC/SC NFC readers"
 license = "MIT"
 
 # Deliberately almost no dependencies: this process is resident for the whole
@@ -11,6 +11,9 @@ license = "MIT"
 # library on Linux, so poll() and kill() cost declarations and nothing else.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+pcsc = "2.9"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = [

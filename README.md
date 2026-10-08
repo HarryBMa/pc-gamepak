@@ -86,11 +86,11 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   [Ludusavi](https://github.com/mtkennerly/ludusavi-manifest)'s list if you
   switch that on, or you point at the folder. A cartridge can be a *combo drive*
   too, and keep its memory card one button away.
-- **Not an NFC project.** If you want to tap a card, a toy or a QR code to
-  launch a game, use [Zaparoo](https://zaparoo.org/) — it does that across nine
-  platforms and this does not do it at all.
-- **Works offline.** Nothing phones home. The only network call is the artwork
-  lookup you asked for.
+- **Tap to select a GamePak.** Write its stable ID as an NDEF URI and use a
+  PC/SC-compatible PN532 reader. The card selects the launcher entry; Play is
+  still required to start the game.
+- **Works offline.** Nothing phones home. Network use is limited to optional
+  artwork lookup and any Wake-on-LAN/readiness checks you configure for a host.
 
 ## Supported platforms
 

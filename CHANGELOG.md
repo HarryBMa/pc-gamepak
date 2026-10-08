@@ -12,6 +12,13 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### Select GamePaks with NFC
+
+A PC/SC-compatible PN532 reader can read an NDEF GamePak URI and select its host
+registry entry. Scanning opens the launcher in READY state without starting the
+game; press Play to use the existing launch path. Optional registry host settings
+send Wake-on-LAN and wait for readiness before READY.
+
 ### Emulated cartridges carry their ROM
 
 **Choose ROM…** under *Add a game by hand* makes a cartridge for an emulated

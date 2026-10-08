@@ -8,13 +8,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 
 /// Schemes handed to whatever the OS has registered for them.
-const KNOWN_SCHEMES: [&str; 8] = [
+const KNOWN_SCHEMES: [&str; 9] = [
     "steam://",
     "heroic://",
     "gog://",
     "epic://",
     "playnite://",
     "lutris://",
+    "moonlight://",
     "http://",
     "https://",
 ];
@@ -142,6 +143,7 @@ mod tests {
     fn knows_a_uri_from_a_path() {
         assert!(is_uri("steam://rungameid/413150"));
         assert!(is_uri("Playnite://playnite/start/abc"));
+        assert!(is_uri("moonlight://launch/host/game"));
         assert!(!is_uri("Games/Tunic/Tunic.exe"));
         assert!(!is_uri(""));
     }

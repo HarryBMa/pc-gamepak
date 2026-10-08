@@ -56,6 +56,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: watcher
+      - name: Install PC/SC Lite development files
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
       - run: cargo fmt --manifest-path watcher/Cargo.toml --check
       - run: cargo test --manifest-path watcher/Cargo.toml
       - run: cargo build --manifest-path watcher/Cargo.toml --release
