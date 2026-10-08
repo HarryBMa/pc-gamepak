@@ -75,6 +75,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod headless;
+mod nfc;
 
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
@@ -1405,6 +1406,44 @@ fn list_target_drives() -> Vec<drives::TargetDrive> {
     create::target_drives()
 }
 
+#[tauri::command]
+fn nfc_readers() -> Result<Vec<String>, String> {
+    nfc::readers()
+}
+
+#[tauri::command]
+fn register_nfc_gamepak(
+    id: String,
+    drive_path: String,
+    wake_on_lan: Option<String>,
+    ready_address: Option<String>,
+) -> Result<(), String> {
+    let selected_path = Path::new(&drive_path)
+        .canonicalize()
+        .map_err(|error| format!("GamePak path is unavailable: {error}"))?;
+    let is_gamepak_drive = create::target_drives().into_iter().any(|drive| {
+        drive.has_cartridge
+            && Path::new(&drive.path)
+                .canonicalize()
+                .is_ok_and(|path| path == selected_path)
+    });
+    if !is_gamepak_drive {
+        return Err("choose a mounted drive that already contains a GamePak".into());
+    }
+    gamepak_core::nfc::register_from(
+        &gamepak_core::nfc::registry_path(),
+        &id,
+        &selected_path,
+        wake_on_lan.as_deref(),
+        ready_address.as_deref(),
+    )
+}
+
+#[tauri::command]
+fn write_nfc_card(reader_name: String, id: String) -> Result<(), String> {
+    nfc::write_gamepak_card(&reader_name, &id)
+}
+
 /// Every filesystem a cartridge can be made with, and what each one costs.
 ///
 /// The wizard used to carry its own two-entry list, with the label limit
@@ -1946,6 +1985,9 @@ fn main() {
             sgdb_download_artwork,
             sgdb_last_used_artwork,
             list_target_drives,
+            nfc_readers,
+            register_nfc_gamepak,
+            write_nfc_card,
             list_unmounted_volumes,
             mount_volume,
             format_plan,

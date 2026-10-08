@@ -93,6 +93,16 @@
           </svg>
           <span>Memory card</span>
         </button>
+        <button id="tab-nfc" class="side-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-nfc" tabindex="-1">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
+               aria-hidden="true">
+            <path d="M6.2 6.2a5.4 5.4 0 0 0 0 7.6M9 8.8a1.7 1.7 0 0 0 0 2.4M13.8 6.2a5.4 5.4 0 0 1 0 7.6" />
+            <rect x="8" y="8" width="4" height="4" rx="1" />
+          </svg>
+          <span>NFC cards</span>
+        </button>
       </nav>
 
       <!-- ============================================================
@@ -482,6 +492,48 @@
             <p id="mcw-status" class="hint" role="status" aria-live="polite"></p>
             <button id="btn-mcw-write" class="btn btn--primary" type="button">
               <span class="btn__label">Write memory card</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- NFC cards — register a GamePak and write its stable ID to a tag. -->
+        <div id="panel-nfc" role="tabpanel" aria-labelledby="tab-nfc" hidden>
+          <div class="build-group">
+            <p class="build-label">GamePak</p>
+            <select id="nfc-drive" class="mcw-select" aria-label="GamePak cartridge"></select>
+            <p class="hint">Choose a mounted cartridge to register on this PC.</p>
+          </div>
+          <div class="build-group">
+            <label class="field">
+              <span class="field__label">Stable card ID</span>
+              <input id="nfc-id" type="text" class="field__input--lead" autocomplete="off"
+                     spellcheck="false" placeholder="gp_game-name" aria-describedby="nfc-uri" />
+            </label>
+            <p id="nfc-uri" class="hint mono">gamepak://gp_…</p>
+          </div>
+          <details class="build-group">
+            <summary class="build-label">Remote host (optional)</summary>
+            <label class="field">
+              <span class="field__label">Wake-on-LAN MAC address</span>
+              <input id="nfc-wol" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="00:11:22:33:44:55" />
+            </label>
+            <label class="field">
+              <span class="field__label">Readiness address</span>
+              <input id="nfc-ready-address" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="192.168.1.20:47984" />
+            </label>
+            <p class="hint">Both are required to wake and wait for a remote host.</p>
+          </details>
+          <div class="build-group">
+            <p class="build-label">Reader</p>
+            <select id="nfc-reader" class="mcw-select" aria-label="PC/SC NFC reader"></select>
+            <p class="hint">Use a PC/SC reader and a blank, writable Type 2 / NTAG tag.</p>
+          </div>
+          <div class="mcw-foot">
+            <p id="nfc-status" class="hint" role="status" aria-live="polite"></p>
+            <button id="btn-nfc-write" class="btn btn--primary" type="button" disabled>
+              <span class="btn__label">Write NFC card</span>
             </button>
           </div>
         </div>

@@ -2857,7 +2857,8 @@ input.field__input--lead:focus {
 
 /* --- Memory card --------------------------------------------------------- */
 
-#panel-memcard {
+#panel-memcard,
+#panel-nfc {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2868,8 +2869,18 @@ input.field__input--lead:focus {
   animation: rise 320ms var(--ease) both;
 }
 
-#panel-memcard[hidden] {
+#panel-memcard[hidden],
+#panel-nfc[hidden] {
   display: none;
+}
+
+#panel-nfc details summary {
+  cursor: pointer;
+}
+
+#panel-nfc details[open] {
+  display: grid;
+  gap: 10px;
 }
 
 .mcw-select,

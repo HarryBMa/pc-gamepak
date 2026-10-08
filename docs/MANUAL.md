@@ -1252,6 +1252,12 @@ the Smart Card service. On Linux, NFC monitoring is available through the
 rootless watcher or Flatpak install; the udev-only system install does not keep
 a watcher running.
 
+To make a card, open the wizard's **NFC cards** tab, choose a mounted GamePak,
+keep or edit its suggested stable ID, select a reader, and write to a blank,
+writable Type 2 / NTAG card. The wizard registers the ID and cartridge path on
+this PC before writing the NDEF URI. Optional Wake-on-LAN and readiness fields
+configure a remote host; provide both or neither.
+
 Tapping a card or leaving it in the reader selects the same GamePak. Detection
 does not launch the game: the launcher waits at READY until **Play** is pressed.
 Play uses the existing backend flow for local executables, emulator ROMs,

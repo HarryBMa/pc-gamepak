@@ -19,6 +19,9 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 tauri-plugin-dialog = "2"
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+pcsc = "2.9"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = [
     "Win32_Storage_FileSystem",
