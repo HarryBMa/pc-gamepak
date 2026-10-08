@@ -2858,6 +2858,7 @@ input.field__input--lead:focus {
 /* --- Memory card --------------------------------------------------------- */
 
 #panel-memcard,
+#panel-actions,
 #panel-nfc {
   display: flex;
   flex-direction: column;
@@ -2870,6 +2871,7 @@ input.field__input--lead:focus {
 }
 
 #panel-memcard[hidden],
+#panel-actions[hidden],
 #panel-nfc[hidden] {
   display: none;
 }

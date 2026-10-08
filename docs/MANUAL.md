@@ -1209,41 +1209,79 @@ takes, not how the game runs.
 
 </details>
 
-<a id="tags"></a>
+<a id="triggers"></a>
 <details>
-<summary><b>NFC cards</b> — select a registered GamePak with a tap</summary>
+<summary><b>Triggers and GamePak actions</b> — one <code>gp_</code> ID, one registered action</summary>
 <br />
 
-An NFC card contains only a stable GamePak ID as an NDEF URI record:
+```text
+trigger -> gp_id -> launcher/watcher -> registered action -> execute
+```
+
+A trigger can be anything — NFC, a QR code, a barcode, a button, an HTTP
+request, another application. It supplies **only** a stable ID such as
+`gp_01jabc`. Paths, commands and settings live in the host registry, never in
+the trigger, and only registered actions ever run. An unknown or malformed ID
+exits non-zero with a message on stderr and does nothing.
+
+**Submitting an ID.** The whole trigger interface is one command:
+
+```text
+pc-gamepak --trigger gp_01jabc
+```
+
+Exit status 0 means the action was started (or, for a cartridge, the launcher
+window opened); 1 means the ID was invalid, unregistered or its action failed.
+Any program can build a trigger on this: a script behind a localhost HTTP
+endpoint, a QR scanner, a Decky or Playnite plugin. IDs are
+`gp_` followed by 1–64 lowercase letters, digits, `_` or `-`.
+
+**Registry.** `~/.local/state/pc-gamepak/gamepaks.json` on Linux,
+`%LOCALAPPDATA%\PC-GamePak\gamepaks.json` on Windows. The wizard's **GamePak
+actions** tab writes it: name, action, settings, and it shows the ID it
+generated. It can also be edited by hand:
+
+```json
+{
+  "gamepaks": [
+    { "id": "gp_stardew", "path": "/home/you/Games/Stardew" },
+    { "id": "gp_cyberpunk", "title": "Cyberpunk 2077",
+      "action": { "type": "moonlight", "target": "gaming-pc", "app": "Cyberpunk 2077" } },
+    { "id": "gp_matrix", "title": "The Matrix",
+      "action": { "type": "local", "path": "/media/The Matrix.mkv" } },
+    { "id": "gp_halo", "action": { "type": "steam", "appId": 976730 } },
+    { "id": "gp_tool", "action": { "type": "exec", "program": "/usr/bin/foo", "args": ["--bar"] } },
+    { "id": "gp_svc", "action": { "type": "service", "target": "sunshine" } },
+    { "id": "gp_page", "action": { "type": "open", "target": "https://example.com" } }
+  ]
+}
+```
+
+An entry has exactly one of `action` or `path`; `path` is shorthand for a
+`cartridge` action — a GamePak folder with `cartridge.conf` or `autorun.inf`,
+opened in the launcher at READY. Every entry may also carry `host`
+(`wakeOnLan` and `readyAddress`, both or neither): the host is woken and awaited
+before the action runs. The actions are `cartridge`, `steam`, `moonlight`
+(needs the Moonlight client), `local`, `exec`, `service` (systemd user unit or
+Windows service) and `open`.
+
+</details>
+
+<a id="tags"></a>
+<details>
+<summary><b>NFC cards</b> — an optional example trigger</summary>
+<br />
+
+NFC is one trigger adapter, not part of the GamePak model. A card carries only
+the ID as an NDEF URI record, and the adapter extracts it and submits it exactly
+as `--trigger` does:
 
 ```text
 gamepak://gp_stardew-valley
 ```
 
-The ID resolves against the host registry at
-`~/.local/state/pc-gamepak/gamepaks.json` on Linux or
-`%LOCALAPPDATA%\PC-GamePak\gamepaks.json` on Windows. It maps the ID to a local
-GamePak directory and may optionally configure a host:
-
-```json
-{
-  "gamepaks": [
-    {
-      "id": "gp_stardew-valley",
-      "path": "/home/you/Games/Stardew",
-      "host": {
-        "wakeOnLan": "00:11:22:33:44:55",
-        "readyAddress": "192.168.1.20:47984"
-      }
-    }
-  ]
-}
-```
-
-Each path must contain a `cartridge.conf` or `autorun.inf`. Omit `host` for a
-local game. A remote host needs both `wakeOnLan` and `readyAddress`; the launcher
-sends a Wake-on-LAN packet and waits up to 90 seconds for the TCP readiness
-endpoint before showing READY.
+The ID resolves through the registry described above. Nothing else on the
+card is read.
 
 The watcher reads NFC Forum Type 2 and Type 4 cards through PC/SC. Use a
 PN532-based reader that exposes a PC/SC interface; direct UART-only modules are
@@ -1258,10 +1296,9 @@ writable Type 2 / NTAG card. The wizard registers the ID and cartridge path on
 this PC before writing the NDEF URI. Optional Wake-on-LAN and readiness fields
 configure a remote host; provide both or neither.
 
-Tapping a card or leaving it in the reader selects the same GamePak. Detection
-does not launch the game: the launcher waits at READY until **Play** is pressed.
-Play uses the existing backend flow for local executables, emulator ROMs,
-Steam, Moonlight URI handlers, and other supported targets.
+Tapping a card or leaving it in the reader triggers the same GamePak as
+`--trigger`. A cartridge action waits at READY until **Play** is pressed; the
+other actions run immediately.
 
 </details>
 

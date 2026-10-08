@@ -24,6 +24,7 @@ pub mod emulated;
 pub mod folders;
 pub mod format;
 pub mod frontend;
+pub mod gamepak;
 pub mod health;
 pub mod hltb;
 pub mod home;

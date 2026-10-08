@@ -112,22 +112,59 @@ fn parse_cartridge(drive_path: String) -> Result<CartridgeInfo, String> {
 #[tauri::command]
 async fn drive_path() -> Result<String, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let Some(index) = args.iter().position(|arg| arg == "--nfc-ndef") else {
+    let Some(encoded) = trigger_id(&args)? else {
         return Ok(cartridge::drive_from_args(args.into_iter()));
     };
-    let encoded = args
-        .get(index + 1)
-        .cloned()
-        .ok_or_else(|| "NFC selection is missing its NDEF message".to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
-        let id = gamepak_core::nfc::id_from_ndef_hex(&encoded)?;
-        let registry = gamepak_core::nfc::registry_path();
-        let path = gamepak_core::nfc::resolve_from(&registry, &id)?;
-        gamepak_core::nfc::prepare_host(&registry, &id)?;
-        Ok(path.to_string_lossy().into_owned())
+        let id = encoded.into_id()?;
+        match gamepak_core::gamepak::trigger_from(&gamepak_core::gamepak::registry_path(), &id)? {
+            gamepak_core::gamepak::Outcome::OpenCartridge(path) => {
+                Ok(path.to_string_lossy().into_owned())
+            }
+            gamepak_core::gamepak::Outcome::Executed => {
+                Err("this GamePak is not a cartridge".to_string())
+            }
+        }
     })
     .await
-    .map_err(|error| format!("NFC selection failed: {error}"))?
+    .map_err(|error| format!("GamePak trigger failed: {error}"))?
+}
+
+/// A GamePak ID as a trigger delivered it. Every trigger ends up as an ID.
+enum TriggerInput {
+    Id(String),
+    /// NFC adapter transport: the hex of an NDEF message carrying the ID.
+    NdefHex(String),
+}
+
+impl TriggerInput {
+    fn into_id(self) -> Result<String, String> {
+        match self {
+            TriggerInput::Id(id) => Ok(id),
+            TriggerInput::NdefHex(hex) => {
+                gamepak_core::nfc::id_from_ndef_hex(&hex).map(|id| id.as_str().to_owned())
+            }
+        }
+    }
+}
+
+/// `--trigger gp_id` (the generic entry point) or `--nfc-ndef <hex>` (what the
+/// NFC adapter sends). `None` when the launcher was not started by a trigger.
+fn trigger_id(args: &[String]) -> Result<Option<TriggerInput>, String> {
+    for (flag, nfc) in [("--trigger", false), ("--nfc-ndef", true)] {
+        if let Some(index) = args.iter().position(|arg| arg == flag) {
+            let value = args
+                .get(index + 1)
+                .cloned()
+                .ok_or_else(|| format!("{flag} needs a value"))?;
+            return Ok(Some(if nfc {
+                TriggerInput::NdefHex(value)
+            } else {
+                TriggerInput::Id(value)
+            }));
+        }
+    }
+    Ok(None)
 }
 
 #[tauri::command]
@@ -1430,13 +1467,82 @@ fn register_nfc_gamepak(
     if !is_gamepak_drive {
         return Err("choose a mounted drive that already contains a GamePak".into());
     }
-    gamepak_core::nfc::register_from(
-        &gamepak_core::nfc::registry_path(),
+    gamepak_core::gamepak::register_from(
+        &gamepak_core::gamepak::registry_path(),
         &id,
         &selected_path,
         wake_on_lan.as_deref(),
         ready_address.as_deref(),
     )
+}
+
+/// The generic wizard step: register an action under a stable ID and return
+/// the ID. `kind` is an action type; `a` and `b` are its one or two settings
+/// (see `action_from`). Nothing here knows how the ID will be delivered.
+#[tauri::command]
+fn add_gamepak(
+    title: String,
+    kind: String,
+    a: String,
+    b: Option<String>,
+    id: Option<String>,
+) -> Result<String, String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("name the GamePak".into());
+    }
+    let action = action_from(&kind, a.trim(), b.as_deref().map(str::trim))?;
+    let id = match id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
+        Some(id) => id.to_owned(),
+        None => gamepak_core::gamepak::new_id(),
+    };
+    gamepak_core::gamepak::register_action_from(
+        &gamepak_core::gamepak::registry_path(),
+        &id,
+        Some(title),
+        action,
+        None,
+        None,
+    )?;
+    Ok(id)
+}
+
+fn action_from(
+    kind: &str,
+    a: &str,
+    b: Option<&str>,
+) -> Result<gamepak_core::gamepak::Action, String> {
+    use gamepak_core::gamepak::Action;
+    if a.is_empty() {
+        return Err("fill in the action's setting".into());
+    }
+    Ok(match kind {
+        "steam" => Action::Steam {
+            app_id: a.parse().map_err(|_| "Steam app ID must be a number")?,
+        },
+        "local" => Action::Local { path: a.into() },
+        "exec" => Action::Exec {
+            program: a.to_owned(),
+            args: b
+                .filter(|args| !args.is_empty())
+                .map(|args| args.split_whitespace().map(str::to_owned).collect())
+                .unwrap_or_default(),
+        },
+        "moonlight" => Action::Moonlight {
+            target: a.to_owned(),
+            app: b
+                .filter(|app| !app.is_empty())
+                .ok_or("Moonlight needs an app name")?
+                .to_owned(),
+        },
+        "service" => Action::Service {
+            target: a.to_owned(),
+        },
+        "open" => Action::Open {
+            target: a.to_owned(),
+        },
+        _ => return Err(format!("unknown action type {kind}")),
+    })
 }
 
 #[tauri::command]
@@ -1926,8 +2032,44 @@ fn main() {
     // things do: the resident watcher, the udev helper on a system install, and
     // the tray menu. A setting honoured by one of those and not the others
     // would be worse than no setting.
-    let is_nfc_selection = args.iter().any(|arg| arg == "--nfc-ndef");
-    if !wizard && !is_nfc_selection {
+    let is_trigger = args
+        .iter()
+        .any(|arg| arg == "--nfc-ndef" || arg == "--trigger");
+    if is_trigger {
+        // Anything that is not a cartridge is executed here and now, with no
+        // window. A cartridge falls through to the launcher at READY.
+        match trigger_id(&args).and_then(|input| input.map_or(Ok(None), |i| i.into_id().map(Some)))
+        {
+            Ok(Some(id)) => {
+                let registry = gamepak_core::gamepak::registry_path();
+                let is_cartridge = gamepak_core::gamepak::GamePakId::parse(id.trim())
+                    .and_then(|parsed| gamepak_core::gamepak::lookup_from(&registry, &parsed))
+                    .map(|pak| {
+                        matches!(pak.action, gamepak_core::gamepak::Action::Cartridge { .. })
+                    });
+                match is_cartridge {
+                    Ok(false) => {
+                        if let Err(error) = gamepak_core::gamepak::trigger_from(&registry, &id) {
+                            eprintln!("GamePak trigger failed: {error}");
+                            std::process::exit(1);
+                        }
+                        return;
+                    }
+                    Ok(true) => {}
+                    Err(error) => {
+                        eprintln!("GamePak trigger failed: {error}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                eprintln!("GamePak trigger failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if !wizard && !is_trigger {
         if let Some(reaction) = reaction_on_insert(&args) {
             if act_on_insert(reaction) {
                 return;
@@ -1987,6 +2129,7 @@ fn main() {
             list_target_drives,
             nfc_readers,
             register_nfc_gamepak,
+            add_gamepak,
             write_nfc_card,
             list_unmounted_volumes,
             mount_volume,

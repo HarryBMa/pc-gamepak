@@ -25,6 +25,7 @@
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
  *   nfc_readers()                     -> [reader name]
+ *   add_gamepak(title, kind, a, b, id)  -> "gp_…" (generic action wizard)
  *   register_nfc_gamepak(...)          -> ()
  *   write_nfc_card(reader_name, id)     -> ()
  *   create_cartridge({ request })    -> { confPath, formatted, gameCopied, ... }
@@ -137,6 +138,17 @@ const el = {
   tabCreated: $("tab-created"),
   tabMemcard: $("tab-memcard"),
   panelMemcard: $("panel-memcard"),
+  tabActions: $("tab-actions"),
+  panelActions: $("panel-actions"),
+  actTitle: $("act-title"),
+  actKind: $("act-kind"),
+  actA: $("act-a"),
+  actALabel: $("act-a-label"),
+  actB: $("act-b"),
+  actBField: $("act-b-field"),
+  actBLabel: $("act-b-label"),
+  actStatus: $("act-status"),
+  actCreate: $("btn-act-create"),
   tabNfc: $("tab-nfc"),
   panelNfc: $("panel-nfc"),
   nfcDrive: $("nfc-drive"),
@@ -2791,7 +2803,7 @@ function applyDefaults() {
    Create / Edit
    ========================================================================== */
 
-const TABS = ["create", "edit", "created", "memcard", "nfc"];
+const TABS = ["create", "edit", "created", "memcard", "actions", "nfc"];
 
 /**
  * Which panel is showing. The rail belongs to Create and Edit and never moves;
@@ -2806,6 +2818,7 @@ async function showTab(name) {
     [el.tabEdit, el.panelEdit, "edit"],
     [el.tabCreated, el.panelCreated, "created"],
     [el.tabMemcard, el.panelMemcard, "memcard"],
+    [el.tabActions, el.panelActions, "actions"],
     [el.tabNfc, el.panelNfc, "nfc"],
   ]) {
     const on = id === activeTab;
@@ -2815,9 +2828,17 @@ async function showTab(name) {
   }
   el.columns.classList.toggle(
     "is-shelf",
-    activeTab === "created" || activeTab === "memcard" || activeTab === "nfc",
+    activeTab === "created" ||
+      activeTab === "memcard" ||
+      activeTab === "actions" ||
+      activeTab === "nfc",
   );
 
+  if (activeTab === "actions") {
+    el.barText.textContent = "GamePak actions";
+    updateActionFields();
+    return;
+  }
   if (activeTab === "nfc") {
     el.barText.textContent = "NFC cards";
     await openNfcPage();
@@ -3415,6 +3436,42 @@ async function openMemcardPage() {
   await loadMemcardDrive();
 }
 
+// Per action type: [label for setting a, label for setting b or null].
+const ACTION_FIELDS = {
+  steam: ["Steam app ID", null],
+  moonlight: ["Moonlight host (name or address)", "App name"],
+  local: ["File path", null],
+  exec: ["Program", "Arguments (optional, space-separated)"],
+  service: ["Service name", null],
+  open: ["URL", null],
+};
+
+function updateActionFields() {
+  const [a, b] = ACTION_FIELDS[el.actKind.value];
+  el.actALabel.textContent = a;
+  el.actBLabel.textContent = b ?? "";
+  el.actBField.hidden = !b;
+}
+
+async function createGamePakAction() {
+  el.actCreate.disabled = true;
+  el.actStatus.textContent = "Saving…";
+  try {
+    const id = await invoke("add_gamepak", {
+      title: el.actTitle.value,
+      kind: el.actKind.value,
+      a: el.actA.value,
+      b: ACTION_FIELDS[el.actKind.value][1] ? el.actB.value : null,
+      id: null,
+    });
+    el.actStatus.textContent = `GamePak ID: ${id}`;
+  } catch (error) {
+    el.actStatus.textContent = String(error);
+  } finally {
+    el.actCreate.disabled = false;
+  }
+}
+
 let nfcIdTouched = false;
 
 function suggestNfcId(title) {
@@ -3842,6 +3899,9 @@ el.tabCreate.addEventListener("click", () => showTab("create"));
 el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.tabCreated.addEventListener("click", () => showTab("created"));
 el.tabMemcard.addEventListener("click", () => showTab("memcard"));
+el.tabActions.addEventListener("click", () => showTab("actions"));
+el.actKind.addEventListener("change", updateActionFields);
+el.actCreate.addEventListener("click", createGamePakAction);
 el.tabNfc.addEventListener("click", () => showTab("nfc"));
 el.nfcDrive.addEventListener("change", () => {
   const drive = drives.find((item) => item.path === el.nfcDrive.value);
@@ -4369,6 +4429,8 @@ async function demoInvoke(command, args) {
       ];
     case "nfc_readers":
       return ["Demo PN532 PC/SC Reader"];
+    case "add_gamepak":
+      return "gp_0123456789abcdef";
     case "register_nfc_gamepak":
     case "write_nfc_card":
       return undefined;
