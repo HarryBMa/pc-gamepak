@@ -122,6 +122,34 @@ pub struct CartridgeInfo {
     pub platform: String,
 }
 
+impl CartridgeInfo {
+    /// What the launcher shows for a game on another PC (see
+    /// [`crate::remote`]): the host's title and cover, Play standing for the
+    /// stream, and `drive_path` the marker every drive command recognises.
+    pub fn remote(marker: &str, title: &str, cover: &str) -> CartridgeInfo {
+        CartridgeInfo {
+            title: title.to_string(),
+            cover_path: String::new(),
+            cover: cover.to_string(),
+            background: String::new(),
+            background_path: String::new(),
+            logo: String::new(),
+            logo_path: String::new(),
+            icon: String::new(),
+            icon_path: String::new(),
+            executable: marker.to_string(),
+            drive_path: marker.to_string(),
+            holds_game: false,
+            is_bundle: false,
+            games: Vec::new(),
+            skin_css: String::new(),
+            how_long: HowLong::default(),
+            memory_card: false,
+            platform: "PC".to_string(),
+        }
+    }
+}
+
 /// A cartridge's `platform=`, tidied: trimmed, and empty meaning a PC game.
 ///
 /// What the cartridge is *for*, so a front-end that draws the physical thing —

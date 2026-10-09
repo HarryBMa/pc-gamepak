@@ -101,6 +101,7 @@ dependencies = [
 name = "gamepak-core"
 version = "1.1.0"
 dependencies = [
+ "getrandom",
  "image",
  "serde",
  "serde_json",

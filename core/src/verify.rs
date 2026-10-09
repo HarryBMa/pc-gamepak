@@ -417,7 +417,16 @@ impl Sha256 {
     }
 
     /// The digest as lowercase hex, which is the form anyone will paste.
-    pub fn hex(mut self) -> String {
+    pub fn hex(self) -> String {
+        let mut out = String::with_capacity(64);
+        for byte in self.digest() {
+            out.push_str(&format!("{byte:02x}"));
+        }
+        out
+    }
+
+    /// The digest as its 32 bytes, for HMAC (see [`crate::remote`]).
+    pub fn digest(mut self) -> [u8; 32] {
         // Padding: a 1 bit, zeroes, then the length in bits as a big-endian
         // u64 — so the final block always has eight bytes free for it.
         let bits = self.bytes.wrapping_mul(8);
@@ -427,9 +436,9 @@ impl Sha256 {
         }
         self.update_raw(&bits.to_be_bytes());
 
-        let mut out = String::with_capacity(64);
-        for word in self.state {
-            out.push_str(&format!("{word:08x}"));
+        let mut out = [0u8; 32];
+        for (chunk, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(self.state) {
+            chunk.copy_from_slice(&word.to_be_bytes());
         }
         out
     }

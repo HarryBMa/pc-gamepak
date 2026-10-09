@@ -11,6 +11,7 @@
 //
 //   pc-gamepak --drive <path> --play <n>              play, stay up while it runs
 //   pc-gamepak --drive <path> --safe-eject [--force]  eject, report on stdout
+//   pc-gamepak --host-agent [--port N] [--print-key]  prime games for a client
 //
 // Launcher commands:
 //   drive_path()                             -> String | error
@@ -74,12 +75,14 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent;
 mod headless;
 mod nfc;
 
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
 use gamepak_core::cartridge::{self, CartridgeInfo};
+use gamepak_core::remote;
 use gamepak_core::{
     busy, create, created, drives, edit, format, frontend, health, home, idle, insert, ludusavi,
     memcard, playlog, playtrack, saves, settings, sgdb, shaders, stats, tuning, unboxed,
@@ -101,7 +104,23 @@ use tauri_plugin_dialog::DialogExt;
 /// Parse the cartridge at `drive_path` and return metadata.
 #[tauri::command]
 fn parse_cartridge(drive_path: String) -> Result<CartridgeInfo, String> {
+    if let Some(id) = remote::marker_id(&drive_path) {
+        return prime_remote(&drive_path, id);
+    }
     cartridge::read_cartridge_info(&drive_path)
+}
+
+/// A game on another PC: start it there now, and show it here at READY with
+/// the host's title and cover. Play streams it; Eject stops it.
+fn prime_remote(marker: &str, id: &str) -> Result<CartridgeInfo, String> {
+    let target = remote::Remote::resolve(&gamepak_core::gamepak::registry_path(), id)?;
+    let reply = target.prime()?;
+    debug_log(format!("remote {id}: primed on {}", target.agent));
+    Ok(CartridgeInfo::remote(
+        marker,
+        reply.title.as_deref().unwrap_or(&target.moonlight),
+        reply.cover.as_deref().unwrap_or(""),
+    ))
 }
 
 /// The cartridge this window was started for.
@@ -120,6 +139,9 @@ async fn drive_path() -> Result<String, String> {
         match gamepak_core::gamepak::trigger_from(&gamepak_core::gamepak::registry_path(), &id)? {
             gamepak_core::gamepak::Outcome::OpenCartridge(path) => {
                 Ok(path.to_string_lossy().into_owned())
+            }
+            gamepak_core::gamepak::Outcome::OpenRemote(id) => {
+                Ok(format!("{}{}", remote::MARKER, id.as_str()))
             }
             gamepak_core::gamepak::Outcome::Executed => {
                 Err("this GamePak is not a cartridge".to_string())
@@ -258,6 +280,21 @@ fn set_window_icons(window: &tauri::WebviewWindow, ico: &[u8]) {
 #[cfg(not(target_os = "windows"))]
 fn set_window_icons(_window: &tauri::WebviewWindow, _ico: &[u8]) {}
 
+/// Eject for a game on another PC: end the stream, then close the game on the
+/// host and let it save. A stream that will not end is noted and the game is
+/// closed anyway, which ends the stream with it.
+fn stop_remote(id: &str) -> Result<EjectOutcome, String> {
+    let target = remote::Remote::resolve(&gamepak_core::gamepak::registry_path(), id)?;
+    if let Err(why) = target.quit() {
+        debug_log(format!("remote {id}: {why}"));
+    }
+    target.stop()?;
+    Ok(EjectOutcome {
+        ejected: true,
+        message: format!("Stopped on {}", target.moonlight),
+    })
+}
+
 /// Launch the game.
 /// `executable` can be a URI (steam://, heroic://, ...) or a path relative
 /// to `drive_path`.
@@ -269,6 +306,16 @@ fn launch_game(
 ) -> Result<(), String> {
     if executable.is_empty() {
         return Err("No executable configured for this cartridge".into());
+    }
+    if let Some(id) = remote::marker_id(&drive_path) {
+        // The game is already running on the host and counting its own hours
+        // there; Play only brings the picture over.
+        let target = remote::Remote::resolve(&gamepak_core::gamepak::registry_path(), id)?;
+        let mut moonlight = target.stream()?;
+        std::thread::spawn(move || {
+            let _ = moonlight.wait();
+        });
+        return Ok(());
     }
 
     // Before the game starts, and before anything that can fail. A launch that
@@ -528,6 +575,9 @@ fn wait_for_sessions() {
 /// appearing on the next launch as if from nowhere.
 #[tauri::command]
 fn cartridge_stats(drive_path: String) -> stats::Stats {
+    if remote::marker_id(&drive_path).is_some() {
+        return stats::Stats::default();
+    }
     let root = Path::new(&drive_path);
     if settings::load().track_playtime {
         if let Some(seconds) = stats::recover(root) {
@@ -587,6 +637,9 @@ fn end_every_session() {
 /// whether to turn it on.
 #[tauri::command]
 fn save_slots(drive_path: String) -> Vec<saves::SlotStatus> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Vec::new();
+    }
     saves::status(Path::new(&drive_path))
 }
 
@@ -635,6 +688,9 @@ fn set_frontend(id: String, on: bool) -> Result<Vec<FrontEndState>, String> {
 /// line to show for it.
 #[tauri::command]
 fn carried_home(drive_path: String) -> Option<String> {
+    if remote::marker_id(&drive_path).is_some() {
+        return None;
+    }
     let root = Path::new(&drive_path);
     if !home::wanted(root) {
         return None;
@@ -646,6 +702,9 @@ fn carried_home(drive_path: String) -> Option<String> {
 /// Reconcile the cartridge's saves with this machine's, on insert.
 #[tauri::command]
 fn sync_saves(drive_path: String) -> Result<Vec<saves::SyncOutcome>, String> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Ok(Vec::new());
+    }
     if !settings::load().save_sync {
         return Ok(Vec::new());
     }
@@ -669,6 +728,9 @@ fn shader_slots(drive_path: String) -> Vec<shaders::ShaderSlot> {
 /// compile time and nothing else, which is not worth interrupting anyone for.
 #[tauri::command]
 fn pull_shaders(drive_path: String) -> Vec<shaders::Synced> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Vec::new();
+    }
     let root = Path::new(&drive_path);
     if !shaders::wanted(root) {
         return Vec::new();
@@ -679,6 +741,9 @@ fn pull_shaders(drive_path: String) -> Vec<shaders::Synced> {
 /// Take this machine's warmer caches with the cartridge, on eject.
 #[tauri::command]
 fn push_shaders(drive_path: String) -> Vec<shaders::Synced> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Vec::new();
+    }
     let root = Path::new(&drive_path);
     if !shaders::wanted(root) {
         return Vec::new();
@@ -701,6 +766,9 @@ fn gather(results: Vec<Result<shaders::Synced, String>>) -> Vec<shaders::Synced>
 /// The same, on the way out.
 #[tauri::command]
 fn push_saves(drive_path: String) -> Result<Vec<saves::SyncOutcome>, String> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Ok(Vec::new());
+    }
     if !settings::load().save_sync {
         return Ok(Vec::new());
     }
@@ -969,6 +1037,10 @@ fn debug_log(line: String) {
 /// the interface chose to show.
 #[tauri::command]
 fn can_eject(drive_path: String) -> bool {
+    if remote::marker_id(&drive_path).is_some() {
+        // Eject is how a remote game is stopped.
+        return true;
+    }
     drives::is_ejectable(std::path::Path::new(&drive_path))
 }
 
@@ -1029,6 +1101,11 @@ async fn eject_with_guard(
     window: tauri::WebviewWindow,
     drive_path: String,
 ) -> Result<EjectOutcome, String> {
+    if let Some(id) = remote::marker_id(&drive_path).map(str::to_string) {
+        return tauri::async_runtime::spawn_blocking(move || stop_remote(&id))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     let holders = cartridge_busy(drive_path.clone());
     if holders.is_empty() {
         unmount(&drive_path)?;
@@ -1195,6 +1272,9 @@ fn set_settings(settings: settings::Settings) -> Result<settings::Settings, Stri
 /// filling in half a second late.
 #[tauri::command]
 async fn cartridge_health(drive_path: String) -> health::Health {
+    if remote::marker_id(&drive_path).is_some() {
+        return health::Health::default();
+    }
     tauri::async_runtime::spawn_blocking(move || health::inspect(&drive_path))
         .await
         .unwrap_or_default()
@@ -1485,13 +1565,32 @@ fn add_gamepak(
     kind: String,
     a: String,
     b: Option<String>,
+    c: Option<String>,
+    d: Option<String>,
     id: Option<String>,
 ) -> Result<String, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("name the GamePak".into());
     }
-    let action = action_from(&kind, a.trim(), b.as_deref().map(str::trim))?;
+    let setting = |value: &Option<String>| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned)
+    };
+    let (c, d) = (setting(&c), setting(&d));
+    let action = action_from(
+        &kind,
+        a.trim(),
+        b.as_deref().map(str::trim),
+        c.as_deref(),
+        d.as_deref(),
+    )?;
+    // A remote GamePak answers to the ID its card carries, which is the ID
+    // the host registered: one ID for the card, the client and the host.
+    let id = if kind == "remote" { c.clone() } else { id };
     let id = match id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
         Some(id) => id.to_owned(),
         None => gamepak_core::gamepak::new_id(),
@@ -1511,6 +1610,8 @@ fn action_from(
     kind: &str,
     a: &str,
     b: Option<&str>,
+    c: Option<&str>,
+    d: Option<&str>,
 ) -> Result<gamepak_core::gamepak::Action, String> {
     use gamepak_core::gamepak::Action;
     if a.is_empty() {
@@ -1535,6 +1636,24 @@ fn action_from(
                 .ok_or("Moonlight needs an app name")?
                 .to_owned(),
         },
+        "remote" => {
+            let key = b.filter(|k| !k.is_empty()).ok_or("paste the host's key")?;
+            remote::Key::from_hex(key)?;
+            let id = c.ok_or("give the GamePak ID the host registered")?;
+            gamepak_core::gamepak::GamePakId::parse(id)?;
+            Action::Remote {
+                // An address with no port means the agent's default one.
+                agent: if a.contains(':') {
+                    a.to_owned()
+                } else {
+                    format!("{a}:{}", remote::DEFAULT_PORT)
+                },
+                key: key.to_owned(),
+                moonlight: a.split(':').next().unwrap_or(a).to_owned(),
+                app: d.unwrap_or("Desktop").to_owned(),
+                host_id: None,
+            }
+        }
         "service" => Action::Service {
             target: a.to_owned(),
         },
@@ -1690,6 +1809,13 @@ async fn create_cartridge(
 /// says whether the drive is a memory card and nothing else.
 #[tauri::command]
 fn memory_card(drive_path: String) -> memcard::CardView {
+    if remote::marker_id(&drive_path).is_some() {
+        return memcard::CardView {
+            title: String::new(),
+            blocks: Vec::new(),
+            card_only: false,
+        };
+    }
     memcard::view(Path::new(&drive_path))
 }
 
@@ -2003,6 +2129,11 @@ fn main() {
         std::process::exit(gamepak_core::eject::run_elevated(&drive) as i32);
     }
 
+    // The gaming PC's half of priming: no window, serves until ended.
+    if args.iter().any(|arg| arg == "--host-agent") {
+        std::process::exit(agent::run(&args));
+    }
+
     // Play and Eject for a front-end with its own buttons. Before the insert
     // reaction, which is about a cartridge arriving and not about being asked.
     let play = headless::play_index(&args);
@@ -2045,7 +2176,11 @@ fn main() {
                 let is_cartridge = gamepak_core::gamepak::GamePakId::parse(id.trim())
                     .and_then(|parsed| gamepak_core::gamepak::lookup_from(&registry, &parsed))
                     .map(|pak| {
-                        matches!(pak.action, gamepak_core::gamepak::Action::Cartridge { .. })
+                        matches!(
+                            pak.action,
+                            gamepak_core::gamepak::Action::Cartridge { .. }
+                                | gamepak_core::gamepak::Action::Remote { .. }
+                        )
                     });
                 match is_cartridge {
                     Ok(false) => {

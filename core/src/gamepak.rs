@@ -71,6 +71,29 @@ pub enum Action {
     /// Start a named system service (systemd user unit on Linux, a Windows
     /// service on Windows).
     Service { target: String },
+    /// Start the game on another PC now and stream it when Play is pressed:
+    /// the host runs `pc-gamepak --host-agent`, Moonlight does the streaming.
+    /// Opened in the launcher at READY, like a cartridge. See
+    /// [`crate::remote`].
+    #[serde(rename_all = "camelCase")]
+    Remote {
+        /// The host agent, `address:port`.
+        agent: String,
+        /// The 64 hex digits `pc-gamepak --host-agent` printed on the host.
+        key: String,
+        /// The host as Moonlight names it, for `moonlight stream` and `quit`.
+        moonlight: String,
+        /// What to stream. The game is already running, so the desktop.
+        #[serde(default = "desktop")]
+        app: String,
+        /// The GamePak's ID in the host's registry, when it is not this one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        host_id: Option<String>,
+    },
+}
+
+fn desktop() -> String {
+    "Desktop".to_string()
 }
 
 /// The smallest useful action interface.
@@ -88,6 +111,7 @@ impl GamePakAction for Action {
             Action::Cartridge { .. } => {
                 Err("a cartridge action is opened by the launcher window".into())
             }
+            Action::Remote { .. } => Err("a remote action is opened by the launcher window".into()),
             Action::Exec { program, args } => {
                 if program.trim().is_empty() {
                     return Err("exec action has no program".into());
@@ -106,7 +130,7 @@ impl GamePakAction for Action {
                 if target.trim().is_empty() || target.starts_with('-') || app.starts_with('-') {
                     return Err("moonlight action needs a host and an app name".into());
                 }
-                run("moonlight", &["stream", target, app])
+                run(&moonlight_program(), &["stream", target, app])
             }
             Action::Service { target } => {
                 if target.trim().is_empty() || target.starts_with('-') {
@@ -119,6 +143,26 @@ impl GamePakAction for Action {
             }
         }
     }
+}
+
+/// The Moonlight client: `PC_GAMEPAK_MOONLIGHT` if set, the installer's own
+/// folder on Windows (it does not put itself on PATH), else `moonlight`.
+pub fn moonlight_program() -> String {
+    if let Some(chosen) = std::env::var_os("PC_GAMEPAK_MOONLIGHT") {
+        return chosen.to_string_lossy().into_owned();
+    }
+    #[cfg(windows)]
+    for base in ["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(dir) = std::env::var_os(base) {
+            let exe = PathBuf::from(dir)
+                .join("Moonlight Game Streaming")
+                .join("Moonlight.exe");
+            if exe.is_file() {
+                return exe.to_string_lossy().into_owned();
+            }
+        }
+    }
+    "moonlight".to_string()
 }
 
 fn run<S: AsRef<std::ffi::OsStr>>(program: &str, args: &[S]) -> Result<(), String> {
@@ -394,6 +438,9 @@ pub enum Outcome {
     Executed,
     /// The ID names a cartridge; the launcher should open this folder at READY.
     OpenCartridge(PathBuf),
+    /// The ID names a game on another PC; the launcher should open at READY
+    /// and prime it there. See [`crate::remote`].
+    OpenRemote(GamePakId),
 }
 
 /// The one path every trigger takes: `gp_id` -> lookup -> host wake -> execute.
@@ -406,6 +453,7 @@ pub fn trigger_from(registry: &Path, id: &str) -> Result<Outcome, String> {
     prepare_host(registry, &id)?;
     match pak.action {
         Action::Cartridge { path } => Ok(Outcome::OpenCartridge(path)),
+        Action::Remote { .. } => Ok(Outcome::OpenRemote(id)),
         action => action.execute().map(|()| Outcome::Executed),
     }
 }
