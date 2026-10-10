@@ -42,6 +42,7 @@ pub mod playtrack;
 pub mod portable;
 pub mod proc;
 pub mod registry;
+pub mod remote;
 pub mod saves;
 pub mod settings;
 pub mod sgdb;

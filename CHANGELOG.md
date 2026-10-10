@@ -12,6 +12,16 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### Start on tap: prime a game on the gaming PC, stream it on Play
+
+Tap a GamePak card at the couch and the game starts on the gaming PC at once,
+with no stream; the couch launcher opens at READY with its cover. Play starts
+`moonlight stream`, and Eject ends the stream and closes the game on the
+gaming PC, letting it save first. The gaming PC runs `pc-gamepak --host-agent`,
+which answers only requests signed with its key, and only for GamePaks in its
+own registry. Set it up from the wizard's GamePak actions tab, under **Game on
+another PC**. See the manual's *Start on tap*.
+
 ### Select GamePaks with NFC
 
 A PC/SC-compatible PN532 reader can read an NDEF GamePak URI and select its host

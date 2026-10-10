@@ -25,7 +25,7 @@
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
  *   nfc_readers()                     -> [reader name]
- *   add_gamepak(title, kind, a, b, id)  -> "gp_…" (generic action wizard)
+ *   add_gamepak(title, kind, a, b, c, d, id) -> "gp_…" (generic action wizard)
  *   register_nfc_gamepak(...)          -> ()
  *   write_nfc_card(reader_name, id)     -> ()
  *   create_cartridge({ request })    -> { confPath, formatted, gameCopied, ... }
@@ -147,6 +147,12 @@ const el = {
   actB: $("act-b"),
   actBField: $("act-b-field"),
   actBLabel: $("act-b-label"),
+  actC: $("act-c"),
+  actCField: $("act-c-field"),
+  actCLabel: $("act-c-label"),
+  actD: $("act-d"),
+  actDField: $("act-d-field"),
+  actDLabel: $("act-d-label"),
   actStatus: $("act-status"),
   actCreate: $("btn-act-create"),
   tabNfc: $("tab-nfc"),
@@ -3436,10 +3442,16 @@ async function openMemcardPage() {
   await loadMemcardDrive();
 }
 
-// Per action type: [label for setting a, label for setting b or null].
+// Per action type: the labels for settings a–d, null where it has none.
 const ACTION_FIELDS = {
   steam: ["Steam app ID", null],
   moonlight: ["Moonlight host (name or address)", "App name"],
+  remote: [
+    "Host (its address, as Moonlight knows it)",
+    "Host key (64 characters, from the host)",
+    "GamePak ID (the card's, as registered on the host)",
+    "App to stream (optional, Desktop)",
+  ],
   local: ["File path", null],
   exec: ["Program", "Arguments (optional, space-separated)"],
   service: ["Service name", null],
@@ -3447,21 +3459,30 @@ const ACTION_FIELDS = {
 };
 
 function updateActionFields() {
-  const [a, b] = ACTION_FIELDS[el.actKind.value];
+  const [a, b, c, d] = ACTION_FIELDS[el.actKind.value];
   el.actALabel.textContent = a;
-  el.actBLabel.textContent = b ?? "";
-  el.actBField.hidden = !b;
+  for (const [label, field, text] of [
+    [el.actBLabel, el.actBField, b],
+    [el.actCLabel, el.actCField, c],
+    [el.actDLabel, el.actDField, d],
+  ]) {
+    label.textContent = text ?? "";
+    field.hidden = !text;
+  }
 }
 
 async function createGamePakAction() {
   el.actCreate.disabled = true;
   el.actStatus.textContent = "Saving…";
+  const [, b, c, d] = ACTION_FIELDS[el.actKind.value];
   try {
     const id = await invoke("add_gamepak", {
       title: el.actTitle.value,
       kind: el.actKind.value,
       a: el.actA.value,
-      b: ACTION_FIELDS[el.actKind.value][1] ? el.actB.value : null,
+      b: b ? el.actB.value : null,
+      c: c ? el.actC.value : null,
+      d: d ? el.actD.value : null,
       id: null,
     });
     el.actStatus.textContent = `GamePak ID: ${id}`;
@@ -4430,7 +4451,7 @@ async function demoInvoke(command, args) {
     case "nfc_readers":
       return ["Demo PN532 PC/SC Reader"];
     case "add_gamepak":
-      return "gp_0123456789abcdef";
+      return args?.kind === "remote" && args.c ? args.c : "gp_0123456789abcdef";
     case "register_nfc_gamepak":
     case "write_nfc_card":
       return undefined;
