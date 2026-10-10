@@ -33,6 +33,7 @@ pub mod insert;
 pub mod launch;
 pub mod ludusavi;
 pub mod memcard;
+pub mod moonlight;
 pub mod nfc;
 pub mod notify;
 pub mod play;

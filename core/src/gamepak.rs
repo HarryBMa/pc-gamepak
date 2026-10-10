@@ -71,29 +71,16 @@ pub enum Action {
     /// Start a named system service (systemd user unit on Linux, a Windows
     /// service on Windows).
     Service { target: String },
-    /// Start the game on another PC now and stream it when Play is pressed:
-    /// the host runs `pc-gamepak --host-agent`, Moonlight does the streaming.
-    /// Opened in the launcher at READY, like a cartridge. See
+    /// Start the game on another PC now and stream it when Play is pressed,
+    /// all through Moonlight's pairing: the host needs only the app in its
+    /// list. Opened in the launcher at READY, like a cartridge. See
     /// [`crate::remote`].
-    #[serde(rename_all = "camelCase")]
     Remote {
-        /// The host agent, `address:port`.
-        agent: String,
-        /// The 64 hex digits `pc-gamepak --host-agent` printed on the host.
-        key: String,
-        /// The host as Moonlight names it, for `moonlight stream` and `quit`.
+        /// The host as Moonlight names it (or its address).
         moonlight: String,
-        /// What to stream. The game is already running, so the desktop.
-        #[serde(default = "desktop")]
+        /// The app as the host lists it.
         app: String,
-        /// The GamePak's ID in the host's registry, when it is not this one.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        host_id: Option<String>,
     },
-}
-
-fn desktop() -> String {
-    "Desktop".to_string()
 }
 
 /// The smallest useful action interface.
@@ -412,6 +399,41 @@ pub fn register_action_from(
     })
 }
 
+/// One registered GamePak, for a list to choose from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Listed {
+    pub id: String,
+    pub title: Option<String>,
+    /// The action type: `cartridge`, `remote`, `steam`...
+    pub kind: String,
+}
+
+/// Everything in the registry, in its order. Nothing is checked beyond the
+/// IDs: a list should show an entry whose cartridge is unplugged.
+pub fn list_from(registry: &Path) -> Result<Vec<Listed>, String> {
+    if !registry.exists() {
+        return Ok(Vec::new());
+    }
+    Ok(entries(registry)?
+        .into_iter()
+        .map(|entry| {
+            let kind = match &entry.action {
+                Some(action) => serde_json::to_value(action)
+                    .ok()
+                    .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(str::to_owned))
+                    .unwrap_or_default(),
+                None => "cartridge".to_string(),
+            };
+            Listed {
+                id: entry.id,
+                title: entry.title,
+                kind,
+            }
+        })
+        .collect())
+}
+
 /// Resolve an ID to its registered GamePak. Cartridge paths are verified.
 pub fn lookup_from(registry: &Path, id: &GamePakId) -> Result<GamePak, String> {
     let entry = entries(registry)?
@@ -486,15 +508,25 @@ pub fn prepare_host(registry: &Path, id: &GamePakId) -> Result<(), String> {
     let address: SocketAddr = address
         .parse()
         .map_err(|_| format!("invalid host readiness address: {address}"))?;
-    let packet = magic_packet(&mac)?;
+    send_packet(&magic_packet(&mac)?)?;
+    wait_until_ready(address)
+}
+
+/// Wake the machine with this MAC address.
+pub fn send_magic_packet(mac: &[u8; 6]) -> Result<(), String> {
+    let text: Vec<String> = mac.iter().map(|b| format!("{b:02x}")).collect();
+    send_packet(&magic_packet(&text.join(":"))?)
+}
+
+fn send_packet(packet: &[u8; 102]) -> Result<(), String> {
     let socket = UdpSocket::bind("0.0.0.0:0").map_err(|error| error.to_string())?;
     socket
         .set_broadcast(true)
         .map_err(|error| error.to_string())?;
     socket
-        .send_to(&packet, "255.255.255.255:9")
+        .send_to(packet, "255.255.255.255:9")
         .map_err(|error| format!("could not send Wake-on-LAN packet: {error}"))?;
-    wait_until_ready(address)
+    Ok(())
 }
 
 fn magic_packet(mac: &str) -> Result<[u8; 102], String> {

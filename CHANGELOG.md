@@ -12,15 +12,18 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
-### Start on tap: prime a game on the gaming PC, stream it on Play
+### Start on tap: the game starts on the gaming PC, the stream on Play
 
 Tap a GamePak card at the couch and the game starts on the gaming PC at once,
-with no stream; the couch launcher opens at READY with its cover. Play starts
-`moonlight stream`, and Eject ends the stream and closes the game on the
-gaming PC, letting it save first. The gaming PC runs `pc-gamepak --host-agent`,
-which answers only requests signed with its key, and only for GamePaks in its
-own registry. Set it up from the wizard's GamePak actions tab, under **Game on
-another PC**. See the manual's *Start on tap*.
+with no stream; the couch launcher opens at READY with the game's box art. Play
+runs `moonlight stream`, which resumes the running game, and Eject runs
+`moonlight quit`. The gaming PC needs nothing but Apollo or Sunshine with the
+game in its app list: the couch PC starts the app with Moonlight's own
+pairing, and wakes the gaming PC with the MAC address Moonlight stored. Set it
+up under **GamePak actions → Game on another PC, through Moonlight**, which
+offers Moonlight's hosts and their apps, and write the card from **NFC cards**,
+which now lists GamePaks registered on this PC as well as mounted cartridges.
+See the manual's *Start on tap*.
 
 ### Select GamePaks with NFC
 
