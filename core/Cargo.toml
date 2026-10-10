@@ -18,9 +18,11 @@ license = "MIT"
 image = { version = "=0.25.5", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Keys and nonces for the host agent (remote.rs). Already in the tree through
-# ureq, so this costs a line in the lockfile and nothing else.
+# Random session keys for GameStream requests (moonlight.rs), and the TLS that
+# presents Moonlight's client certificate to a host. Both already in the tree
+# through ureq, so they cost lines in the lockfile and nothing else.
 getrandom = "0.2"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 ureq = { version = "2.10", features = ["json"] }
 urlencoding = "2.1"
 

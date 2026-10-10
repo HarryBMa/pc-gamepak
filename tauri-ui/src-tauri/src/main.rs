@@ -11,7 +11,6 @@
 //
 //   pc-gamepak --drive <path> --play <n>              play, stay up while it runs
 //   pc-gamepak --drive <path> --safe-eject [--force]  eject, report on stdout
-//   pc-gamepak --host-agent [--port N] [--print-key]  prime games for a client
 //
 // Launcher commands:
 //   drive_path()                             -> String | error
@@ -75,7 +74,6 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod agent;
 mod headless;
 mod nfc;
 
@@ -110,16 +108,26 @@ fn parse_cartridge(drive_path: String) -> Result<CartridgeInfo, String> {
     cartridge::read_cartridge_info(&drive_path)
 }
 
-/// A game on another PC: start it there now, and show it here at READY with
-/// the host's title and cover. Play streams it; Eject stops it.
+/// A game on another PC: start it there now, through Moonlight's pairing, and
+/// show it here at READY with the host's title and box art. Play streams it;
+/// Eject closes it.
 fn prime_remote(marker: &str, id: &str) -> Result<CartridgeInfo, String> {
     let target = remote::Remote::resolve(&gamepak_core::gamepak::registry_path(), id)?;
-    let reply = target.prime()?;
-    debug_log(format!("remote {id}: primed on {}", target.agent));
+    let launched = target.prime()?;
+    debug_log(format!(
+        "remote {id}: {} on {} ({})",
+        launched.title,
+        target.moonlight,
+        if launched.already_running {
+            "already running"
+        } else {
+            "started"
+        }
+    ));
     Ok(CartridgeInfo::remote(
         marker,
-        reply.title.as_deref().unwrap_or(&target.moonlight),
-        reply.cover.as_deref().unwrap_or(""),
+        &launched.title,
+        launched.cover.as_deref().unwrap_or(""),
     ))
 }
 
@@ -280,18 +288,14 @@ fn set_window_icons(window: &tauri::WebviewWindow, ico: &[u8]) {
 #[cfg(not(target_os = "windows"))]
 fn set_window_icons(_window: &tauri::WebviewWindow, _ico: &[u8]) {}
 
-/// Eject for a game on another PC: end the stream, then close the game on the
-/// host and let it save. A stream that will not end is noted and the game is
-/// closed anyway, which ends the stream with it.
+/// Eject for a game on another PC: `moonlight quit`, which closes the app on
+/// the host and any stream of it.
 fn stop_remote(id: &str) -> Result<EjectOutcome, String> {
     let target = remote::Remote::resolve(&gamepak_core::gamepak::registry_path(), id)?;
-    if let Err(why) = target.quit() {
-        debug_log(format!("remote {id}: {why}"));
-    }
-    target.stop()?;
+    target.quit()?;
     Ok(EjectOutcome {
         ejected: true,
-        message: format!("Stopped on {}", target.moonlight),
+        message: format!("Closed on {}", target.moonlight),
     })
 }
 
@@ -1565,32 +1569,13 @@ fn add_gamepak(
     kind: String,
     a: String,
     b: Option<String>,
-    c: Option<String>,
-    d: Option<String>,
     id: Option<String>,
 ) -> Result<String, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("name the GamePak".into());
     }
-    let setting = |value: &Option<String>| {
-        value
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_owned)
-    };
-    let (c, d) = (setting(&c), setting(&d));
-    let action = action_from(
-        &kind,
-        a.trim(),
-        b.as_deref().map(str::trim),
-        c.as_deref(),
-        d.as_deref(),
-    )?;
-    // A remote GamePak answers to the ID its card carries, which is the ID
-    // the host registered: one ID for the card, the client and the host.
-    let id = if kind == "remote" { c.clone() } else { id };
+    let action = action_from(&kind, a.trim(), b.as_deref().map(str::trim))?;
     let id = match id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
         Some(id) => id.to_owned(),
         None => gamepak_core::gamepak::new_id(),
@@ -1610,8 +1595,6 @@ fn action_from(
     kind: &str,
     a: &str,
     b: Option<&str>,
-    c: Option<&str>,
-    d: Option<&str>,
 ) -> Result<gamepak_core::gamepak::Action, String> {
     use gamepak_core::gamepak::Action;
     if a.is_empty() {
@@ -1636,24 +1619,13 @@ fn action_from(
                 .ok_or("Moonlight needs an app name")?
                 .to_owned(),
         },
-        "remote" => {
-            let key = b.filter(|k| !k.is_empty()).ok_or("paste the host's key")?;
-            remote::Key::from_hex(key)?;
-            let id = c.ok_or("give the GamePak ID the host registered")?;
-            gamepak_core::gamepak::GamePakId::parse(id)?;
-            Action::Remote {
-                // An address with no port means the agent's default one.
-                agent: if a.contains(':') {
-                    a.to_owned()
-                } else {
-                    format!("{a}:{}", remote::DEFAULT_PORT)
-                },
-                key: key.to_owned(),
-                moonlight: a.split(':').next().unwrap_or(a).to_owned(),
-                app: d.unwrap_or("Desktop").to_owned(),
-                host_id: None,
-            }
-        }
+        "remote" => Action::Remote {
+            moonlight: a.to_owned(),
+            app: b
+                .filter(|app| !app.is_empty())
+                .ok_or("name the app, as the host lists it")?
+                .to_owned(),
+        },
         "service" => Action::Service {
             target: a.to_owned(),
         },
@@ -1662,6 +1634,37 @@ fn action_from(
         },
         _ => return Err(format!("unknown action type {kind}")),
     })
+}
+
+/// Every GamePak registered on this PC, for the NFC tab to write a card for.
+#[tauri::command]
+fn list_gamepaks() -> Result<Vec<gamepak_core::gamepak::Listed>, String> {
+    gamepak_core::gamepak::list_from(&gamepak_core::gamepak::registry_path())
+}
+
+/// A host Moonlight has paired with, and its apps as Moonlight last saw them.
+#[derive(serde::Serialize)]
+struct MoonlightHost {
+    name: String,
+    apps: Vec<String>,
+}
+
+/// Moonlight's paired hosts, for the wizard to suggest. Empty when Moonlight
+/// is not installed or not paired: the fields are still free text.
+#[tauri::command]
+fn moonlight_hosts() -> Vec<MoonlightHost> {
+    gamepak_core::moonlight::Settings::load()
+        .map(|settings| {
+            settings
+                .hosts()
+                .into_iter()
+                .map(|host| MoonlightHost {
+                    name: host.name,
+                    apps: host.apps.into_iter().map(|(name, _)| name).collect(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -2129,11 +2132,6 @@ fn main() {
         std::process::exit(gamepak_core::eject::run_elevated(&drive) as i32);
     }
 
-    // The gaming PC's half of priming: no window, serves until ended.
-    if args.iter().any(|arg| arg == "--host-agent") {
-        std::process::exit(agent::run(&args));
-    }
-
     // Play and Eject for a front-end with its own buttons. Before the insert
     // reaction, which is about a cartridge arriving and not about being asked.
     let play = headless::play_index(&args);
@@ -2264,6 +2262,8 @@ fn main() {
             list_target_drives,
             nfc_readers,
             register_nfc_gamepak,
+            list_gamepaks,
+            moonlight_hosts,
             add_gamepak,
             write_nfc_card,
             list_unmounted_volumes,

@@ -25,7 +25,9 @@
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
  *   nfc_readers()                     -> [reader name]
- *   add_gamepak(title, kind, a, b, c, d, id) -> "gp_…" (generic action wizard)
+ *   add_gamepak(title, kind, a, b, id)  -> "gp_…" (generic action wizard)
+ *   list_gamepaks()                   -> [{ id, title, kind }]
+ *   moonlight_hosts()                 -> [{ name, apps: [name] }]
  *   register_nfc_gamepak(...)          -> ()
  *   write_nfc_card(reader_name, id)     -> ()
  *   create_cartridge({ request })    -> { confPath, formatted, gameCopied, ... }
@@ -147,12 +149,9 @@ const el = {
   actB: $("act-b"),
   actBField: $("act-b-field"),
   actBLabel: $("act-b-label"),
-  actC: $("act-c"),
-  actCField: $("act-c-field"),
-  actCLabel: $("act-c-label"),
-  actD: $("act-d"),
-  actDField: $("act-d-field"),
-  actDLabel: $("act-d-label"),
+  actAList: $("act-a-list"),
+  actBList: $("act-b-list"),
+  nfcHost: $("nfc-host"),
   actStatus: $("act-status"),
   actCreate: $("btn-act-create"),
   tabNfc: $("tab-nfc"),
@@ -3442,50 +3441,73 @@ async function openMemcardPage() {
   await loadMemcardDrive();
 }
 
-// Per action type: the labels for settings a–d, null where it has none.
+// Per action type: [label for setting a, label for setting b or null].
 const ACTION_FIELDS = {
   steam: ["Steam app ID", null],
   moonlight: ["Moonlight host (name or address)", "App name"],
-  remote: [
-    "Host (its address, as Moonlight knows it)",
-    "Host key (64 characters, from the host)",
-    "GamePak ID (the card's, as registered on the host)",
-    "App to stream (optional, Desktop)",
-  ],
+  remote: ["Host, as Moonlight names it", "App, as the host lists it"],
   local: ["File path", null],
   exec: ["Program", "Arguments (optional, space-separated)"],
   service: ["Service name", null],
   open: ["URL", null],
 };
 
-function updateActionFields() {
-  const [a, b, c, d] = ACTION_FIELDS[el.actKind.value];
+/** Moonlight's paired hosts and their apps, read once when first needed. */
+let moonlightHosts = null;
+
+function fillList(list, values) {
+  list.replaceChildren(
+    ...values.map((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      return option;
+    }),
+  );
+}
+
+/** Suggest the apps of whichever host has been typed or picked. */
+function suggestApps() {
+  const host = (moonlightHosts ?? []).find(
+    (h) => h.name.toLowerCase() === el.actA.value.trim().toLowerCase(),
+  );
+  fillList(el.actBList, host?.apps ?? []);
+}
+
+async function updateActionFields() {
+  const kind = el.actKind.value;
+  const [a, b] = ACTION_FIELDS[kind];
   el.actALabel.textContent = a;
-  for (const [label, field, text] of [
-    [el.actBLabel, el.actBField, b],
-    [el.actCLabel, el.actCField, c],
-    [el.actDLabel, el.actDField, d],
-  ]) {
-    label.textContent = text ?? "";
-    field.hidden = !text;
+  el.actBLabel.textContent = b ?? "";
+  el.actBField.hidden = !b;
+
+  // Moonlight already knows the hosts it paired with and their apps, so the
+  // two fields offer those rather than asking for them to be typed out.
+  const remote = kind === "remote" || kind === "moonlight";
+  for (const [input, list] of [[el.actA, el.actAList], [el.actB, el.actBList]]) {
+    if (remote) input.setAttribute("list", list.id);
+    else input.removeAttribute("list");
   }
+  if (!remote) return;
+  if (moonlightHosts === null) {
+    moonlightHosts = await invoke("moonlight_hosts").catch(() => []);
+  }
+  fillList(el.actAList, moonlightHosts.map((h) => h.name));
+  if (!el.actA.value && moonlightHosts.length === 1) el.actA.value = moonlightHosts[0].name;
+  suggestApps();
 }
 
 async function createGamePakAction() {
   el.actCreate.disabled = true;
   el.actStatus.textContent = "Saving…";
-  const [, b, c, d] = ACTION_FIELDS[el.actKind.value];
   try {
     const id = await invoke("add_gamepak", {
       title: el.actTitle.value,
       kind: el.actKind.value,
       a: el.actA.value,
-      b: b ? el.actB.value : null,
-      c: c ? el.actC.value : null,
-      d: d ? el.actD.value : null,
+      b: ACTION_FIELDS[el.actKind.value][1] ? el.actB.value : null,
       id: null,
     });
-    el.actStatus.textContent = `GamePak ID: ${id}`;
+    el.actStatus.textContent = `${id} — write it to a card under NFC cards.`;
   } catch (error) {
     el.actStatus.textContent = String(error);
   } finally {
@@ -3531,13 +3553,23 @@ async function openNfcPage() {
     option.textContent = drive.cartridgeTitle || drive.label || drive.path;
     el.nfcDrive.append(option);
   }
-  el.nfcDrive.value = available.some((drive) => drive.path === previous)
-    ? previous
-    : available[0]?.path || "";
-  if (!nfcIdTouched && el.nfcDrive.value) {
-    const drive = available.find((item) => item.path === el.nfcDrive.value);
-    el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
+  // A GamePak that is not a drive — a game on another PC, a Steam game —
+  // is written by the ID it was registered under.
+  const registered = await invoke("list_gamepaks").catch(() => []);
+  if (registered.length) {
+    const group = document.createElement("optgroup");
+    group.label = "Registered on this PC";
+    for (const pak of registered) {
+      const option = document.createElement("option");
+      option.value = `gp:${pak.id}`;
+      option.textContent = `${pak.title || pak.id} · ${KIND_LABELS[pak.kind] ?? pak.kind}`;
+      group.append(option);
+    }
+    el.nfcDrive.append(group);
   }
+  const values = [...el.nfcDrive.options].map((o) => o.value).filter(Boolean);
+  el.nfcDrive.value = values.includes(previous) ? previous : values[0] || "";
+  chooseNfcGamePak(available);
 
   const previousReader = el.nfcReader.value;
   el.nfcReader.replaceChildren();
@@ -3568,10 +3600,39 @@ async function openNfcPage() {
     el.nfcReader.append(failed);
     el.nfcStatus.textContent = String(error);
   }
-  if (!available.length) {
-    el.nfcStatus.textContent = "Connect a GamePak cartridge to register it.";
+  if (!available.length && !registered.length) {
+    el.nfcStatus.textContent = "Connect a cartridge, or register a GamePak under GamePak actions.";
   } else if (!el.nfcStatus.textContent) {
-    el.nfcStatus.textContent = "Choose a cartridge, then hold a blank tag near the reader.";
+    el.nfcStatus.textContent = "Choose a GamePak, then hold a blank tag near the reader.";
+  }
+  updateNfcUri();
+}
+
+const KIND_LABELS = {
+  cartridge: "cartridge",
+  remote: "on another PC",
+  moonlight: "Moonlight stream",
+  steam: "Steam",
+  local: "file",
+  exec: "program",
+  service: "service",
+  open: "URL",
+};
+
+/**
+ * Follow the GamePak picker: a drive suggests an ID to register it under, a
+ * registered GamePak already has one and keeps it.
+ */
+function chooseNfcGamePak(available = drives) {
+  const value = el.nfcDrive.value;
+  const registered = value.startsWith("gp:");
+  el.nfcId.readOnly = registered;
+  el.nfcHost.hidden = registered;
+  if (registered) {
+    el.nfcId.value = value.slice(3);
+  } else if (!nfcIdTouched && value) {
+    const drive = available.find((item) => item.path === value);
+    el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
   }
   updateNfcUri();
 }
@@ -3593,9 +3654,10 @@ async function writeNfcCard() {
   if (!drivePath || !readerName) return;
 
   el.nfcWrite.disabled = true;
-  el.nfcStatus.textContent = "Registering GamePak and writing tag…";
+  const registered = drivePath.startsWith("gp:");
+  el.nfcStatus.textContent = registered ? "Writing tag…" : "Registering GamePak and writing tag…";
   try {
-    await invoke("register_nfc_gamepak", {
+    if (!registered) await invoke("register_nfc_gamepak", {
       id,
       drivePath,
       wakeOnLan: wakeOnLan || null,
@@ -3924,11 +3986,8 @@ el.tabActions.addEventListener("click", () => showTab("actions"));
 el.actKind.addEventListener("change", updateActionFields);
 el.actCreate.addEventListener("click", createGamePakAction);
 el.tabNfc.addEventListener("click", () => showTab("nfc"));
-el.nfcDrive.addEventListener("change", () => {
-  const drive = drives.find((item) => item.path === el.nfcDrive.value);
-  if (!nfcIdTouched) el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
-  updateNfcUri();
-});
+el.nfcDrive.addEventListener("change", () => chooseNfcGamePak());
+el.actA.addEventListener("input", suggestApps);
 el.nfcId.addEventListener("input", () => {
   nfcIdTouched = true;
   updateNfcUri();
@@ -4451,7 +4510,11 @@ async function demoInvoke(command, args) {
     case "nfc_readers":
       return ["Demo PN532 PC/SC Reader"];
     case "add_gamepak":
-      return args?.kind === "remote" && args.c ? args.c : "gp_0123456789abcdef";
+      return "gp_0123456789abcdef";
+    case "list_gamepaks":
+      return [{ id: "gp_cyberpunk", title: "Cyberpunk 2077", kind: "remote" }];
+    case "moonlight_hosts":
+      return [{ name: "GAMING-PC", apps: ["Desktop", "Steam Big Picture", "Cyberpunk 2077"] }];
     case "register_nfc_gamepak":
     case "write_nfc_card":
       return undefined;

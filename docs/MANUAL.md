@@ -1308,72 +1308,53 @@ other actions run immediately.
 <br />
 
 Tap a card at the couch and the game starts on the gaming PC straight away,
-without a stream. The launcher on the couch opens at READY with the game's
-cover. **Play** starts Moonlight, which shows the game already running.
-**Eject** ends the stream and closes the game on the gaming PC, letting it save
-first.
+without a stream. The launcher on the couch opens at READY with the game's box
+art. **Play** streams it, already running. **Eject** closes it on the gaming PC.
 
 ```text
-COUCH (client)                           GAMING PC (host)
-tap ── wake, then prime gp_id ─────────▶ pc-gamepak --host-agent
-                                           starts the game headless:
-                                           hours counted, saves pulled
-Play ── moonlight stream <host> Desktop ▶ Apollo streams the desktop
-Eject ── moonlight quit, then stop ─────▶ game asked to close (forced after
-                                           15 s), saves pushed back
+COUCH (NFC reader, Moonlight)              GAMING PC (Apollo or Sunshine)
+tap ── GameStream "launch", no stream ───▶ the app starts and keeps running
+Play ── moonlight stream <host> <app> ───▶ Moonlight resumes the running app
+Eject ── moonlight quit <host> ──────────▶ the app is closed
 ```
 
-**On the gaming PC** (Windows, with Apollo or Sunshine):
+**The gaming PC needs nothing new.** Apollo or Sunshine with the game in its
+app list is all. Everything else happens on the couch PC, with the pairing
+Moonlight already has. Moonlight's command line cannot start an app without
+streaming it, so the couch PC sends GameStream's own launch request once,
+signed with Moonlight's client certificate and checking the host against the
+certificate Moonlight pinned. The host starts the app and, when no stream
+follows within a few seconds, simply leaves it running. Play's `moonlight
+stream` then finds it running and resumes it.
 
-1. Register the game on this PC under a GamePak ID. The simplest way is the
-   wizard's **NFC cards** tab with the cartridge plugged in here: it registers
-   the ID and writes the card in one go. A card written there is the card you
-   tap at the couch.
-2. Start the agent at every logon, in your own account (the game needs your
-   desktop), and let it through the firewall on private networks:
+**On the couch PC:**
 
-   ```powershell
-   $exe = "$env:LOCALAPPDATA\PC-GamePak\pc-gamepak.exe"   # install.ps1's folder; WinGet's differs
-   schtasks /Create /TN "PC GamePak host agent" /SC ONLOGON /TR "`"$exe`" --host-agent"
-   New-NetFirewallRule -DisplayName "PC GamePak host agent" -Direction Inbound `
-     -Protocol TCP -LocalPort 47820 -Action Allow -Profile Private
-   ```
+1. Pair Moonlight with the gaming PC, as usual.
+2. In the wizard's **GamePak actions** tab choose **Game on another PC, through
+   Moonlight**. The host and its apps are offered from Moonlight's own list;
+   pick the host and the game's app, and **Create**.
+3. In **NFC cards**, choose it under *Registered on this PC*, pick the reader,
+   and write a blank tag.
 
-3. Read the key: `%LOCALAPPDATA%\PC-GamePak\host-agent.key`, 64 characters,
-   made the first time the agent starts. `pc-gamepak --host-agent --print-key`
-   prints it too.
+A gaming PC that is asleep is woken with the MAC address Moonlight stored when
+it paired, and the couch waits up to 90 seconds for it. The game is started at
+Moonlight's own resolution and frame rate, so Apollo's virtual display is made
+at the size the stream will be.
 
-**On the couch PC:** pair Moonlight with the gaming PC once, as usual. Then in
-the wizard's **GamePak actions** tab choose **Game on another PC**, and give the
-gaming PC's address, the key, and the card's GamePak ID. **App to stream** is
-Apollo's app name and defaults to **Desktop**, since the game is already
-running there. For Wake-on-LAN, add `host` to the entry in `gamepaks.json` as
-for any GamePak; the couch wakes the gaming PC and waits for it before priming.
-
-The entry it writes looks like this:
+The entry it registers is just the host and the app:
 
 ```json
-{ "id": "gp_cyberpunk", "title": "Cyberpunk 2077",
-  "action": { "type": "remote", "agent": "192.168.1.20:47820",
-              "key": "…64 hex digits…", "moonlight": "192.168.1.20", "app": "Desktop" } }
+{ "id": "gp_0123456789abcdef", "title": "Cyberpunk 2077",
+  "action": { "type": "remote", "moonlight": "GAMING-PC", "app": "Cyberpunk 2077" } }
 ```
 
-**What is and is not protected.** Every request is signed with the key
-(HMAC-SHA256), carries the time and a one-off nonce, and is refused if the
-signature is wrong, the clocks are more than two minutes apart, or the same
-request arrives twice. The gaming PC runs only what its own registry says an ID
-means: the couch can name an ID, never a program. Requests are not encrypted;
-they carry an ID and a verb, and the answer a title and a cover. Keep the agent
-to private networks, as the firewall rule above does. Anyone with the key can
-start and stop registered games on that PC, so treat it like a password, and
-delete `host-agent.key` to make a new one.
-
-**Not yet:** a collection starts its first game, since the couch has no way to
-pick one yet. Lifting the card off the reader does not eject; press Eject.
-Moonlight is found at `C:\Program Files\Moonlight Game Streaming` or on PATH;
-set `PC_GAMEPAK_MOONLIGHT` for anywhere else. With Apollo's virtual display, a
-game started before the stream may open on the physical monitor rather than the
-virtual one. If it does, stream the physical display instead.
+**Not yet:** lifting the card off the reader does not eject; press Eject. If
+the gaming PC is already running a different app, the tap says so rather than
+replacing it. Moonlight is found at `C:\Program Files\Moonlight Game
+Streaming` or on PATH; set `PC_GAMEPAK_MOONLIGHT` for anywhere else. Its
+settings are read from the registry on Windows and from
+`~/.config/Moonlight Game Streaming Project/Moonlight.conf` (or the Flatpak's
+copy) on Linux; `PC_GAMEPAK_MOONLIGHT_CONF` names another file.
 
 </details>
 
