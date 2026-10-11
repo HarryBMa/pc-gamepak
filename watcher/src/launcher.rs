@@ -18,6 +18,7 @@ use crate::log;
 /// systemd user manager holds the session's current ones; take the display
 /// variables from there.
 fn launcher_command(launcher: &Path) -> Command {
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut command = Command::new(launcher);
     #[cfg(target_os = "linux")]
     if let Ok(output) = Command::new("systemctl")
