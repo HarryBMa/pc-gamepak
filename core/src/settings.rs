@@ -126,6 +126,14 @@ pub struct Settings {
     /// Look up where each game keeps its saves, from Ludusavi's manifest.
     /// **Off**: it downloads a 17 MB file. See [`crate::ludusavi`].
     pub ludusavi_enabled: bool,
+
+    // ---- GamePak triggers --------------------------------------------------
+    /// Start a GamePak's action the moment its card or barcode arrives.
+    ///
+    /// **Off**: a trigger opens the launcher at READY — the host woken, the
+    /// title and cover up — and Play starts it, as a cartridge does. On, a
+    /// tap is the Play press, for a setup with no screen to press it on.
+    pub launch_on_trigger: bool,
 }
 
 impl Default for Settings {
@@ -153,6 +161,7 @@ impl Default for Settings {
             default_format: false,
             save_sync: false,
             track_playtime: true,
+            launch_on_trigger: false,
             idle_pause_minutes: crate::playtrack::DEFAULT_IDLE_MINUTES,
             hltb_enabled: false,
             ludusavi_enabled: false,

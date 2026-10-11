@@ -102,16 +102,6 @@
           </svg>
           <span>GamePak actions</span>
         </button>
-        <button id="tab-nfc" class="side-tab" type="button" role="tab"
-                aria-selected="false" aria-controls="panel-nfc" tabindex="-1">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
-               stroke-linecap="round" stroke-linejoin="round" width="16" height="16"
-               aria-hidden="true">
-            <path d="M6.2 6.2a5.4 5.4 0 0 0 0 7.6M9 8.8a1.7 1.7 0 0 0 0 2.4M13.8 6.2a5.4 5.4 0 0 1 0 7.6" />
-            <rect x="8" y="8" width="4" height="4" rx="1" />
-          </svg>
-          <span>NFC cards</span>
-        </button>
       </nav>
 
       <!-- ============================================================
@@ -505,93 +495,99 @@
           </div>
         </div>
 
-        <!-- GamePak actions — register a stable gp_ ID against an action.
-             Knows nothing about how the ID will be delivered. -->
+        <!-- GamePak actions — a card or barcode, and what it starts. The list
+             is the home; New GamePak listens for a tap or scan the moment it
+             opens, so making one is: tap, pick, save. -->
         <div id="panel-actions" role="tabpanel" aria-labelledby="tab-actions" hidden>
-          <div class="build-group">
-            <label class="field">
-              <span class="field__label">Name</span>
-              <input id="act-title" type="text" class="field__input--lead" autocomplete="off"
-                     spellcheck="false" placeholder="Cyberpunk 2077" />
-            </label>
+          <div id="gp-home" class="gp-view">
+            <div class="gp-head">
+              <p class="build-label">Your GamePaks</p>
+              <button id="gp-new" class="btn btn--primary" type="button">
+                <span class="btn__label">New GamePak</span>
+              </button>
+            </div>
+            <ul id="gp-list" aria-label="GamePaks on this PC"></ul>
+            <div id="gp-empty" class="gp-empty" hidden>
+              <p class="gp-empty__title">No GamePaks yet</p>
+              <p class="hint">A GamePak is a card or a barcode that starts something: a game, a
+                stream, a movie. Make one, then tap the card to play.</p>
+            </div>
+            <p id="gp-status" class="hint" role="status" aria-live="polite"></p>
           </div>
-          <div class="build-group">
-            <p class="build-label">Action</p>
-            <select id="act-kind" class="mcw-select" aria-label="Action type">
-              <option value="steam">Steam game</option>
-              <option value="moonlight">Moonlight stream</option>
-              <option value="remote">Game on another PC (start on tap)</option>
-              <option value="local">Local file (movie, media)</option>
-              <option value="exec">Program</option>
-              <option value="service">Service</option>
-              <option value="open">URL</option>
-            </select>
-          </div>
-          <div class="build-group">
-            <label class="field">
-              <span id="act-a-label" class="field__label">Steam app ID</span>
-              <input id="act-a" type="text" autocomplete="off" spellcheck="false" />
-            </label>
-            <label id="act-b-field" class="field">
-              <span id="act-b-label" class="field__label"></span>
-              <input id="act-b" type="text" autocomplete="off" spellcheck="false" />
-            </label>
-            <label id="act-c-field" class="field" hidden>
-              <span id="act-c-label" class="field__label"></span>
-              <input id="act-c" type="text" autocomplete="off" spellcheck="false" />
-            </label>
-            <label id="act-d-field" class="field" hidden>
-              <span id="act-d-label" class="field__label"></span>
-              <input id="act-d" type="text" autocomplete="off" spellcheck="false" />
-            </label>
-          </div>
-          <div class="mcw-foot">
-            <p id="act-status" class="hint mono" role="status" aria-live="polite"></p>
-            <button id="btn-act-create" class="btn btn--primary" type="button">
-              <span class="btn__label">Create</span>
-            </button>
-          </div>
-        </div>
 
-        <!-- NFC cards (optional example adapter) — register a GamePak and write its stable ID to a tag. -->
-        <div id="panel-nfc" role="tabpanel" aria-labelledby="tab-nfc" hidden>
-          <div class="build-group">
-            <p class="build-label">GamePak</p>
-            <select id="nfc-drive" class="mcw-select" aria-label="GamePak cartridge"></select>
-            <p class="hint">Choose a mounted cartridge to register on this PC.</p>
-          </div>
-          <div class="build-group">
-            <label class="field">
-              <span class="field__label">Stable card ID</span>
-              <input id="nfc-id" type="text" class="field__input--lead" autocomplete="off"
-                     spellcheck="false" placeholder="gp_game-name" aria-describedby="nfc-uri" />
-            </label>
-            <p id="nfc-uri" class="hint mono">gamepak://gp_…</p>
-          </div>
-          <details class="build-group">
-            <summary class="build-label">Remote host (optional)</summary>
-            <label class="field">
-              <span class="field__label">Wake-on-LAN MAC address</span>
-              <input id="nfc-wol" type="text" autocomplete="off" spellcheck="false"
-                     placeholder="00:11:22:33:44:55" />
-            </label>
-            <label class="field">
-              <span class="field__label">Readiness address</span>
-              <input id="nfc-ready-address" type="text" autocomplete="off" spellcheck="false"
-                     placeholder="192.168.1.20:47984" />
-            </label>
-            <p class="hint">Both are required to wake and wait for a remote host.</p>
-          </details>
-          <div class="build-group">
-            <p class="build-label">Reader</p>
-            <select id="nfc-reader" class="mcw-select" aria-label="PC/SC NFC reader"></select>
-            <p class="hint">Use a PC/SC reader and a blank, writable Type 2 / NTAG tag.</p>
-          </div>
-          <div class="mcw-foot">
-            <p id="nfc-status" class="hint" role="status" aria-live="polite"></p>
-            <button id="btn-nfc-write" class="btn btn--primary" type="button" disabled>
-              <span class="btn__label">Write NFC card</span>
-            </button>
+          <div id="gp-form" class="gp-view" hidden>
+            <section class="gp-step">
+              <p class="build-label">1 · Tap a card or scan a barcode</p>
+              <div id="gp-listen" class="gp-listen" data-state="waiting">
+                <span class="gp-listen__mark" aria-hidden="true"></span>
+                <p id="gp-listen-text" class="gp-listen__text" role="status" aria-live="polite">
+                  Waiting for a card or barcode…</p>
+                <button id="gp-type-id" class="change-btn" type="button">Type an ID</button>
+              </div>
+              <label id="gp-id-field" class="field" hidden>
+                <span class="field__label">ID</span>
+                <input id="gp-id" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="gp_… or the number under a barcode — blank makes one up" />
+              </label>
+            </section>
+
+            <section class="gp-step">
+              <p class="build-label">2 · What should it start?</p>
+              <div id="gp-kinds" class="gp-kinds" role="radiogroup" aria-label="What it starts">
+                <button type="button" role="radio" class="gp-kind" data-kind="game">Game on this PC</button>
+                <button type="button" role="radio" class="gp-kind" data-kind="moonlight">Stream (Moonlight)</button>
+                <button type="button" role="radio" class="gp-kind" data-kind="remote">Game on another PC</button>
+                <button type="button" role="radio" class="gp-kind" data-kind="local">Movie or file</button>
+                <button type="button" role="radio" class="gp-kind" data-kind="exec">Program</button>
+                <button type="button" role="radio" class="gp-kind" data-kind="open">Web page</button>
+                <button type="button" role="radio" class="gp-kind" data-kind="service">Service</button>
+              </div>
+              <div id="gp-game" class="gp-game" hidden>
+                <input id="gp-game-search" type="search" class="mcw-search" autocomplete="off"
+                       spellcheck="false" placeholder="Find an installed game…"
+                       aria-label="Find an installed game" />
+                <ul id="gp-game-results" aria-label="Installed games"></ul>
+              </div>
+              <div id="gp-fields" class="gp-fields" hidden>
+                <label class="field">
+                  <span id="gp-a-label" class="field__label"></span>
+                  <input id="gp-a" type="text" autocomplete="off" spellcheck="false" />
+                </label>
+                <label id="gp-b-field" class="field">
+                  <span id="gp-b-label" class="field__label"></span>
+                  <input id="gp-b" type="text" autocomplete="off" spellcheck="false" />
+                </label>
+                <div id="gp-ml" class="gp-ml" hidden>
+                  <button id="gp-ml-find" class="change-btn" type="button">Find games on this host</button>
+                  <input id="gp-ml-search" type="search" class="mcw-search" autocomplete="off"
+                         spellcheck="false" placeholder="Filter the host's games…"
+                         aria-label="Filter the host's games" hidden />
+                  <ul id="gp-ml-results" aria-label="Games on the Moonlight host"></ul>
+                </div>
+                <label id="gp-c-field" class="field">
+                  <span id="gp-c-label" class="field__label"></span>
+                  <input id="gp-c" type="text" autocomplete="off" spellcheck="false" />
+                </label>
+                <label id="gp-d-field" class="field">
+                  <span id="gp-d-label" class="field__label"></span>
+                  <input id="gp-d" type="text" autocomplete="off" spellcheck="false" />
+                </label>
+              </div>
+            </section>
+
+            <section class="gp-step">
+              <p class="build-label">3 · Name it</p>
+              <input id="gp-title" type="text" class="field__input--lead" autocomplete="off"
+                     spellcheck="false" placeholder="Stardew Valley" aria-label="Name" />
+            </section>
+
+            <div class="mcw-foot">
+              <p id="gp-form-status" class="hint" role="status" aria-live="polite"></p>
+              <button id="gp-cancel" class="btn btn--quiet" type="button">Cancel</button>
+              <button id="gp-save" class="btn btn--primary" type="button" disabled>
+                <span class="btn__label">Save GamePak</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -853,6 +849,13 @@
               <option value="none">Nothing</option>
             </select>
             <span id="on-insert-hint" class="opt__hint"></span>
+          </label>
+          <label class="opt">
+            <input id="set-launch-on-trigger" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">Launch directly on trigger</span>
+              <span class="opt__hint">A tapped card or scanned barcode starts its game at once. Off: the launcher opens at READY and Play starts it.</span>
+            </span>
           </label>
           <div>
             <span class="field__label">Open it in</span>

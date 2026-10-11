@@ -109,7 +109,10 @@ fn request_autostart() {
 pub fn run() -> ! {
     log::line("watcher starting (mount table)");
     #[cfg(target_os = "linux")]
-    crate::nfc::start();
+    {
+        crate::nfc::start();
+        crate::barcode::start();
+    }
 
     // Outside a sandbox the installer enabled a systemd user unit and this does
     // nothing. Inside one there is no unit to enable, so it asks instead.

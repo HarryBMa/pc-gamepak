@@ -2858,8 +2858,7 @@ input.field__input--lead:focus {
 /* --- Memory card --------------------------------------------------------- */
 
 #panel-memcard,
-#panel-actions,
-#panel-nfc {
+#panel-actions {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2871,18 +2870,287 @@ input.field__input--lead:focus {
 }
 
 #panel-memcard[hidden],
-#panel-actions[hidden],
-#panel-nfc[hidden] {
+#panel-actions[hidden] {
   display: none;
 }
 
-#panel-nfc details summary {
+/* --- GamePak actions ------------------------------------------------------ */
+
+.gp-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.gp-view[hidden] {
+  display: none;
+}
+
+.gp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#gp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gp-row {
+  align-items: flex-start;
+  padding: 11px 10px 11px 14px;
+}
+
+.gp-row .change-btn,
+.gp-row .shelf-row__forget {
+  align-self: center;
+}
+
+.gp-row.is-listening {
+  border-color: color-mix(in oklch, var(--accent) 55%, transparent);
+}
+
+.gp-row.is-confirming {
+  border-color: color-mix(in oklch, var(--danger) 55%, transparent);
+}
+
+.gp-row.is-confirming .shelf-row__games,
+.gp-row.is-confirming .shelf-row__forget {
+  color: var(--danger);
+}
+
+.gp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+/* A card or barcode that starts this GamePak. */
+.gp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-mid);
+  background: var(--lift);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.gp-chip--none {
+  border-style: dashed;
+  color: var(--ink-3);
+}
+
+.gp-chip__off {
+  appearance: none;
+  border: 0;
+  padding: 0 0 0 2px;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
 }
 
-#panel-nfc details[open] {
+.gp-chip__off:hover {
+  color: var(--danger);
+}
+
+.gp-empty {
+  padding: 28px 20px;
+  border: 1px dashed var(--hairline);
+  border-radius: 11px;
+  text-align: center;
+}
+
+.gp-empty[hidden] {
+  display: none;
+}
+
+.gp-empty__title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+#gp-form .mcw-foot {
+  justify-content: flex-end;
+}
+
+#gp-form-status {
+  flex: 1;
+  margin: 0;
+}
+
+.gp-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Listening for a tap or a scan; it starts the moment the form opens. */
+.gp-listen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 12px 10px 16px;
+  border: 1px dashed var(--hairline);
+  border-radius: 11px;
+  background: var(--well);
+}
+
+.gp-listen__mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: gp-pulse 1.4s var(--ease) infinite;
+}
+
+.gp-listen__text {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.gp-listen[data-state="learned"] {
+  border-style: solid;
+  border-color: color-mix(in oklch, var(--good) 50%, transparent);
+}
+
+.gp-listen[data-state="learned"] .gp-listen__mark {
+  background: var(--good);
+  animation: none;
+}
+
+.gp-listen[data-state="learned"] .gp-listen__text {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+@keyframes gp-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-listen__mark {
+    animation: none;
+  }
+}
+
+.gp-kinds {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.gp-kind {
+  appearance: none;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-mid);
+  border-radius: 8px;
+  background: var(--lift);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gp-kind:hover {
+  border-color: var(--hairline);
+  color: var(--ink);
+}
+
+.gp-kind[aria-checked="true"] {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  color: var(--ink);
+}
+
+.gp-ml {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.gp-ml[hidden],
+.gp-ml [hidden] {
+  display: none;
+}
+
+.gp-ml .mcw-search,
+#gp-ml-results {
+  align-self: stretch;
+}
+
+#gp-ml-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gp-game,
+.gp-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gp-game[hidden],
+.gp-fields[hidden],
+.gp-fields .field[hidden] {
+  display: none;
+}
+
+#gp-game-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gp-result {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gp-result__source {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.gp-result[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .mcw-select,

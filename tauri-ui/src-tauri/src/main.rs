@@ -77,7 +77,6 @@
 
 mod agent;
 mod headless;
-mod nfc;
 
 // All of the real work lives in gamepak-core, which has no UI dependency and
 // so can be tested without a webview. This file is the Tauri shell around it.
@@ -105,9 +104,39 @@ use tauri_plugin_dialog::DialogExt;
 #[tauri::command]
 fn parse_cartridge(drive_path: String) -> Result<CartridgeInfo, String> {
     if let Some(id) = remote::marker_id(&drive_path) {
-        return prime_remote(&drive_path, id);
+        return prime_registered(&drive_path, id);
     }
     cartridge::read_cartridge_info(&drive_path)
+}
+
+/// The registered GamePak behind a marker. The marker names any GamePak that
+/// is not a cartridge — a game on another PC, a Steam game, a stream, a file —
+/// and the window shows it at READY like one.
+fn registered(id: &str) -> Result<gamepak_core::gamepak::GamePak, String> {
+    gamepak_core::gamepak::lookup_from(
+        &gamepak_core::gamepak::registry_path(),
+        &gamepak_core::gamepak::GamePakId::parse(id)?,
+    )
+}
+
+/// Ready a GamePak for Play: a game on another PC is started there; anything
+/// else has its host woken and waited for, if it names one. Nothing starts
+/// here until Play.
+fn prime_registered(marker: &str, id: &str) -> Result<CartridgeInfo, String> {
+    let pak = registered(id)?;
+    if matches!(pak.action, gamepak_core::gamepak::Action::Remote { .. }) {
+        return prime_remote(marker, id);
+    }
+    gamepak_core::gamepak::prepare_host(&gamepak_core::gamepak::registry_path(), &pak.id)?;
+    let cover = match &pak.action {
+        gamepak_core::gamepak::Action::Steam { app_id } => {
+            create::game_cover(create::Library::Steam, &app_id.to_string())
+        }
+        _ => String::new(),
+    };
+    let title = pak.title.clone().unwrap_or_else(|| id.to_string());
+    debug_log(format!("gamepak {id}: ready"));
+    Ok(CartridgeInfo::remote(marker, &title, &cover))
 }
 
 /// A game on another PC: start it there now, and show it here at READY with
@@ -136,6 +165,19 @@ async fn drive_path() -> Result<String, String> {
     };
     tauri::async_runtime::spawn_blocking(move || {
         let id = encoded.into_id()?;
+        let registry = gamepak_core::gamepak::registry_path();
+        let pak = gamepak_core::gamepak::lookup_from(
+            &registry,
+            &gamepak_core::gamepak::GamePakId::parse(id.trim())?,
+        )?;
+        // Started on Play, not here: the window opens on it at READY.
+        if !matches!(
+            pak.action,
+            gamepak_core::gamepak::Action::Cartridge { .. }
+                | gamepak_core::gamepak::Action::Remote { .. }
+        ) {
+            return Ok(format!("{}{}", remote::MARKER, pak.id.as_str()));
+        }
         match gamepak_core::gamepak::trigger_from(&gamepak_core::gamepak::registry_path(), &id)? {
             gamepak_core::gamepak::Outcome::OpenCartridge(path) => {
                 Ok(path.to_string_lossy().into_owned())
@@ -308,6 +350,11 @@ fn launch_game(
         return Err("No executable configured for this cartridge".into());
     }
     if let Some(id) = remote::marker_id(&drive_path) {
+        let pak = registered(id)?;
+        if !matches!(pak.action, gamepak_core::gamepak::Action::Remote { .. }) {
+            use gamepak_core::gamepak::GamePakAction;
+            return pak.action.execute();
+        }
         // The game is already running on the host and counting its own hours
         // there; Play only brings the picture over.
         let target = remote::Remote::resolve(&gamepak_core::gamepak::registry_path(), id)?;
@@ -1102,6 +1149,17 @@ async fn eject_with_guard(
     drive_path: String,
 ) -> Result<EjectOutcome, String> {
     if let Some(id) = remote::marker_id(&drive_path).map(str::to_string) {
+        // Nothing to unmount and nothing of ours to stop: the game, stream or
+        // file runs on its own once started.
+        if !matches!(
+            registered(&id)?.action,
+            gamepak_core::gamepak::Action::Remote { .. }
+        ) {
+            return Ok(EjectOutcome {
+                ejected: true,
+                message: "Done".to_string(),
+            });
+        }
         return tauri::async_runtime::spawn_blocking(move || stop_remote(&id))
             .await
             .map_err(|e| e.to_string())?;
@@ -1523,39 +1581,6 @@ fn list_target_drives() -> Vec<drives::TargetDrive> {
     create::target_drives()
 }
 
-#[tauri::command]
-fn nfc_readers() -> Result<Vec<String>, String> {
-    nfc::readers()
-}
-
-#[tauri::command]
-fn register_nfc_gamepak(
-    id: String,
-    drive_path: String,
-    wake_on_lan: Option<String>,
-    ready_address: Option<String>,
-) -> Result<(), String> {
-    let selected_path = Path::new(&drive_path)
-        .canonicalize()
-        .map_err(|error| format!("GamePak path is unavailable: {error}"))?;
-    let is_gamepak_drive = create::target_drives().into_iter().any(|drive| {
-        drive.has_cartridge
-            && Path::new(&drive.path)
-                .canonicalize()
-                .is_ok_and(|path| path == selected_path)
-    });
-    if !is_gamepak_drive {
-        return Err("choose a mounted drive that already contains a GamePak".into());
-    }
-    gamepak_core::gamepak::register_from(
-        &gamepak_core::gamepak::registry_path(),
-        &id,
-        &selected_path,
-        wake_on_lan.as_deref(),
-        ready_address.as_deref(),
-    )
-}
-
 /// The generic wizard step: register an action under a stable ID and return
 /// the ID. `kind` is an action type; `a` and `b` are its one or two settings
 /// (see `action_from`). Nothing here knows how the ID will be delivered.
@@ -1664,9 +1689,95 @@ fn action_from(
     })
 }
 
+/// Leave the ID of every trigger beside the registry, registered or not: the
+/// wizard's Learn button waits for this file to change, so whatever can submit
+/// an ID — a card, a barcode, a script — can be learned onto a GamePak.
+fn remember_trigger(registry: &Path, id: &str) {
+    let id = id.trim();
+    if gamepak_core::gamepak::GamePakId::parse(id).is_ok() {
+        if let Some(dir) = registry.parent() {
+            let _ = std::fs::create_dir_all(dir);
+            let _ = std::fs::write(dir.join("last-trigger"), id);
+        }
+    }
+}
+
+/// The last trigger's ID and when it arrived (ms since the epoch), for Learn.
 #[tauri::command]
-fn write_nfc_card(reader_name: String, id: String) -> Result<(), String> {
-    nfc::write_gamepak_card(&reader_name, &id)
+fn last_trigger() -> Option<(String, u64)> {
+    let path = gamepak_core::gamepak::registry_path().with_file_name("last-trigger");
+    let id = std::fs::read_to_string(&path).ok()?;
+    let at = std::fs::metadata(&path)
+        .and_then(|meta| meta.modified())
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+    Some((id.trim().to_owned(), at))
+}
+
+/// Make a learned card or barcode start an existing GamePak too.
+#[tauri::command]
+fn add_gamepak_trigger(id: String, trigger: String) -> Result<(), String> {
+    gamepak_core::gamepak::add_trigger_from(
+        &gamepak_core::gamepak::registry_path(),
+        &id,
+        trigger.trim(),
+    )
+}
+
+/// Every registered GamePak — what it starts and what starts it — for the
+/// GamePak actions list.
+#[tauri::command]
+fn registered_gamepaks() -> Result<Vec<gamepak_core::gamepak::Listed>, String> {
+    gamepak_core::gamepak::list_from(&gamepak_core::gamepak::registry_path())
+}
+
+/// The games a Moonlight host offers, as `moonlight list <host>` prints them:
+/// one name per line. The host has to be paired in Moonlight already.
+#[tauri::command]
+async fn moonlight_apps(host: String) -> Result<Vec<String>, String> {
+    let host = host.trim().to_owned();
+    if host.is_empty() || host.starts_with('-') {
+        return Err("enter the Moonlight host first".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = std::process::Command::new(gamepak_core::gamepak::moonlight_program())
+            .args(["list", &host])
+            // No window: Moonlight is a Qt app even when it only lists.
+            .env("QT_QPA_PLATFORM", "offscreen")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|error| format!("could not run Moonlight: {error}"))?;
+        let apps: Vec<String> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+        if apps.is_empty() {
+            return Err(format!(
+                "Moonlight listed no games on {host}. Is it on, and paired in Moonlight?"
+            ));
+        }
+        Ok(apps)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn remove_gamepak(id: String) -> Result<(), String> {
+    gamepak_core::gamepak::remove_from(&gamepak_core::gamepak::registry_path(), &id)
+}
+
+#[tauri::command]
+fn remove_gamepak_trigger(id: String, trigger: String) -> Result<(), String> {
+    gamepak_core::gamepak::remove_trigger_from(
+        &gamepak_core::gamepak::registry_path(),
+        &id,
+        &trigger,
+    )
 }
 
 /// Every filesystem a cartridge can be made with, and what each one costs.
@@ -2167,12 +2278,14 @@ fn main() {
         .iter()
         .any(|arg| arg == "--nfc-ndef" || arg == "--trigger");
     if is_trigger {
-        // Anything that is not a cartridge is executed here and now, with no
-        // window. A cartridge falls through to the launcher at READY.
+        // Every GamePak opens the launcher at READY and starts on Play. With
+        // "Launch directly on trigger" on, anything that is not a cartridge or
+        // a game on another PC is started here and now, with no window.
         match trigger_id(&args).and_then(|input| input.map_or(Ok(None), |i| i.into_id().map(Some)))
         {
             Ok(Some(id)) => {
                 let registry = gamepak_core::gamepak::registry_path();
+                remember_trigger(&registry, &id);
                 let is_cartridge = gamepak_core::gamepak::GamePakId::parse(id.trim())
                     .and_then(|parsed| gamepak_core::gamepak::lookup_from(&registry, &parsed))
                     .map(|pak| {
@@ -2180,7 +2293,7 @@ fn main() {
                             pak.action,
                             gamepak_core::gamepak::Action::Cartridge { .. }
                                 | gamepak_core::gamepak::Action::Remote { .. }
-                        )
+                        ) || !settings::load().launch_on_trigger
                     });
                 match is_cartridge {
                     Ok(false) => {
@@ -2262,10 +2375,13 @@ fn main() {
             sgdb_download_artwork,
             sgdb_last_used_artwork,
             list_target_drives,
-            nfc_readers,
-            register_nfc_gamepak,
             add_gamepak,
-            write_nfc_card,
+            registered_gamepaks,
+            remove_gamepak,
+            remove_gamepak_trigger,
+            moonlight_apps,
+            last_trigger,
+            add_gamepak_trigger,
             list_unmounted_volumes,
             mount_volume,
             format_plan,

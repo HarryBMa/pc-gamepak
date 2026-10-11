@@ -24,10 +24,13 @@
  *   suggest_collection_name({ titles }) -> string
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
- *   nfc_readers()                     -> [reader name]
  *   add_gamepak(title, kind, a, b, c, d, id) -> "gp_…" (generic action wizard)
- *   register_nfc_gamepak(...)          -> ()
- *   write_nfc_card(reader_name, id)     -> ()
+ *   registered_gamepaks()              -> [{ id, title, action, triggers }]
+ *   remove_gamepak(id)                 -> ()
+ *   moonlight_apps(host)               -> [app name] (`moonlight list <host>`)
+ *   remove_gamepak_trigger(id, trigger) -> ()
+ *   last_trigger()                     -> [id, ms] | null (what Learn waits on)
+ *   add_gamepak_trigger(id, trigger)   -> ()
  *   create_cartridge({ request })    -> { confPath, formatted, gameCopied, ... }
  *
  * The backend re-derives the list of writable drives and re-checks the format
@@ -140,31 +143,41 @@ const el = {
   panelMemcard: $("panel-memcard"),
   tabActions: $("tab-actions"),
   panelActions: $("panel-actions"),
-  actTitle: $("act-title"),
-  actKind: $("act-kind"),
-  actA: $("act-a"),
-  actALabel: $("act-a-label"),
-  actB: $("act-b"),
-  actBField: $("act-b-field"),
-  actBLabel: $("act-b-label"),
-  actC: $("act-c"),
-  actCField: $("act-c-field"),
-  actCLabel: $("act-c-label"),
-  actD: $("act-d"),
-  actDField: $("act-d-field"),
-  actDLabel: $("act-d-label"),
-  actStatus: $("act-status"),
-  actCreate: $("btn-act-create"),
-  tabNfc: $("tab-nfc"),
-  panelNfc: $("panel-nfc"),
-  nfcDrive: $("nfc-drive"),
-  nfcId: $("nfc-id"),
-  nfcUri: $("nfc-uri"),
-  nfcWol: $("nfc-wol"),
-  nfcReadyAddress: $("nfc-ready-address"),
-  nfcReader: $("nfc-reader"),
-  nfcStatus: $("nfc-status"),
-  nfcWrite: $("btn-nfc-write"),
+  gpHome: $("gp-home"),
+  gpNew: $("gp-new"),
+  gpList: $("gp-list"),
+  gpEmpty: $("gp-empty"),
+  gpStatus: $("gp-status"),
+  gpForm: $("gp-form"),
+  gpListen: $("gp-listen"),
+  gpListenText: $("gp-listen-text"),
+  gpTypeId: $("gp-type-id"),
+  gpIdField: $("gp-id-field"),
+  gpId: $("gp-id"),
+  gpKinds: $("gp-kinds"),
+  gpGame: $("gp-game"),
+  gpGameSearch: $("gp-game-search"),
+  gpGameResults: $("gp-game-results"),
+  gpFields: $("gp-fields"),
+  gpA: $("gp-a"),
+  gpALabel: $("gp-a-label"),
+  gpB: $("gp-b"),
+  gpBField: $("gp-b-field"),
+  gpBLabel: $("gp-b-label"),
+  gpMl: $("gp-ml"),
+  gpMlFind: $("gp-ml-find"),
+  gpMlSearch: $("gp-ml-search"),
+  gpMlResults: $("gp-ml-results"),
+  gpC: $("gp-c"),
+  gpCField: $("gp-c-field"),
+  gpCLabel: $("gp-c-label"),
+  gpD: $("gp-d"),
+  gpDField: $("gp-d-field"),
+  gpDLabel: $("gp-d-label"),
+  gpTitle: $("gp-title"),
+  gpFormStatus: $("gp-form-status"),
+  gpCancel: $("gp-cancel"),
+  gpSave: $("gp-save"),
   optMemcard: $("opt-memcard"),
   editMemcard: $("edit-memcard"),
   optPlatform: $("opt-platform"),
@@ -276,6 +289,7 @@ const el = {
   setOnInsert: $("set-on-insert"),
   onInsertHint: $("on-insert-hint"),
   setPlaytime: $("set-playtime"),
+  setLaunchOnTrigger: $("set-launch-on-trigger"),
   setIdle: $("set-idle"),
   setIdleRow: $("set-idle-row"),
   setHltb: $("set-hltb"),
@@ -2785,6 +2799,7 @@ function applySettings() {
   // On unless it has been switched off: it writes to the cartridge only, and
   // only because Play was pressed.
   el.setPlaytime.checked = settings.trackPlaytime !== false;
+  el.setLaunchOnTrigger.checked = Boolean(settings.launchOnTrigger);
   el.setIdle.value = String(settings.idlePauseMinutes ?? 10);
   el.setIdleRow.hidden = !el.setPlaytime.checked;
   el.setHltb.checked = Boolean(settings.hltbEnabled);
@@ -2809,7 +2824,7 @@ function applyDefaults() {
    Create / Edit
    ========================================================================== */
 
-const TABS = ["create", "edit", "created", "memcard", "actions", "nfc"];
+const TABS = ["create", "edit", "created", "memcard", "actions"];
 
 /**
  * Which panel is showing. The rail belongs to Create and Edit and never moves;
@@ -2825,7 +2840,6 @@ async function showTab(name) {
     [el.tabCreated, el.panelCreated, "created"],
     [el.tabMemcard, el.panelMemcard, "memcard"],
     [el.tabActions, el.panelActions, "actions"],
-    [el.tabNfc, el.panelNfc, "nfc"],
   ]) {
     const on = id === activeTab;
     tab.setAttribute("aria-selected", String(on));
@@ -2834,20 +2848,13 @@ async function showTab(name) {
   }
   el.columns.classList.toggle(
     "is-shelf",
-    activeTab === "created" ||
-      activeTab === "memcard" ||
-      activeTab === "actions" ||
-      activeTab === "nfc",
+    activeTab === "created" || activeTab === "memcard" || activeTab === "actions",
   );
 
+  stopListening();
   if (activeTab === "actions") {
     el.barText.textContent = "GamePak actions";
-    updateActionFields();
-    return;
-  }
-  if (activeTab === "nfc") {
-    el.barText.textContent = "NFC cards";
-    await openNfcPage();
+    await openActionsPage();
     return;
   }
   if (activeTab === "memcard") {
@@ -3121,6 +3128,7 @@ async function saveSettings() {
         defaultFormat: false,
         onCartridgeInsert: el.setOnInsert.value,
         trackPlaytime: el.setPlaytime.checked,
+        launchOnTrigger: el.setLaunchOnTrigger.checked,
         idlePauseMinutes: Number(el.setIdle.value) || 0,
         hltbEnabled: el.setHltb.checked,
         ludusaviEnabled: el.setLudusavi.checked,
@@ -3442,171 +3450,447 @@ async function openMemcardPage() {
   await loadMemcardDrive();
 }
 
+// ===========================================================================
+// GamePak actions — a card or barcode, and what it starts
+// ===========================================================================
+
 // Per action type: the labels for settings a–d, null where it has none.
+// "game" has no fields: it is picked from the installed games instead.
 const ACTION_FIELDS = {
-  steam: ["Steam app ID", null],
-  moonlight: ["Moonlight host (name or address)", "App name"],
+  moonlight: ["Moonlight host (name or address)", "App name", null, null],
   remote: [
     "Host (its address, as Moonlight knows it)",
     "Host key (64 characters, from the host)",
-    "GamePak ID (the card's, as registered on the host)",
+    "GamePak ID (as registered on the host)",
     "App to stream (optional, Desktop)",
   ],
-  local: ["File path", null],
-  exec: ["Program", "Arguments (optional, space-separated)"],
-  service: ["Service name", null],
-  open: ["URL", null],
+  local: ["File path", null, null, null],
+  exec: ["Program", "Arguments (optional, space-separated)", null, null],
+  open: ["URL", null, null, null],
+  service: ["Service name", null, null, null],
 };
 
-function updateActionFields() {
-  const [a, b, c, d] = ACTION_FIELDS[el.actKind.value];
-  el.actALabel.textContent = a;
-  for (const [label, field, text] of [
-    [el.actBLabel, el.actBField, b],
-    [el.actCLabel, el.actCField, c],
-    [el.actDLabel, el.actDField, d],
-  ]) {
-    label.textContent = text ?? "";
-    field.hidden = !text;
+let gamepaks = [];
+let gpKind = null;
+let gpGame = null;
+let gpLearned = null;
+let mlApps = [];
+
+/** How an ID reads to a person. */
+function describeTrigger(id) {
+  if (id.startsWith("gp_nfc-")) return `NFC card ${id.slice(7)}`;
+  if (/^gp_[0-9]+$/.test(id)) return `Barcode ${id.slice(3)}`;
+  return id;
+}
+
+/** What a registered action starts, in a few words. */
+function describeAction(action) {
+  const base = (path) => String(path).split(/[\\/]/).pop();
+  switch (action.type) {
+    case "steam": {
+      const game = library.find((g) => g.library === "steam" && g.id === String(action.appId));
+      return game ? `Steam · ${game.name}` : `Steam game ${action.appId}`;
+    }
+    case "moonlight":
+      return `Streams ${action.app} from ${action.target}`;
+    case "remote":
+      return `Game on ${action.moonlight}`;
+    case "local":
+      return `Opens ${base(action.path)}`;
+    case "exec":
+      return `Runs ${base(action.program)}`;
+    case "open": {
+      const game = library.find((g) => g.executable === action.target);
+      return game ? `${game.source} · ${game.name}` : `Opens ${action.target}`;
+    }
+    case "service":
+      return `Starts service ${action.target}`;
+    case "cartridge":
+      return `Cartridge · ${base(action.path)}`;
+    default:
+      return action.type;
   }
 }
 
-async function createGamePakAction() {
-  el.actCreate.disabled = true;
-  el.actStatus.textContent = "Saving…";
-  const [, b, c, d] = ACTION_FIELDS[el.actKind.value];
+/** The GamePak an ID already starts, if any. */
+function ownerOf(id) {
+  return gamepaks.find((pak) => pak.id === id || pak.triggers.includes(id));
+}
+
+/**
+ * Wait for the next trigger — a card tapped, a barcode scanned, anything that
+ * runs `pc-gamepak --trigger` — and hand over its ID. The launcher leaves
+ * every ID it is given in a file; this watches for that file to change.
+ * Only one listener at a time: starting one stops the last.
+ */
+let stopListening = () => {};
+function listenForTrigger(onId) {
+  stopListening();
+  let stopped = false;
+  stopListening = () => {
+    stopped = true;
+  };
+  (async () => {
+    let before = (await invoke("last_trigger").catch(() => null))?.[1] ?? 0;
+    while (!stopped) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const last = await invoke("last_trigger").catch(() => null);
+      if (stopped || !last || last[1] === before) continue;
+      before = last[1];
+      if (onId(last[0]) !== "keep") stopped = true;
+    }
+  })();
+}
+
+// --- The list --------------------------------------------------------------
+
+async function openActionsPage() {
+  showGamePakHome();
+  if (!library.length) await refreshLibrary();
+  await refreshGamePaks();
+}
+
+function showGamePakHome() {
+  stopListening();
+  el.gpForm.hidden = true;
+  el.gpHome.hidden = false;
+}
+
+async function refreshGamePaks() {
+  try {
+    gamepaks = await invoke("registered_gamepaks");
+  } catch (error) {
+    gamepaks = [];
+    el.gpStatus.textContent = String(error);
+  }
+  el.gpList.replaceChildren(...gamepaks.map(gamePakRow));
+  el.gpEmpty.hidden = gamepaks.length > 0;
+}
+
+function gamePakRow(pak) {
+  const row = document.createElement("li");
+  row.className = "shelf-row gp-row";
+
+  const body = document.createElement("div");
+  body.className = "shelf-row__body";
+  const title = document.createElement("p");
+  title.className = "shelf-row__title";
+  title.textContent = pak.title || describeAction(pak.action);
+  const what = document.createElement("p");
+  what.className = "shelf-row__games";
+  what.textContent = describeAction(pak.action);
+  const chips = document.createElement("div");
+  chips.className = "gp-chips";
+  // Its own ID is a card's only when a person chose it; a generated one
+  // (gp_ and 16 hex digits) is on no card.
+  if (!/^gp_[0-9a-f]{16}$/.test(pak.id)) chips.append(triggerChip(pak.id));
+  for (const trigger of pak.triggers) chips.append(triggerChip(trigger, pak));
+  if (!chips.childElementCount) {
+    const none = document.createElement("span");
+    none.className = "gp-chip gp-chip--none";
+    none.textContent = "No card yet";
+    chips.append(none);
+  }
+  body.append(title, what, chips);
+
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "change-btn";
+  add.textContent = "Add card";
+  add.addEventListener("click", () => addCardTo(pak, row, add));
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "icon-btn shelf-row__forget";
+  remove.setAttribute("aria-label", `Delete ${pak.title || pak.id}`);
+  remove.title = "Delete this GamePak. Its cards stop working here.";
+  remove.innerHTML =
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" width="13" height="13" aria-hidden="true"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" /></svg>';
+  // Two clicks: the first asks, the second deletes.
+  remove.addEventListener("click", async () => {
+    if (!row.classList.contains("is-confirming")) {
+      row.classList.add("is-confirming");
+      what.textContent = "Delete this GamePak? Click × again.";
+      setTimeout(() => {
+        row.classList.remove("is-confirming");
+        what.textContent = describeAction(pak.action);
+      }, 3000);
+      return;
+    }
+    try {
+      await invoke("remove_gamepak", { id: pak.id });
+    } catch (error) {
+      el.gpStatus.textContent = String(error);
+    }
+    await refreshGamePaks();
+  });
+
+  row.append(body, add, remove);
+  return row;
+}
+
+/** A card or barcode that starts `pak`. Learned ones can be taken off. */
+function triggerChip(id, pak) {
+  const chip = document.createElement("span");
+  chip.className = "gp-chip";
+  chip.textContent = describeTrigger(id);
+  chip.title = id;
+  if (pak) {
+    const off = document.createElement("button");
+    off.type = "button";
+    off.className = "gp-chip__off";
+    off.setAttribute("aria-label", `Stop ${describeTrigger(id)} starting this`);
+    off.textContent = "×";
+    off.addEventListener("click", async () => {
+      try {
+        await invoke("remove_gamepak_trigger", { id: pak.id, trigger: id });
+      } catch (error) {
+        el.gpStatus.textContent = String(error);
+      }
+      await refreshGamePaks();
+    });
+    chip.append(off);
+  }
+  return chip;
+}
+
+/** One more card or barcode for a GamePak that exists. */
+function addCardTo(pak, row, button) {
+  for (const other of el.gpList.querySelectorAll(".is-listening")) {
+    other.classList.remove("is-listening");
+  }
+  row.classList.add("is-listening");
+  button.textContent = "Tap or scan…";
+  el.gpStatus.textContent = `Tap a card or scan a barcode for ${pak.title || pak.id}.`;
+  listenForTrigger((id) => {
+    const owner = ownerOf(id);
+    if (owner) {
+      el.gpStatus.textContent =
+        owner.id === pak.id
+          ? `${describeTrigger(id)} already starts this.`
+          : `${describeTrigger(id)} already starts ${owner.title || owner.id}.`;
+      return "keep";
+    }
+    invoke("add_gamepak_trigger", { id: pak.id, trigger: id })
+      .then(() => {
+        el.gpStatus.textContent = `${describeTrigger(id)} now starts ${pak.title || pak.id}.`;
+      })
+      .catch((error) => {
+        el.gpStatus.textContent = String(error);
+      })
+      .finally(refreshGamePaks);
+  });
+}
+
+// --- New GamePak -------------------------------------------------------------
+
+function openGamePakForm() {
+  gpKind = null;
+  gpGame = null;
+  gpLearned = null;
+  el.gpStatus.textContent = "";
+  el.gpFormStatus.textContent = "";
+  el.gpTitle.value = "";
+  el.gpId.value = "";
+  el.gpIdField.hidden = true;
+  el.gpTypeId.hidden = false;
+  el.gpTypeId.textContent = "Type an ID";
+  el.gpGameSearch.value = "";
+  mlApps = [];
+  el.gpMlSearch.hidden = true;
+  el.gpMlResults.replaceChildren();
+  for (const input of [el.gpA, el.gpB, el.gpC, el.gpD]) input.value = "";
+  chooseKind(null);
+  setListen("waiting", "Waiting for a card or barcode…");
+  el.gpHome.hidden = true;
+  el.gpForm.hidden = false;
+  listenForTrigger(learnedForNew);
+  updateGamePakSave();
+}
+
+function setListen(state, text) {
+  el.gpListen.dataset.state = state;
+  el.gpListenText.textContent = text;
+}
+
+function learnedForNew(id) {
+  const owner = ownerOf(id);
+  if (owner) {
+    setListen("waiting", `${describeTrigger(id)} already starts ${owner.title || owner.id}. Try another.`);
+    return "keep";
+  }
+  gpLearned = id;
+  setListen("learned", describeTrigger(id));
+  el.gpTypeId.textContent = "Change";
+  el.gpIdField.hidden = true;
+  updateGamePakSave();
+}
+
+/** The ID typed by hand: a bare code — the number under a barcode — gets gp_. */
+function typedId() {
+  const id = el.gpId.value.trim().toLowerCase();
+  if (!id) return null;
+  return id.startsWith("gp_") ? id : `gp_${id}`;
+}
+
+function chooseKind(kind) {
+  gpKind = kind;
+  for (const button of el.gpKinds.querySelectorAll(".gp-kind")) {
+    button.setAttribute("aria-checked", String(button.dataset.kind === kind));
+  }
+  el.gpGame.hidden = kind !== "game";
+  el.gpMl.hidden = kind !== "moonlight";
+  el.gpFields.hidden = !kind || kind === "game";
+  if (kind === "game") renderGameResults();
+  if (kind && kind !== "game") {
+    const labels = ACTION_FIELDS[kind];
+    for (const [label, field, text] of [
+      [el.gpALabel, null, labels[0]],
+      [el.gpBLabel, el.gpBField, labels[1]],
+      [el.gpCLabel, el.gpCField, labels[2]],
+      [el.gpDLabel, el.gpDField, labels[3]],
+    ]) {
+      label.textContent = text ?? "";
+      if (field) field.hidden = !text;
+    }
+  }
+  updateGamePakSave();
+}
+
+function renderGameResults() {
+  const query = el.gpGameSearch.value.trim().toLowerCase();
+  const matches = library
+    .filter((game) => game.executable && game.name.toLowerCase().includes(query))
+    .slice(0, 6);
+  el.gpGameResults.replaceChildren(
+    ...matches.map((game) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mcw-result gp-result";
+      button.setAttribute("aria-pressed", String(gpGame === game));
+      button.innerHTML = "<span></span><span class=\"gp-result__source\"></span>";
+      button.firstChild.textContent = game.name;
+      button.lastChild.textContent = game.source;
+      button.addEventListener("click", () => {
+        gpGame = game;
+        if (!el.gpTitle.value.trim() || el.gpTitle.dataset.auto === "1") {
+          el.gpTitle.value = game.name;
+          el.gpTitle.dataset.auto = "1";
+        }
+        renderGameResults();
+        updateGamePakSave();
+      });
+      item.append(button);
+      return item;
+    }),
+  );
+  if (!matches.length) {
+    const none = document.createElement("li");
+    none.className = "hint";
+    none.textContent = library.length ? "No installed game matches." : "No installed games found.";
+    el.gpGameResults.append(none);
+  }
+}
+
+/** Ask Moonlight what the host in field A offers, and list it to pick from. */
+async function findMoonlightApps() {
+  el.gpMlFind.disabled = true;
+  el.gpMlFind.textContent = "Asking the host…";
+  try {
+    mlApps = await invoke("moonlight_apps", { host: el.gpA.value });
+    el.gpMlSearch.hidden = false;
+    el.gpMlSearch.value = "";
+    renderMoonlightApps();
+    el.gpMlSearch.focus();
+  } catch (error) {
+    mlApps = [];
+    el.gpMlResults.replaceChildren();
+    el.gpFormStatus.textContent = String(error);
+  } finally {
+    el.gpMlFind.disabled = false;
+    el.gpMlFind.textContent = "Find games on this host";
+  }
+}
+
+function renderMoonlightApps() {
+  const query = el.gpMlSearch.value.trim().toLowerCase();
+  const matches = mlApps.filter((app) => app.toLowerCase().includes(query)).slice(0, 8);
+  el.gpMlResults.replaceChildren(
+    ...matches.map((app) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mcw-result gp-result";
+      button.setAttribute("aria-pressed", String(el.gpB.value === app));
+      button.textContent = app;
+      button.addEventListener("click", () => {
+        el.gpB.value = app;
+        if (!el.gpTitle.value.trim() || el.gpTitle.dataset.auto === "1") {
+          el.gpTitle.value = app;
+          el.gpTitle.dataset.auto = "1";
+        }
+        renderMoonlightApps();
+        updateGamePakSave();
+      });
+      item.append(button);
+      return item;
+    }),
+  );
+}
+
+/** The action to register, as add_gamepak takes it, or null if incomplete. */
+function chosenAction() {
+  if (gpKind === "game") {
+    if (!gpGame) return null;
+    if (gpGame.library === "steam") return { kind: "steam", a: gpGame.id };
+    return gpGame.executable.includes("://")
+      ? { kind: "open", a: gpGame.executable }
+      : { kind: "exec", a: gpGame.executable };
+  }
+  if (!gpKind || !el.gpA.value.trim()) return null;
+  const [, b, c, d] = ACTION_FIELDS[gpKind];
+  return {
+    kind: gpKind,
+    a: el.gpA.value,
+    b: b ? el.gpB.value : null,
+    c: c ? el.gpC.value : null,
+    d: d ? el.gpD.value : null,
+  };
+}
+
+function updateGamePakSave() {
+  el.gpSave.disabled = !chosenAction() || !el.gpTitle.value.trim();
+}
+
+async function saveGamePak() {
+  const action = chosenAction();
+  if (!action) return;
+  el.gpSave.disabled = true;
+  el.gpFormStatus.textContent = "Saving…";
+  const trigger = gpLearned ?? typedId();
   try {
     const id = await invoke("add_gamepak", {
-      title: el.actTitle.value,
-      kind: el.actKind.value,
-      a: el.actA.value,
-      b: b ? el.actB.value : null,
-      c: c ? el.actC.value : null,
-      d: d ? el.actD.value : null,
-      id: null,
+      title: el.gpTitle.value,
+      kind: action.kind,
+      a: action.a,
+      b: action.b ?? null,
+      c: action.c ?? null,
+      d: action.d ?? null,
+      id: trigger,
     });
-    el.actStatus.textContent = `GamePak ID: ${id}`;
-  } catch (error) {
-    el.actStatus.textContent = String(error);
-  } finally {
-    el.actCreate.disabled = false;
-  }
-}
-
-let nfcIdTouched = false;
-
-function suggestNfcId(title) {
-  const slug = String(title || "gamepak")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 64)
-    .replace(/-+$/g, "");
-  return `gp_${slug || "gamepak"}`;
-}
-
-function updateNfcUri() {
-  const id = el.nfcId.value.trim();
-  el.nfcUri.textContent = id ? `gamepak://${id}` : "gamepak://gp_…";
-  el.nfcWrite.disabled =
-    !el.nfcDrive.value ||
-    !el.nfcReader.value ||
-    !/^gp_[a-z0-9_-]{1,64}$/.test(id) ||
-    Boolean(el.nfcWol.value.trim()) !== Boolean(el.nfcReadyAddress.value.trim());
-}
-
-async function openNfcPage() {
-  el.nfcStatus.textContent = "";
-  await refreshDrives({ quick: true });
-  const available = drives.filter((drive) => drive.hasCartridge);
-  const previous = el.nfcDrive.value;
-  el.nfcDrive.replaceChildren();
-  const drivePlaceholder = document.createElement("option");
-  drivePlaceholder.value = "";
-  drivePlaceholder.textContent = available.length ? "Choose a cartridge…" : "No mounted GamePaks";
-  el.nfcDrive.append(drivePlaceholder);
-  for (const drive of available) {
-    const option = document.createElement("option");
-    option.value = drive.path;
-    option.textContent = drive.cartridgeTitle || drive.label || drive.path;
-    el.nfcDrive.append(option);
-  }
-  el.nfcDrive.value = available.some((drive) => drive.path === previous)
-    ? previous
-    : available[0]?.path || "";
-  if (!nfcIdTouched && el.nfcDrive.value) {
-    const drive = available.find((item) => item.path === el.nfcDrive.value);
-    el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
-  }
-
-  const previousReader = el.nfcReader.value;
-  el.nfcReader.replaceChildren();
-  const readerPlaceholder = document.createElement("option");
-  readerPlaceholder.value = "";
-  readerPlaceholder.textContent = "Looking for readers…";
-  el.nfcReader.append(readerPlaceholder);
-  try {
-    const readers = await invoke("nfc_readers");
-    el.nfcReader.replaceChildren();
-    const empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = readers.length ? "Choose a reader…" : "No PC/SC readers found";
-    el.nfcReader.append(empty);
-    for (const reader of readers) {
-      const option = document.createElement("option");
-      option.value = reader;
-      option.textContent = reader;
-      el.nfcReader.append(option);
+    // A game on another PC keeps the host's ID; the card is added to it.
+    if (trigger && trigger !== id) {
+      await invoke("add_gamepak_trigger", { id, trigger });
     }
-    el.nfcReader.value = readers.includes(previousReader) ? previousReader : "";
-    if (!readers.length) el.nfcStatus.textContent = "No PC/SC readers found.";
+    showGamePakHome();
+    await refreshGamePaks();
+    el.gpStatus.textContent = trigger
+      ? `Saved. ${describeTrigger(trigger)} now starts ${el.gpTitle.value.trim()}.`
+      : `Saved as ${id}. Add a card to it to start it with a tap.`;
   } catch (error) {
-    el.nfcReader.replaceChildren();
-    const failed = document.createElement("option");
-    failed.value = "";
-    failed.textContent = "PC/SC unavailable";
-    el.nfcReader.append(failed);
-    el.nfcStatus.textContent = String(error);
-  }
-  if (!available.length) {
-    el.nfcStatus.textContent = "Connect a GamePak cartridge to register it.";
-  } else if (!el.nfcStatus.textContent) {
-    el.nfcStatus.textContent = "Choose a cartridge, then hold a blank tag near the reader.";
-  }
-  updateNfcUri();
-}
-
-async function writeNfcCard() {
-  const id = el.nfcId.value.trim();
-  const drivePath = el.nfcDrive.value;
-  const readerName = el.nfcReader.value;
-  const wakeOnLan = el.nfcWol.value.trim();
-  const readyAddress = el.nfcReadyAddress.value.trim();
-  if (!/^gp_[a-z0-9_-]{1,64}$/.test(id)) {
-    el.nfcStatus.textContent = "Use gp_ followed by lowercase letters, digits, _ or -.";
-    return;
-  }
-  if (Boolean(wakeOnLan) !== Boolean(readyAddress)) {
-    el.nfcStatus.textContent = "Enter both remote host fields, or leave both blank.";
-    return;
-  }
-  if (!drivePath || !readerName) return;
-
-  el.nfcWrite.disabled = true;
-  el.nfcStatus.textContent = "Registering GamePak and writing tag…";
-  try {
-    await invoke("register_nfc_gamepak", {
-      id,
-      drivePath,
-      wakeOnLan: wakeOnLan || null,
-      readyAddress: readyAddress || null,
-    });
-    await invoke("write_nfc_card", { readerName, id });
-    el.nfcStatus.textContent = `Written gamepak://${id}. The tag can now select this GamePak.`;
-  } catch (error) {
-    el.nfcStatus.textContent = String(error);
-  } finally {
-    updateNfcUri();
+    el.gpFormStatus.textContent = String(error);
+    updateGamePakSave();
   }
 }
 
@@ -3921,22 +4205,36 @@ el.tabEdit.addEventListener("click", () => showTab("edit"));
 el.tabCreated.addEventListener("click", () => showTab("created"));
 el.tabMemcard.addEventListener("click", () => showTab("memcard"));
 el.tabActions.addEventListener("click", () => showTab("actions"));
-el.actKind.addEventListener("change", updateActionFields);
-el.actCreate.addEventListener("click", createGamePakAction);
-el.tabNfc.addEventListener("click", () => showTab("nfc"));
-el.nfcDrive.addEventListener("change", () => {
-  const drive = drives.find((item) => item.path === el.nfcDrive.value);
-  if (!nfcIdTouched) el.nfcId.value = suggestNfcId(drive?.cartridgeTitle || drive?.label);
-  updateNfcUri();
+el.gpNew.addEventListener("click", openGamePakForm);
+el.gpCancel.addEventListener("click", showGamePakHome);
+el.gpSave.addEventListener("click", saveGamePak);
+el.gpTypeId.addEventListener("click", () => {
+  // Learned already: forget it and listen for another.
+  if (gpLearned) {
+    gpLearned = null;
+    el.gpTypeId.textContent = "Type an ID";
+    setListen("waiting", "Waiting for a card or barcode…");
+    listenForTrigger(learnedForNew);
+    return;
+  }
+  el.gpIdField.hidden = false;
+  el.gpTypeId.hidden = true;
+  el.gpId.focus();
 });
-el.nfcId.addEventListener("input", () => {
-  nfcIdTouched = true;
-  updateNfcUri();
+el.gpKinds.addEventListener("click", (event) => {
+  const kind = event.target.closest(".gp-kind")?.dataset.kind;
+  if (kind) chooseKind(kind);
 });
-el.nfcReader.addEventListener("change", updateNfcUri);
-el.nfcWol.addEventListener("input", updateNfcUri);
-el.nfcReadyAddress.addEventListener("input", updateNfcUri);
-el.nfcWrite.addEventListener("click", writeNfcCard);
+el.gpGameSearch.addEventListener("input", renderGameResults);
+el.gpMlFind.addEventListener("click", findMoonlightApps);
+el.gpMlSearch.addEventListener("input", renderMoonlightApps);
+for (const input of [el.gpA, el.gpB, el.gpC, el.gpD]) {
+  input.addEventListener("input", updateGamePakSave);
+}
+el.gpTitle.addEventListener("input", () => {
+  el.gpTitle.dataset.auto = "0";
+  updateGamePakSave();
+});
 // Drives are read again when the picker opens and when Create is shown, not on
 // window focus. A refresh on focus took the foreground back from a launcher
 // that had just opened on top of the wizard, so its arrow keys went here.
@@ -4303,6 +4601,8 @@ let demoShelf = [
     writtenAt: 1758200000, bytesCopied: 0, cover: "src/demo/cover.jpg" },
 ];
 
+let demoTapAt;
+
 async function demoInvoke(command, args) {
   switch (command) {
     // Kept in step with core::format by hand, which is the price of a preview
@@ -4448,12 +4748,24 @@ async function demoInvoke(command, args) {
           totalBytes: 128_035_676_160, freeBytes: 18_253_611_008, hasCartridge: true,
           cartridgeTitle: "God of War Collection" },
       ];
-    case "nfc_readers":
-      return ["Demo PN532 PC/SC Reader"];
     case "add_gamepak":
       return args?.kind === "remote" && args.c ? args.c : "gp_0123456789abcdef";
-    case "register_nfc_gamepak":
-    case "write_nfc_card":
+    case "registered_gamepaks":
+      return [
+        { id: "gp_stardew", title: "Stardew Valley", action: { type: "steam", appId: 413150 },
+          triggers: ["gp_nfc-4726aa64", "gp_3501170818305"] },
+        { id: "gp_0123456789abcdef", title: "Movie night", triggers: [],
+          action: { type: "local", path: "/media/films/The Matrix.mkv" } },
+      ];
+    case "last_trigger":
+      // The preview "taps" a card two seconds after it starts listening.
+      demoTapAt ??= Date.now() + 2000;
+      return Date.now() < demoTapAt ? ["gp_3501170818305", 1] : ["gp_nfc-e9105207", demoTapAt];
+    case "moonlight_apps":
+      return ["Desktop", "Steam Big Picture", "Stardew Valley", "Hades", "Cities: Skylines"];
+    case "add_gamepak_trigger":
+    case "remove_gamepak":
+    case "remove_gamepak_trigger":
       return undefined;
     case "executable_choices":
       return [

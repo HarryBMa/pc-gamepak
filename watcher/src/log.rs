@@ -58,7 +58,9 @@ pub fn line(message: &str) {
     else {
         return;
     };
-    let _ = writeln!(file, "[{}] {message}", timestamp());
+    // One write, so lines from the NFC and barcode threads cannot interleave:
+    // writeln! on a File is a write per piece.
+    let _ = file.write_all(format!("[{}] {message}\n", timestamp()).as_bytes());
 }
 
 /// `YYYY-MM-DDTHH:MM:SSZ`, from the clock alone.

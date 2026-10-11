@@ -22,7 +22,11 @@
 
 #[cfg(windows)]
 mod autoplay;
+#[cfg(target_os = "linux")]
+mod barcode;
 mod launcher;
+#[cfg(target_os = "linux")]
+mod libnfc;
 #[cfg(not(windows))]
 mod linux;
 mod log;
