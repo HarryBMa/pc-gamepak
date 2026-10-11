@@ -135,8 +135,48 @@ fn prime_registered(marker: &str, id: &str) -> Result<CartridgeInfo, String> {
         _ => String::new(),
     };
     let title = pak.title.clone().unwrap_or_else(|| id.to_string());
+    let mut info = CartridgeInfo::remote(marker, &title, &cover);
+    fill_artwork(&mut info, id);
     debug_log(format!("gamepak {id}: ready"));
-    Ok(CartridgeInfo::remote(marker, &title, &cover))
+    Ok(info)
+}
+
+/// Cover, background and logo for a GamePak with no cartridge to carry them,
+/// looked up on SteamGridDB by its title. Only what is missing is filled, and
+/// only when SteamGridDB is switched on; a failure leaves the placeholder.
+/// Downloads are cached, so a second tap does not go to the network.
+fn fill_artwork(info: &mut CartridgeInfo, id: &str) {
+    let Some(game) = sgdb::search_games(&info.title)
+        .ok()
+        .and_then(|games| games.into_iter().next())
+    else {
+        return;
+    };
+    let fetch = |kind: sgdb::ArtworkType, portrait: bool| {
+        let art = sgdb::get_artwork(game.id, kind).ok()?;
+        let pick = art
+            .iter()
+            .find(|a| !portrait || a.height > a.width)
+            .or(art.first())?;
+        let path = sgdb::download_artwork(&pick.url, &format!("gamepak-{id}-{kind:?}")).ok()?;
+        let uri = sgdb::read_as_data_uri(&path)?;
+        Some((uri, path.to_string_lossy().into_owned()))
+    };
+    if info.cover.is_empty() {
+        if let Some((uri, path)) = fetch(sgdb::ArtworkType::Grid, true) {
+            (info.cover, info.cover_path) = (uri, path);
+        }
+    }
+    if info.background.is_empty() {
+        if let Some((uri, path)) = fetch(sgdb::ArtworkType::Hero, false) {
+            (info.background, info.background_path) = (uri, path);
+        }
+    }
+    if info.logo.is_empty() {
+        if let Some((uri, path)) = fetch(sgdb::ArtworkType::Logo, false) {
+            (info.logo, info.logo_path) = (uri, path);
+        }
+    }
 }
 
 /// A game on another PC: start it there now, and show it here at READY with
