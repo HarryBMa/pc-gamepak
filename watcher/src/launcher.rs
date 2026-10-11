@@ -9,6 +9,36 @@ use std::process::{Child, Command};
 
 use crate::log;
 
+/// A command for the launcher, in the desktop session as it is now.
+///
+/// The watcher can start before anyone logs in — at boot when the user
+/// lingers, or before the desktop has published its variables — and a child
+/// inherits the watcher's environment from then: no `WAYLAND_DISPLAY`, so a
+/// Steam game or a window opened for a trigger has no screen to go to. The
+/// systemd user manager holds the session's current ones; take the display
+/// variables from there.
+fn launcher_command(launcher: &Path) -> Command {
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut command = Command::new(launcher);
+    #[cfg(target_os = "linux")]
+    if let Ok(output) = Command::new("systemctl")
+        .args(["--user", "show-environment"])
+        .output()
+    {
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some((key, value)) = line.split_once('=') {
+                if matches!(
+                    key,
+                    "WAYLAND_DISPLAY" | "DISPLAY" | "XAUTHORITY" | "XDG_SESSION_TYPE"
+                ) {
+                    command.env(key, value);
+                }
+            }
+        }
+    }
+    command
+}
+
 /// Why a launcher is being opened.
 ///
 /// It changes what the launcher does, not what this does. `on_cartridge_insert`
@@ -34,7 +64,7 @@ pub fn open(path: &Path, why: Why) -> Option<Child> {
         return None;
     };
 
-    let mut command = Command::new(&launcher);
+    let mut command = launcher_command(&launcher);
     command
         .arg("--drive")
         .arg(path)
@@ -73,7 +103,7 @@ pub fn open_nfc(message: &[u8]) -> Option<Child> {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    match Command::new(&launcher)
+    match launcher_command(&launcher)
         .args(["--nfc-ndef", &encoded])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -86,6 +116,32 @@ pub fn open_nfc(message: &[u8]) -> Option<Child> {
         }
         Err(error) => {
             log::line(&format!("could not start NFC launcher: {error}"));
+            None
+        }
+    }
+}
+
+/// Submit a GamePak ID from a trigger, exactly as `pc-gamepak --trigger` does.
+/// The launcher validates it and refuses anything unregistered.
+#[cfg(target_os = "linux")]
+pub fn open_trigger(id: &str) -> Option<Child> {
+    let Some(launcher) = installed_at() else {
+        log::line("pc-gamepak is not installed anywhere I can find it");
+        return None;
+    };
+    match launcher_command(&launcher)
+        .args(["--trigger", id])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => {
+            log::line(&format!("trigger {id} started, pid {}", child.id()));
+            Some(child)
+        }
+        Err(error) => {
+            log::line(&format!("could not start the launcher for {id}: {error}"));
             None
         }
     }

@@ -1,4 +1,5 @@
-//! NFC transport: decode and encode the NDEF URI that carries a GamePak ID.
+//! NFC transport: decode the NDEF record that carries a GamePak ID — a
+//! `gamepak://gp_…` URI, or a Text record holding just the ID.
 //!
 //! NFC is only one trigger. All it contributes is the stable `gp_` identifier;
 //! resolving the ID to an action is [`crate::gamepak`]'s job.
@@ -92,6 +93,24 @@ pub fn id_from_ndef(message: &[u8]) -> Result<GamePakId, String> {
                 }
             }
         }
+        // A Text record holding just the ID, as a phone's NFC app writes
+        // "gp_stardew": the card carries the ID the way a barcode does.
+        if header & 0x07 == 0x01 && record_type == b"T" {
+            if let Some((&status, rest)) = payload.split_first() {
+                let language_len = usize::from(status & 0x3f);
+                let text = rest
+                    .get(language_len..)
+                    .filter(|_| status & 0x80 == 0) // UTF-8, not UTF-16
+                    .and_then(|text| std::str::from_utf8(text).ok())
+                    .map(str::trim);
+                if let Some(id) = text.filter(|text| text.starts_with("gp_")) {
+                    if !end || cursor != message.len() {
+                        return Err("GamePak ID must be the only NDEF record".into());
+                    }
+                    return GamePakId::parse(id);
+                }
+            }
+        }
         if end {
             if cursor != message.len() {
                 return Err("NDEF message has trailing bytes".into());
@@ -100,17 +119,6 @@ pub fn id_from_ndef(message: &[u8]) -> Result<GamePakId, String> {
         }
     }
     Err("NDEF message is incomplete".into())
-}
-
-pub fn ndef_uri(id: &str) -> Result<Vec<u8>, String> {
-    let id = GamePakId::parse(id)?;
-    let uri = format!("gamepak://{}", id.as_str());
-    let payload_len = uri.len() + 1;
-    let payload_len = u8::try_from(payload_len)
-        .map_err(|_| "GamePak URI is too long for an NDEF short record".to_string())?;
-    let mut message = vec![0xd1, 0x01, payload_len, b'U', 0];
-    message.extend_from_slice(uri.as_bytes());
-    Ok(message)
 }
 
 fn take_byte(message: &[u8], cursor: &mut usize) -> Result<u8, String> {
@@ -158,10 +166,15 @@ mod tests {
     }
 
     #[test]
-    fn creates_an_ndef_uri_for_a_gamepak_id() {
-        let message = ndef_uri("gp_demo").unwrap();
-        assert_eq!(id_from_ndef(&message).unwrap().as_str(), "gp_demo");
-        assert!(ndef_uri("not-an-id").is_err());
+    fn parses_a_gamepak_id_from_a_text_record() {
+        // Text record, UTF-8, language "en", as a phone writes "gp_stardew"
+        let mut message = vec![0xd1, 0x01, 13, b'T', 0x02, b'e', b'n'];
+        message.extend_from_slice(b"gp_stardew");
+        assert_eq!(id_from_ndef(&message).unwrap().as_str(), "gp_stardew");
+
+        let mut other = vec![0xd1, 0x01, 8, b'T', 0x02, b'e', b'n'];
+        other.extend_from_slice(b"hello");
+        assert!(id_from_ndef(&other).is_err());
     }
 
     #[test]
