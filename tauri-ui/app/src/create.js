@@ -2331,8 +2331,17 @@ async function write() {
     el.progressFill.classList.remove("is-indeterminate");
     el.progressFill.style.transform = "scaleX(1)";
 
+    // Formatting relabels the drive, and Linux remounts it under the new label:
+    // the cartridge is wherever its cartridge.conf went, not where it started.
+    if (result.confPath) {
+      selectedDrive = result.confPath
+        .replace(/[\\/]cartridge\.conf$/, "")
+        .replace(/^([A-Za-z]:)$/, "$1\\"); // a Windows drive root keeps its backslash
+    }
     const drive = drives.find((d) => d.path === selectedDrive);
-    const parts = [`Cartridge written to ${drive ? drive.label : selectedDrive}.`];
+    const parts = [
+      `Cartridge written to ${drive ? drive.label : selectedDrive.split(/[\\/]/).pop()}.`,
+    ];
     if (result.formatted) {
       parts.push(`Formatted to ${filesystemLabel(result.formattedFilesystem || request.formatFilesystem)}.`);
     }
