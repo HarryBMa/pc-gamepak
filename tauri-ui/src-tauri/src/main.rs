@@ -1935,13 +1935,19 @@ async fn create_cartridge(
             let _ = window.emit("cartridge://progress", progress);
         })?;
         // Here rather than in the window, so a write is on the shelf even if
-        // the window is closed before it hears back.
+        // the window is closed before it hears back. At the drive's mount now,
+        // not the one it was asked for: a format relabels it, and Linux
+        // remounts it under the new label.
+        let written_to = Path::new(&result.conf_path)
+            .parent()
+            .map(|root| root.to_string_lossy().into_owned())
+            .unwrap_or_else(|| request.drive_path.clone());
         let label = drives::list_drives()
             .into_iter()
-            .find(|drive| drive.path == request.drive_path)
+            .find(|drive| drive.path == written_to)
             .map(|drive| drive.label)
             .unwrap_or_default();
-        if let Err(e) = created::record(&request.drive_path, &label, result.bytes_copied) {
+        if let Err(e) = created::record(&written_to, &label, result.bytes_copied) {
             result
                 .warnings
                 .push(format!("Not added to Created cartridges: {e}"));
