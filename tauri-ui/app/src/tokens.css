@@ -24,6 +24,9 @@
 }
 
 :root {
+  /* Native controls follow the page, not the desktop theme. On a light GTK
+     theme WebKitGTK drew dropdowns white, under text that is white here. */
+  color-scheme: dark;
   --shell: oklch(0.155 0.005 65);
   --panel: oklch(0.185 0.006 65);
   --sunk: oklch(0.125 0.005 65);
@@ -68,6 +71,19 @@
   --select-bg: color-mix(in oklch, var(--accent) 34%, transparent);
   --scroll-thumb: oklch(1 0 0 / 0.14);
   --scroll-thumb-hover: oklch(1 0 0 / 0.24);
+}
+
+/* A dropdown's list is drawn by the toolkit, not the page, and only takes
+   solid colours: the see-through fills the closed selects use let the light
+   desktop theme show through. */
+select {
+  background-color: var(--sunk);
+}
+
+option,
+optgroup {
+  background-color: var(--panel);
+  color: var(--ink);
 }
 
 *,
