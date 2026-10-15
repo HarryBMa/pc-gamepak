@@ -4,8 +4,8 @@
 
 # PC GamePak
 
-**Turn removable storage into physical game cartridges.**
-Plug one in and a launcher appears with the game's cover art and two buttons.
+**Turn any USB drive into a physical game cartridge.**
+Plug one in and a launcher appears with the game's cover art and two buttons. Nothing runs until you press Play.
 
 [![CI](https://github.com/HarryBMa/pc-gamepak/actions/workflows/ci.yml/badge.svg)](https://github.com/HarryBMa/pc-gamepak/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/HarryBMa/pc-gamepak)](https://github.com/HarryBMa/pc-gamepak/releases)
@@ -37,6 +37,23 @@ start the game, or **Eject** to power the drive down and pull it out.
 Each cartridge is a drive with a `cartridge.conf` text file at its root. There
 are no scripts to write and nothing to allowlist, because **nothing on a
 cartridge is ever executed automatically** — pressing Play is the gate.
+
+### Is this Autorun again?
+
+No. `autorun.inf` ran a program the moment a drive was plugged in, which is why
+Windows removed it. PC GamePak does the opposite: plugging in only *shows* a
+window, and nothing starts until a person clicks Play. `cartridge.conf` is plain
+text read as data, never run. A classic `autorun.inf` on the drive is read for
+its label and icon only; its `open=` line is ignored. Details in
+[the manual](docs/MANUAL.md).
+
+### What does it cost?
+
+The software is free and open source (MIT). A cartridge can be hardware you
+already own: a USB stick or a portable SSD works. The pocketable NVMe-in-an-
+enclosure build shown in the photos is a nicer option, not a requirement. See
+[supported drives](#supported-platforms) and the
+[hardware notes](docs/MANUAL.md) for what speed to expect from each.
 
 <div align="center">
 <img width="260" alt="The launcher showing Dave the Diver: cover art filling the window, the game's logo over it, and a wide Play button beside an eject icon" src="docs/launcher.png" />
