@@ -55,6 +55,33 @@ enclosure build shown in the photos is a nicer option, not a requirement. See
 [supported drives](#supported-platforms) and the
 [hardware notes](docs/MANUAL.md) for what speed to expect from each.
 
+### Does the game have to be on the cartridge?
+
+No, there are two ways to use one:
+
+- **As a trigger.** The game stays installed on your PC. The cartridge holds only
+  a `cartridge.conf` that points at it (`executable=steam://rungameid/413150`, or
+  a path to the install folder). Any USB stick, SD card or old drive will do, and
+  the cartridge is mostly a way to launch the game with a physical object.
+- **As the game's home.** The game files are copied onto the drive and run from
+  it, so the cartridge travels between machines. Here drive speed matters, which
+  is where the NVMe build comes in.
+
+### Is it safe to plug in any drive?
+
+It is built for drives you made yourself, and there is no signing or allowlist.
+What it does guarantee:
+
+- Plugging in a drive never starts anything on its own. At most a launcher window
+  opens, and only for a drive that has a `cartridge.conf`.
+- The window and `cartridge.conf` are data. Titles are shown as plain text, and
+  the launcher cannot read your disk.
+- **Play runs what `cartridge.conf` says.** On a drive someone else gave you,
+  read the file first. A `steam://`-style target hands off to a launcher you
+  already have; a binary on the drive runs as-is.
+
+The full list is in [the manual's security section](docs/MANUAL.md).
+
 <div align="center">
 <img width="260" alt="The launcher showing Dave the Diver: cover art filling the window, the game's logo over it, and a wide Play button beside an eject icon" src="docs/launcher.png" />
 &nbsp;
@@ -208,6 +235,13 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 [Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) · [Tauri and Iced](docs/ICED.md) ·
 [Where the project is](docs/STATUS.md) · [What changed](CHANGELOG.md) ·
 [Contributing](CONTRIBUTING.md)
+
+## Credits
+
+Began as a fork of [LewdM3at/PC-cartridge-system](https://github.com/LewdM3at/PC-cartridge-system),
+which had the original idea and the first working insert detection. The
+launcher, wizard and click-to-play model were written from scratch. See the
+[manual](docs/MANUAL.md) for the full history.
 
 ## License
 
