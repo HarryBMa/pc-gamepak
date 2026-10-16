@@ -88,24 +88,35 @@ async function typeInto(page, selector, text) {
 }
 
 const DEMOS = {
-  // The memory card: a save newer on the card is copied home; one changed on
-  // both asks which to keep.
+  // A combo cartridge's memory card: the card slots in and its saves fan out,
+  // a save newer on the card is copied home, the ring turns to one changed on
+  // both, and back to the cartridge.
   "memcard-demo": {
     viewport: [420, 630],
     width: 420, // the GIF's width
     async setup(page) {
-      await page.goto("/tauri-ui/app/index.html?drive=X&state=memcard");
+      await page.goto("/tauri-ui/app/index.html?drive=X&combo");
       await page.waitForTimeout(2200);
-      await page.mouse.move(300, 560);
+      await page.mouse.move(210, 420);
     },
     async run(page) {
-      await page.waitForTimeout(900);
-      await glideClick(page, '.mc__block[data-index="1"]');
-      await page.waitForTimeout(1900);
+      await page.waitForTimeout(700);
+      await glideClick(page, "#btn-memcard");
+      await page.waitForTimeout(1700); // in it goes, and out come the saves
+      // The card and the chosen case lean after the pointer.
+      await page.mouse.move(120, 330, { steps: 26 });
+      await page.mouse.move(310, 300, { steps: 30 });
+      await page.waitForTimeout(400);
+      await glideClick(page, '.mc__block[data-index="1"]'); // God of War
+      await page.waitForTimeout(1500);
       await glideClick(page, "#mc-to-pc");
-      await page.waitForTimeout(2400);
-      await glideClick(page, '.mc__block[data-index="3"]');
-      await page.waitForTimeout(2600);
+      await page.waitForTimeout(2200);
+      await glideClick(page, "#mc-next");
+      await page.waitForTimeout(900);
+      await glideClick(page, "#mc-next"); // Tunic: changed on both
+      await page.waitForTimeout(2300);
+      await glideClick(page, "#mc-close");
+      await page.waitForTimeout(1200);
     },
   },
   // A card tapped at New GamePak becomes a game on another PC in four clicks.

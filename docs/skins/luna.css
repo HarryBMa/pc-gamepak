@@ -535,29 +535,33 @@ body.is-gamepad :focus {
   text-decoration: underline;
 }
 
-/* The memory card: an Explorer window onto the card, the shelf in the white
-   pane. The cases keep the stock colours — they are pictures of boxes, and
-   their spine and back-cover text is printed over the art. */
+/* The memory card: an Explorer window onto the card, the stage in the white
+   pane. The card and the cases keep the stock colours — they are pictures of
+   objects, and their spine text is printed over the art — and the floor they
+   stand on goes, since a white pane has no room to light. */
 #memcard {
   background: var(--xp-face);
 }
 
-#mc-blocks {
+.mc__scene {
   margin: 8px;
   background: var(--xp-pane);
   border: 2px solid var(--xp-line);
 }
 
-#memcard .mc__cube {
+.mc__floor {
+  display: none;
+}
+
+#memcard .mc__case {
   --ink: oklch(0.97 0.006 75);
   --ink-2: oklch(0.75 0.008 75);
   --ink-3: oklch(0.635 0.008 75);
   --panel: oklch(0.185 0.006 65);
 }
 
-.mc__block[aria-selected="true"] .mc__label {
-  color: #ffffff;
-  background: var(--xp-select);
+.mc__block[aria-selected="true"] .mc__face--front {
+  box-shadow: inset 0 0 0 2px var(--xp-select);
 }
 
 /* The capacity bar as Windows drew a progress bar: green blocks in a well. */
@@ -573,8 +577,9 @@ body.is-gamepad :focus {
   background: repeating-linear-gradient(90deg, #2fb52f 0 8px, transparent 8px 10px);
 }
 
-.mc__info {
+.mc__panel {
   border-top: 1px solid var(--hairline-soft);
+  background: var(--xp-face);
 }
 
 .mc__link {

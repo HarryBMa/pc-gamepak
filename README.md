@@ -42,7 +42,7 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 &nbsp;
 <img width="260" alt="The launcher showing a two-game XCOM collection: the collection's logo in the corner, a rail of games, and the selected game's logo over one Play button" src="docs/launcher-bundle.png" />
 &nbsp;
-<img width="260" alt="The memory card, animated: God of War's case says Newer on the card, Copy to PC brings it home and it reads Same on this PC and the card, then the shelf slides to Tunic, changed on both, which asks which copy to keep" src="docs/memcard-demo.gif" />
+<img width="260" alt="The memory card, animated: the card slots into a dark stage and its saves fan out onto a ring round it; God of War, newer on the card, is copied home, then the ring turns to Tunic, changed on both, which asks which copy to keep" src="docs/memcard-demo.gif" />
 </div>
 
 ## Features

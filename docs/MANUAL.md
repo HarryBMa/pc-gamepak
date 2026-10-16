@@ -450,19 +450,23 @@ save-sync tool eats an eighty-hour run.
 ### Memory cards
 
 A drive with a `memorycard.conf` carries saves and no games — the other half
-of a cartridge, the way a console's memory card was. Plug one in and every save
-on it is a game case on a shelf; choose one and it turns round to its back
-cover, which says which copy is newer, when it was saved and how much it holds,
-beside the one button that does what it needs: copy to this PC, or to the card.
-Anything a copy replaces is kept, as with every other save here.
+of a cartridge, the way a console's memory card was. Plug one in and the card
+itself sits in the middle of the window, with every save on it standing as a
+game case on a track round it. The chosen save is at the front; under the
+stage it says which copy is newer, when it was saved, how long it has been
+played and how much it holds, beside the one button that does what it needs:
+copy to this PC, or to the card. Anything a copy replaces is kept, as with
+every other save here.
 
-<img width="420" alt="The memory card, animated: each save is a game case on a shelf. God of War's case turns round to say Newer on the card; Copy to PC brings it home and it reads Same on this PC and the card. Then the shelf slides to Tunic, changed on both, which offers Keep the card's and Keep this PC's" src="memcard-demo.gif" />
+<img width="420" alt="The memory card, animated: the card slots into the middle of a dark stage and the saves fan out of it onto a ring round it. God of War comes to the front saying Newer on the card; Copy to PC brings it home and it reads Same on this PC and the card. Then the ring turns to Tunic, changed on both, which offers Keep the card's and Keep this PC's" src="memcard-demo.gif" />
 
-A lamp under a case means it needs you. **Newer on the card** offers *Copy to
-PC*, **Newer on this PC** offers *Copy to card*; **Changed on both** lights neither and
-asks which to keep, because only you know which play-through you meant.
+Left and right (or the d-pad, a scroll wheel, or the arrows either side of the
+stage) turn the track; clicking a case brings it to the front. A lamp on a
+case's cover means it needs you. **Newer on the card** offers *Copy to PC*,
+**Newer on this PC** offers *Copy to card*; **Changed on both** lights neither
+and asks which to keep, because only you know which play-through you meant.
 
-<img width="300" alt="God of War chosen on the memory card: its back cover says Newer on the card, saved yesterday, 13 hours played, and one Copy to PC button sits beside it" src="memcard-sync.png" /> <img width="300" alt="Tunic chosen on the memory card: its back cover says Changed on both, and two equal buttons offer Keep the card's and Keep this PC's" src="memcard-conflict.png" />
+<img width="300" alt="God of War at the front of the memory card's ring, with a diamond lamp: the panel says Newer on the card, saved yesterday, 13 hours played, and offers one Copy to PC button" src="memcard-sync.png" /> <img width="300" alt="Tunic at the front of the ring with a square lamp: the panel says Changed on both, and two equal buttons offer Keep the card's and Keep this PC's" src="memcard-conflict.png" />
 
 A cartridge can be a **combo drive** too — a switch in the wizard — and its own
 games' saves go on its card, one button (or `M`) away from Play. The wizard's

@@ -1607,13 +1607,17 @@ body.is-gamepad :focus {
 }
 
 /* ==========================================================================
-   Memory card — every save on the drive, as a game case on a shelf
+   Memory card — the card as hardware, and its saves on a track round it
    ==========================================================================
-   A mode of the launcher, in its language. The saves stand on one shelf,
-   turning slowly; choosing one pulls it off the shelf onto the stage below,
-   where it turns to its back cover and the details are printed there, with
-   the one button that does what it needs beside it. memcard.js drives every
-   angle and the spring. */
+   A mode of the launcher, in its language, staged like a console's card
+   browser: the card hovers over the middle of a dark room, the saves stand on
+   a circular track on the floor round it, and the chosen one is at the front,
+   stepped forward and lit. memcard-scene.js sets every transform and the
+   per-save --focus, --shade and --fade; this sheet says what things look like.
+
+   Light is depth and focus, never decoration: the room is lit from above, the
+   floor catches a pool where the chosen save stands, saves round the curve
+   fall into shade. No glow round anything (the No Halo Rule). */
 
 #memcard {
   position: absolute;
@@ -1623,11 +1627,22 @@ body.is-gamepad :focus {
   grid-template-rows: auto auto 1fr auto;
   overflow: hidden;
   color: var(--ink);
-  background: color-mix(in oklch, var(--accent) 4%, oklch(0.115 0 0));
+  /* A dark room, a little blue at the back wall and near-black at the floor. */
+  background: linear-gradient(
+    oklch(0.165 0.03 262) 0%,
+    oklch(0.125 0.02 262) 48%,
+    oklch(0.095 0.006 260) 100%
+  );
   animation: fade 240ms var(--ease) both;
 }
 
 .mc__head {
+  /* Each part is pinned to its row: the capacity bar is hidden on a drive
+     that reports no size, and auto-placement would then slide the stage into
+     its row, where it has no height. */
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1654,12 +1669,15 @@ body.is-gamepad :focus {
 
 /* How full the card is. */
 .mc__capacity {
+  grid-row: 2;
+  position: relative;
+  z-index: 2;
   padding: 8px 22px 0;
 }
 
 .mc__bar {
-  height: 6px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--hairline-soft);
   overflow: hidden;
 }
@@ -1667,7 +1685,7 @@ body.is-gamepad :focus {
 .mc__bar i {
   display: block;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--ink-2);
   transform-origin: left;
   transform: scaleX(0);
@@ -1676,13 +1694,14 @@ body.is-gamepad :focus {
 
 .mc__cap {
   margin: 6px 0 0;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-size: var(--text-sm);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
 
-/* A save that asks for something: diamond when one side is newer, square
-   when both changed. Shape carries it as well as colour. */
+/* A save's state in a shape as well as a colour: circle in step, diamond
+   newer on one side, square changed on both, ring nothing to do yet. */
 .lamp {
   display: inline-block;
   flex: none;
@@ -1700,54 +1719,120 @@ body.is-gamepad :focus {
   background: var(--danger);
 }
 
-/* --- The shelf: one row, scrolled sideways -------------------------------- */
-
-#mc-blocks {
-  list-style: none;
-  margin: 0;
-  padding: 18px 14px 6px;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-padding-inline: 14px;
+.lamp[data-tone="good"] {
+  border-radius: 50%;
+  background: var(--good);
 }
 
+.lamp[data-tone="muted"] {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+
+/* --- The stage ------------------------------------------------------------ */
+
+.mc__scene {
+  grid-row: 3;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  perspective: 980px;
+  perspective-origin: 50% 32%;
+  /* The pointer tilts the card; nothing here is dragged. */
+  touch-action: pan-y;
+}
+
+/* Everything in 3D hangs off one point, a little below the middle of the
+   stage, scaled from the 420 by 340 the scene is drawn at (--s). */
+.mc__world {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  transform: scale(var(--s, 1)) rotateX(-11deg);
+}
+
+/* The floor the saves stand on: a dark disc, lit where the chosen one stands
+   at the front, fading into the room at its edge. */
+.mc__floor {
+  position: absolute;
+  left: -300px;
+  top: -300px;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  transform: translateY(90px) rotateX(90deg);
+  background:
+    radial-gradient(closest-side at 50% 79%, oklch(0.7 0.03 75 / 0.26), transparent 62%),
+    radial-gradient(closest-side, oklch(0.25 0.03 262 / 0.95), oklch(0.17 0.025 262 / 0.7) 66%, transparent);
+  pointer-events: none;
+}
+
+.mc__track {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform-style: preserve-3d;
+}
+
+/* One save: a slot on the track that memcard-scene.js moves, holding a case. */
 .mc__block {
-  flex: none;
-  width: 112px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  position: absolute;
+  left: -42px;
+  top: -30px;
+  width: 84px;
+  height: 120px;
+  transform-style: preserve-3d;
   cursor: pointer;
   outline: none;
 }
 
-/* --- The case (shelf and stage share it; sizes are variables) ------------- */
+.mc__block[aria-selected="true"] {
+  cursor: default;
+}
 
-.mc__cube {
-  --w: 96px;
-  --h: 138px;
-  --d: 12px;
+/* Under the pointer, a save round the curve comes half out of the shade:
+   that is the one a click will bring to the front. */
+.mc__block:hover .mc__face::after {
+  opacity: calc(var(--shade, 0) * 0.45);
+}
+
+/* --- A game case ---------------------------------------------------------- */
+
+.mc__case {
+  --w: 84px;
+  --h: 120px;
+  --d: 14px;
   position: absolute;
-  top: 6px;
-  left: 8px;
-  width: var(--w);
-  height: var(--h);
+  inset: 0;
   transform-style: preserve-3d;
-  transform: rotateX(-8deg);
 }
 
 .mc__face {
   position: absolute;
   display: grid;
   place-items: center;
+  overflow: hidden;
   backface-visibility: hidden;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--ink);
+  opacity: var(--fade, 1);
+}
+
+/* The room's light: faces round the curve fall into shade. An overlay, not a
+   filter, because a filter would flatten the box it is on. */
+.mc__face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: oklch(0.05 0.01 262);
+  opacity: var(--shade, 0);
+  pointer-events: none;
 }
 
 .mc__face--front,
@@ -1763,6 +1848,16 @@ body.is-gamepad :focus {
   transform: translateZ(calc(var(--d) / 2));
 }
 
+/* The chosen case catches the light across its cover. */
+.mc__face--front::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, oklch(1 0 0 / 0.16), transparent 42%);
+  opacity: var(--focus, 0);
+  pointer-events: none;
+}
+
 .mc__face--back {
   transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
   filter: brightness(0.45);
@@ -1774,8 +1869,7 @@ body.is-gamepad :focus {
   left: calc(50% - var(--d) / 2);
   width: var(--d);
   height: var(--h);
-  background: var(--panel);
-  overflow: hidden;
+  background: linear-gradient(90deg, var(--panel), var(--shell));
 }
 
 .mc__face--left {
@@ -1789,12 +1883,15 @@ body.is-gamepad :focus {
 
 /* The spine, with the game's name running down it. */
 .mc__face--left span {
+  max-height: calc(var(--h) - 12px);
+  overflow: hidden;
   writing-mode: vertical-rl;
   font-size: var(--text-label);
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: var(--d);
   text-transform: uppercase;
+  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink-2);
 }
@@ -1816,225 +1913,367 @@ body.is-gamepad :focus {
   transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
 }
 
-/* On the shelf: the case in a slot with its shadow and reflection. */
-.mc__icon {
-  position: relative;
-  width: 112px;
-  height: 186px;
-  perspective: 900px;
-  opacity: 0.78;
-  transition: opacity 160ms linear;
+/* A save that asks for something says so on its cover, readable from the
+   far side of the track. */
+.mc__case-lamp {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  outline: 2px solid oklch(0.1 0.01 262 / 0.85);
 }
 
-.mc__block:hover .mc__icon {
-  opacity: 1;
+/* The chosen save: at the front, forward, lit, and ringed in the accent so
+   the selection is a border and a place, never only light. */
+.mc__block[aria-selected="true"] .mc__face--front {
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 1px oklch(0 0 0 / 0.5);
 }
 
+.mc__block:focus-visible .mc__face--front {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* The shadow it stands in, a hair above the floor so the two never fight. */
 .mc__shadow {
   position: absolute;
-  left: 22%;
-  right: 22%;
-  top: 146px;
-  height: 10px;
-  border-radius: 50%;
-  background: oklch(0 0 0 / 0.55);
-  filter: blur(4px);
-}
-
-.mc__refl {
-  position: absolute;
-  top: 6px;
-  left: 8px;
-  width: 96px;
-  height: 138px;
-  transform: translateY(8px) scaleY(-0.3);
-  transform-origin: bottom;
+  left: -14%;
+  top: calc(var(--h) - 18px);
+  width: 128%;
+  height: 32px;
+  transform: rotateX(90deg);
+  background: radial-gradient(closest-side, oklch(0 0 0 / 0.75), transparent);
+  opacity: var(--fade, 1);
   pointer-events: none;
 }
 
-.mc__refl-plane {
+/* --- The card ------------------------------------------------------------- */
+
+/* A slab of smoked plastic about the proportions of a console card, hovering
+   over the middle of the track. Its colours are its own, not the theme's: it
+   is an object in the room. */
+.mcx {
+  position: absolute;
+  left: -50px;
+  top: -158px;
+  width: 100px;
+  height: 130px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.mcx__slab {
+  --w: 100px;
+  --h: 130px;
+  --d: 12px;
   position: absolute;
   inset: 0;
-  background: var(--art, none) center / cover no-repeat,
-    color-mix(in oklch, var(--accent) 24%, var(--panel));
-  opacity: 0.2;
-  -webkit-mask-image: linear-gradient(to top, #000, transparent 75%);
-  mask-image: linear-gradient(to top, #000, transparent 75%);
+  transform-style: preserve-3d;
 }
 
-/* The chosen case stays on the shelf, ringed in the accent, so the one on
-   the stage is plainly the same save. */
-.mc__block[aria-selected="true"] .mc__icon::after {
-  content: "";
+.mcx__face {
   position: absolute;
-  top: 2px;
-  left: 4px;
-  width: 104px;
-  height: 146px;
-  border-radius: 5px;
-  border: 2px solid var(--accent);
-  pointer-events: none;
+  backface-visibility: hidden;
+  opacity: var(--fade, 1);
 }
 
-.mc__block:focus-visible .mc__icon {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.mcx__face--front,
+.mcx__face--back {
+  inset: 0;
+  border-radius: 7px 7px 4px 4px;
 }
 
-.mc__label {
+.mcx__face--front {
+  transform: translateZ(calc(var(--d) / 2));
+  overflow: hidden;
+  background:
+    /* moulded grain */
+    repeating-linear-gradient(0deg, oklch(1 0 0 / 0.015) 0 1px, transparent 1px 3px),
+    /* lit from above and to the left */
+    linear-gradient(158deg, oklch(0.34 0.03 258) 0%, oklch(0.22 0.025 260) 46%, oklch(0.16 0.02 262) 100%);
+  box-shadow:
+    inset 1px 1px 0 oklch(1 0 0 / 0.22),
+    inset -1px -1px 0 oklch(0 0 0 / 0.55),
+    inset 0 0 0 4px oklch(0 0 0 / 0.08);
+}
+
+.mcx__face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
+  background: oklch(0.15 0.02 262);
+}
+
+.mcx__face--left,
+.mcx__face--right {
+  top: 4px;
+  left: calc(50% - var(--d) / 2);
+  width: var(--d);
+  height: calc(var(--h) - 8px);
+  background: linear-gradient(90deg, oklch(0.2 0.022 262), oklch(0.27 0.025 258) 50%, oklch(0.18 0.02 262));
+}
+
+.mcx__face--left {
+  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+}
+
+.mcx__face--right {
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+  filter: brightness(0.7);
+}
+
+.mcx__face--top,
+.mcx__face--bottom {
+  top: calc(50% - var(--d) / 2);
+  left: 6px;
+  width: calc(var(--w) - 12px);
+  height: var(--d);
+}
+
+.mcx__face--top {
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
+  background: oklch(0.3 0.028 258);
+}
+
+/* The connector along the bottom edge: gold pins in a dark slot. */
+.mcx__face--bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+  background:
+    repeating-linear-gradient(90deg, oklch(0.74 0.11 82) 0 3px, oklch(0.14 0.01 262) 3px 7px)
+      center / calc(100% - 16px) 50% no-repeat,
+    oklch(0.14 0.01 262);
+}
+
+/* The grip moulded across the top. */
+.mcx__grip {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 9px;
+  height: 18px;
+  background: repeating-linear-gradient(
+    180deg,
+    oklch(1 0 0 / 0.12) 0 1px,
+    oklch(0 0 0 / 0.35) 1px 2px,
+    transparent 2px 4px
+  );
+  border-radius: 2px;
+}
+
+/* The label, set into the face. */
+.mcx__label {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  top: 34px;
+  height: 58px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  gap: 7px;
-  width: 100%;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--ink-3);
-  text-align: center;
+  gap: 4px;
+  padding: 0 8px 0 14px;
+  border-radius: 3px;
+  background: linear-gradient(oklch(0.15 0.012 262), oklch(0.12 0.01 262));
+  box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.7), 0 1px 0 oklch(1 0 0 / 0.1);
 }
 
-.mc__block[aria-selected="true"] .mc__label {
-  color: var(--ink);
+.mcx__stripe {
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
-.mc__size {
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
+.mcx__word {
+  font-size: 11px;
+  font-weight: 800;
+  font-stretch: 110%;
+  letter-spacing: 0.14em;
+  line-height: 1.05;
+  text-transform: uppercase;
+  color: oklch(0.88 0.01 260);
+}
+
+.mcx__size {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: oklch(0.68 0.015 260);
+}
+
+.mcx__size:empty {
+  display: none;
+}
+
+/* The arrow that says which way it goes in. */
+.mcx__arrow {
+  position: absolute;
+  left: calc(50% - 7px);
+  bottom: 22px;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 9px solid oklch(0.12 0.015 262 / 0.9);
+  filter: drop-shadow(0 1px 0 oklch(1 0 0 / 0.12));
+}
+
+/* The slots the pins sit behind, seen from the front. */
+.mcx__teeth {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 5px;
+  height: 7px;
+  border-radius: 1px;
+  background: repeating-linear-gradient(90deg, oklch(0.08 0.01 262) 0 4px, oklch(0.2 0.02 260) 4px 7px);
+}
+
+/* Its shadow, cast far down onto the floor under it. */
+.mcx__shadow {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 205px;
+  height: 46px;
+  transform: rotateX(90deg);
+  background: radial-gradient(closest-side, oklch(0 0 0 / 0.55), transparent);
+  opacity: var(--fade, 1);
+}
+
+/* --- Stepping, and the empty card ----------------------------------------- */
+
+/* Either side of the front of the track, for a mouse. */
+.mc__step {
+  position: absolute;
+  top: 62%;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  transform: translateY(-50%);
+}
+
+.mc__step--prev {
+  left: 10px;
+}
+
+.mc__step--next {
+  right: 10px;
+}
+
+.mc__step:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+#memcard.is-empty .mc__step {
+  display: none;
 }
 
 .mc__empty {
-  align-self: center;
-  justify-self: center;
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 22%;
   margin: 0;
+  text-align: center;
   font-size: var(--text-md);
   color: var(--ink-2);
 }
 
-/* --- The stage: the pulled case, and what to do with it ------------------ */
+/* --- The panel: the chosen save, and what to do --------------------------- */
 
-.mc__info {
+.mc__panel {
+  grid-row: 4;
+  position: relative;
+  z-index: 2;
   display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 18px;
-  padding: 10px 20px 18px 24px;
+  align-content: start;
+  gap: 6px;
+  /* Fixed, so the stage above does not grow and shrink, and the whole scene
+     jump, as saves with more or fewer details are chosen. Room for a two-line
+     title, two lines of details and the buttons. */
+  height: 212px;
+  padding: 12px 20px 18px 22px;
   border-top: 1px solid var(--hairline-soft);
+  background: linear-gradient(oklch(0.11 0.008 260 / 0.82), oklch(0.095 0.006 260));
 }
 
-#memcard:not(.has-block) .mc__info {
+#memcard:not(.has-block) .mc__panel {
   display: none;
 }
 
-.mc__stage {
-  width: 168px;
-  height: 232px;
-  display: grid;
-  place-items: center;
-  perspective: 1100px;
-}
-
-.mc__hero {
-  position: relative;
-  width: 150px;
-  height: 216px;
-  cursor: pointer;
-  transform-origin: center;
-  will-change: transform;
-}
-
-.mc__hero .mc__cube {
-  --w: 150px;
-  --h: 216px;
-  --d: 18px;
-  top: 0;
-  left: 0;
-}
-
-/* The back cover faces you on the stage, so it is not darkened like a back;
-   the art sits dim behind the printed details. */
-.mc__hero .mc__face--back {
-  filter: none;
-  background: linear-gradient(oklch(0.11 0.004 65 / 0.8), oklch(0.11 0.004 65 / 0.92)),
-    var(--art, none) center / cover no-repeat,
-    var(--panel);
-  place-items: stretch;
-}
-
-.mc__hero .mc__face--front {
-  box-shadow:
-    inset 0 0 0 1px var(--hairline-soft),
-    0 20px 32px -18px oklch(0 0 0 / 0.9);
-}
-
-.mc__hero .mc__face--left span {
-  font-size: var(--text-sm);
-}
-
-.mc__back {
+.mc__title-row {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 16px 14px;
-  text-align: left;
+  align-items: baseline;
+  gap: 12px;
 }
 
-.mc__back-title {
-  margin-bottom: 4px;
-  font-size: 15px;
+.mc__count {
+  flex: none;
+  margin-left: auto;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mc__game {
+  min-width: 0;
+  margin: 0;
+  font-size: 17px;
   font-weight: 800;
+  font-stretch: 104%;
   line-height: 1.2;
-  color: var(--ink);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
-.mc__back-state {
+.mc__state {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-bottom: 6px;
-  font-size: var(--text-sm);
+  gap: 8px;
+  margin: 0;
+  font-size: var(--text-md);
   font-weight: 700;
   line-height: 1.3;
-  color: var(--ink);
 }
 
-.mc__back-row {
+.mc__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-size: var(--text-sm);
-  font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.5;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
-.mc__side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
 .mc__actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.mc__actions:not(:has(.btn:not([hidden]))) {
-  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 6px;
 }
 
 .mc__actions .btn {
   position: relative;
-  width: 100%;
-  height: 44px;
+  flex: 1 1 140px;
+  max-width: 260px;
+  height: 42px;
   padding: 0 12px;
 }
 
 .mc__more {
   display: flex;
-  flex-wrap: wrap;
   gap: 4px 16px;
+  margin-left: auto;
 }
 
 .mc__link {
@@ -2080,6 +2319,19 @@ body.is-gamepad :focus {
 
 /* A presses the suggested copy; when both are offered it presses neither. */
 .mc__actions .btn:not(.is-suggested) .pad-badge {
+  display: none;
+}
+
+/* --- Without 3D: the track laid flat, still every save in reach ----------- */
+
+.mc__scene.is-flat .mc__world {
+  transform: scale(var(--s, 1));
+}
+
+.mc__scene.is-flat .mc__floor,
+.mc__scene.is-flat .mc__shadow,
+.mc__scene.is-flat .mc__face:not(.mc__face--front),
+.mc__scene.is-flat .mcx__face:not(.mcx__face--front) {
   display: none;
 }
 

@@ -12,6 +12,22 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### The memory card, as a memory card
+
+The memory card view is now a stage: the card itself hovers in the middle, a
+slab of smoked plastic with its grip, label and connector, and every save on it
+stands as a game case on a track round it, the chosen one at the front, stepped
+forward and lit. Left and right turn the track (as do the d-pad, a scroll
+wheel and the arrows either side); a click brings a case to the front. Opening
+it slots the card in and fans the saves out of it. Under the stage, a panel
+gives the save's state, when it was saved, how long it has been played and
+what it takes on each side, with the button that state calls for. Copying,
+deleting (still two presses) and opening the folder are as before.
+
+It is CSS 3D, drawn only while something moves, with no new dependency.
+Reduced motion puts everything straight in place, and where the webview cannot
+really draw 3D (WebKitGTK without a GPU) the saves are laid out as a flat strip.
+
 ### The Iced launcher is gone
 
 `iced-ui/` and `docs/ICED.md` are removed. The experiment answered its

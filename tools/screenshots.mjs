@@ -58,12 +58,14 @@ const SHOTS = {
     await p.goto("/tauri-ui/app/index.html?drive=X&state=memcard");
     await p.waitForTimeout(2000);
     await p.click('.mc__block[data-index="1"]'); // God of War: newer on the card
-    await p.waitForTimeout(1800); // the case flies to the stage
+    await p.waitForTimeout(1800); // the ring turns it to the front
   }],
   "memcard-conflict": [LAUNCHER, async (p) => {
     await p.goto("/tauri-ui/app/index.html?drive=X&state=memcard");
     await p.waitForTimeout(2000);
-    await p.click('.mc__block[data-index="3"]'); // Tunic: changed on both
+    // Tunic, changed on both. Three on round the ring, where it may be behind
+    // the card, so it is stepped to rather than clicked.
+    for (let i = 0; i < 3; i += 1) await p.keyboard.press("ArrowRight");
     await p.waitForTimeout(1800);
   }],
   "wizard-card": [WIZARD, async (p) => {
