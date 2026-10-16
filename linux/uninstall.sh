@@ -64,6 +64,7 @@ echo "Removing udev rule..."
 rm -f /etc/udev/rules.d/99-steam-game-cartridge.rules
 rm -f /etc/udev/rules.d/99-game-cartridge.rules
 rm -f /etc/udev/rules.d/99-pc-gamepak.rules
+rm -f /etc/udev/rules.d/70-pc-gamepak-barcode.rules
 
 
 ########################################

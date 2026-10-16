@@ -12,6 +12,24 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### GamePak actions: any card or barcode, any game, Play to start
+
+The wizard's **GamePak actions** tab lists every GamePak with what it starts
+and the cards and barcodes that start it. **New GamePak** listens for a tap or
+a scan as it opens; pick a game from the ones installed here, a Moonlight
+stream (the host's games are listed), a file, a program or a page, and save.
+**Add card** puts more cards on the same game. The NFC cards tab is gone.
+
+A trigger now opens the launcher at READY for every GamePak, waking its host
+if it has one, and **Play** starts it. Settings → **Launch directly on
+trigger** starts it on the tap instead.
+
+Barcode scanners work as triggers on Linux: the watcher takes the scanner for
+itself and submits each code, `gp_` added where missing. A PN532 on a serial
+adapter is read through libnfc when `/etc/nfc/libnfc.conf` names it, and a
+card may carry its ID as a Text record (`gp_stardew`), as a phone writes it,
+on NTAG or MIFARE Classic.
+
 ### Start on tap: the game starts on the gaming PC, the stream on Play
 
 Tap a GamePak card at the couch and the game starts on the gaming PC at once,
@@ -20,10 +38,8 @@ runs `moonlight stream`, which resumes the running game, and Eject runs
 `moonlight quit`. The gaming PC needs nothing but Apollo or Sunshine with the
 game in its app list: the couch PC starts the app with Moonlight's own
 pairing, and wakes the gaming PC with the MAC address Moonlight stored. Set it
-up under **GamePak actions → Game on another PC, through Moonlight**, which
-offers Moonlight's hosts and their apps, and write the card from **NFC cards**,
-which now lists GamePaks registered on this PC as well as mounted cartridges.
-See the manual's *Start on tap*.
+up under **GamePak actions → New GamePak → Game on another PC**, which offers
+Moonlight's hosts and their games. See the manual's *Start on tap*.
 
 ### Select GamePaks with NFC
 

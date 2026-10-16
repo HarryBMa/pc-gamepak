@@ -99,5 +99,15 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     echo
 fi
 
+# The one step this install cannot do without root: a barcode scanner is a
+# keyboard, and only a udev rule can hand it to the user so the watcher may
+# read it. Said rather than done, so this stays a rootless install.
+if [ ! -f /etc/udev/rules.d/70-pc-gamepak-barcode.rules ]; then
+    echo "For a USB barcode scanner, let the watcher read it (once, as root):"
+    echo "  sudo install -m 644 $SCRIPT_DIR/linux/70-pc-gamepak-barcode.rules /etc/udev/rules.d/"
+    echo "  sudo udevadm control --reload-rules && sudo udevadm trigger"
+    echo
+fi
+
 echo "Plug a cartridge in to test it. To stop it watching:"
 echo "  systemctl --user disable --now pc-gamepak-watcher.service"

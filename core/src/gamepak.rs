@@ -208,9 +208,17 @@ struct Entry {
     path: Option<PathBuf>,
     #[serde(default)]
     host: Option<Host>,
+    /// More IDs that select this GamePak: cards and barcodes learned onto it,
+    /// so several of them can start the same game.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    triggers: Vec<String>,
 }
 
 impl Entry {
+    fn answers_to(&self, id: &str) -> bool {
+        self.id == id || self.triggers.iter().any(|trigger| trigger == id)
+    }
+
     fn action(&self) -> Result<Action, String> {
         match (&self.action, &self.path) {
             (Some(action), None) => Ok(action.clone()),
@@ -264,9 +272,10 @@ fn entries(registry: &Path) -> Result<Vec<Entry>, String> {
         .map_err(|error| format!("could not parse GamePak registry: {error}"))?;
     let mut ids = HashSet::new();
     for entry in &parsed.gamepaks {
-        let id = GamePakId::parse(&entry.id)?;
-        if !ids.insert(id) {
-            return Err(format!("duplicate GamePak ID in registry: {}", entry.id));
+        for id in std::iter::once(&entry.id).chain(&entry.triggers) {
+            if !ids.insert(GamePakId::parse(id)?) {
+                return Err(format!("duplicate GamePak ID in registry: {id}"));
+            }
         }
     }
     Ok(parsed.gamepaks)
@@ -358,6 +367,12 @@ pub fn register_action_from(
     } else {
         Vec::new()
     };
+    if gamepaks
+        .iter()
+        .any(|entry| entry.id != id.as_str() && entry.answers_to(id.as_str()))
+    {
+        return Err(format!("{} already starts another GamePak", id.as_str()));
+    }
     if let Some(existing) = gamepaks.iter_mut().find(|entry| entry.id == id.as_str()) {
         let same = match (existing.action()?, &action) {
             (Action::Cartridge { path: old }, Action::Cartridge { path: new }) => {
@@ -383,9 +398,40 @@ pub fn register_action_from(
             action,
             path,
             host,
+            triggers: Vec::new(),
         });
     }
+    save(registry, gamepaks)
+}
 
+/// Make `trigger` — a learned card or barcode — start the GamePak `id` too.
+/// Adding one it already has is fine; one that starts another is refused.
+pub fn add_trigger_from(registry: &Path, id: &str, trigger: &str) -> Result<(), String> {
+    let trigger = GamePakId::parse(trigger)?;
+    let mut gamepaks = entries(registry)?;
+    if let Some(owner) = gamepaks
+        .iter()
+        .find(|entry| entry.answers_to(trigger.as_str()))
+    {
+        return if owner.id == id {
+            Ok(())
+        } else {
+            Err(format!(
+                "{} already starts {}",
+                trigger.as_str(),
+                owner.title.as_deref().unwrap_or(&owner.id)
+            ))
+        };
+    }
+    let entry = gamepaks
+        .iter_mut()
+        .find(|entry| entry.id == id)
+        .ok_or_else(|| format!("GamePak {id} is not registered on this host"))?;
+    entry.triggers.push(trigger.as_str().to_owned());
+    save(registry, gamepaks)
+}
+
+fn save(registry: &Path, gamepaks: Vec<Entry>) -> Result<(), String> {
     if let Some(parent) = registry.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
@@ -399,47 +445,61 @@ pub fn register_action_from(
     })
 }
 
-/// One registered GamePak, for a list to choose from.
+/// One GamePak as the wizard lists it: what it starts and what starts it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listed {
     pub id: String,
     pub title: Option<String>,
-    /// The action type: `cartridge`, `remote`, `steam`...
-    pub kind: String,
+    pub action: Action,
+    pub triggers: Vec<String>,
 }
 
-/// Everything in the registry, in its order. Nothing is checked beyond the
-/// IDs: a list should show an entry whose cartridge is unplugged.
+/// Every registered GamePak, in registry order. No registry yet is an empty
+/// list, not an error.
 pub fn list_from(registry: &Path) -> Result<Vec<Listed>, String> {
     if !registry.exists() {
         return Ok(Vec::new());
     }
-    Ok(entries(registry)?
+    entries(registry)?
         .into_iter()
         .map(|entry| {
-            let kind = match &entry.action {
-                Some(action) => serde_json::to_value(action)
-                    .ok()
-                    .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(str::to_owned))
-                    .unwrap_or_default(),
-                None => "cartridge".to_string(),
-            };
-            Listed {
+            Ok(Listed {
+                action: entry.action()?,
                 id: entry.id,
                 title: entry.title,
-                kind,
-            }
+                triggers: entry.triggers,
+            })
         })
-        .collect())
+        .collect()
 }
 
-/// Resolve an ID to its registered GamePak. Cartridge paths are verified.
+/// Forget the GamePak `id` and every trigger that started it.
+pub fn remove_from(registry: &Path, id: &str) -> Result<(), String> {
+    let mut gamepaks = entries(registry)?;
+    let before = gamepaks.len();
+    gamepaks.retain(|entry| entry.id != id);
+    if gamepaks.len() == before {
+        return Err(format!("GamePak {id} is not registered on this host"));
+    }
+    save(registry, gamepaks)
+}
+
+/// Stop `trigger` starting the GamePak `id`.
+pub fn remove_trigger_from(registry: &Path, id: &str, trigger: &str) -> Result<(), String> {
+    let mut gamepaks = entries(registry)?;
+    let entry = gamepaks
+        .iter_mut()
+        .find(|entry| entry.id == id)
+        .ok_or_else(|| format!("GamePak {id} is not registered on this host"))?;
+    entry.triggers.retain(|own| own != trigger);
+    save(registry, gamepaks)
+}
+
+/// Resolve an ID — the GamePak's own or one of its triggers — to the GamePak.
+/// The result carries the GamePak's own ID. Cartridge paths are verified.
 pub fn lookup_from(registry: &Path, id: &GamePakId) -> Result<GamePak, String> {
-    let entry = entries(registry)?
-        .into_iter()
-        .find(|entry| entry.id == id.as_str())
-        .ok_or_else(|| format!("GamePak {} is not registered on this host", id.as_str()))?;
+    let entry = find(registry, id)?;
     let action = match entry.action()? {
         Action::Cartridge { path } => Action::Cartridge {
             path: cartridge_path(registry, &path)?,
@@ -447,10 +507,17 @@ pub fn lookup_from(registry: &Path, id: &GamePakId) -> Result<GamePak, String> {
         other => other,
     };
     Ok(GamePak {
-        id: id.clone(),
+        id: GamePakId::parse(&entry.id)?,
         title: entry.title,
         action,
     })
+}
+
+fn find(registry: &Path, id: &GamePakId) -> Result<Entry, String> {
+    entries(registry)?
+        .into_iter()
+        .find(|entry| entry.answers_to(id.as_str()))
+        .ok_or_else(|| format!("GamePak {} is not registered on this host", id.as_str()))
 }
 
 /// The result of a trigger.
@@ -472,10 +539,11 @@ pub enum Outcome {
 pub fn trigger_from(registry: &Path, id: &str) -> Result<Outcome, String> {
     let id = GamePakId::parse(id.trim())?;
     let pak = lookup_from(registry, &id)?;
-    prepare_host(registry, &id)?;
+    prepare_host(registry, &pak.id)?;
     match pak.action {
         Action::Cartridge { path } => Ok(Outcome::OpenCartridge(path)),
-        Action::Remote { .. } => Ok(Outcome::OpenRemote(id)),
+        // The GamePak's own ID, not the card's: it is the one the host knows.
+        Action::Remote { .. } => Ok(Outcome::OpenRemote(pak.id)),
         action => action.execute().map(|()| Outcome::Executed),
     }
 }
@@ -495,10 +563,7 @@ pub fn new_id() -> String {
 
 /// Wake the GamePak's host, if it has one, and wait until it answers.
 pub fn prepare_host(registry: &Path, id: &GamePakId) -> Result<(), String> {
-    let entry = entries(registry)?
-        .into_iter()
-        .find(|entry| entry.id == id.as_str())
-        .ok_or_else(|| format!("GamePak {} is not registered on this host", id.as_str()))?;
+    let entry = find(registry, id)?;
     let Some(host) = entry.host else {
         return Ok(());
     };
@@ -578,6 +643,62 @@ mod tests {
         assert!(chunks
             .iter()
             .all(|part| *part == [0x00, 0x11, 0x22, 0x33, 0x44, 0x55]));
+    }
+
+    #[test]
+    fn lists_removes_and_tolerates_no_registry() {
+        let scratch = crate::testutil::Scratch::new("gamepak-list");
+        let registry = scratch.path().join("gamepaks.json");
+        assert_eq!(list_from(&registry).unwrap(), vec![]);
+        std::fs::write(
+            &registry,
+            r#"{"gamepaks":[{"id":"gp_a","title":"A","action":{"type":"open","target":"x"},
+                             "triggers":["gp_nfc-01","gp_2"]},
+                            {"id":"gp_b","path":"games/b"}]}"#,
+        )
+        .unwrap();
+        let listed = list_from(&registry).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].title.as_deref(), Some("A"));
+        assert_eq!(listed[0].triggers, ["gp_nfc-01", "gp_2"]);
+        assert_eq!(
+            listed[1].action,
+            Action::Cartridge {
+                path: "games/b".into()
+            }
+        );
+
+        remove_trigger_from(&registry, "gp_a", "gp_nfc-01").unwrap();
+        assert_eq!(list_from(&registry).unwrap()[0].triggers, ["gp_2"]);
+        remove_from(&registry, "gp_b").unwrap();
+        assert_eq!(list_from(&registry).unwrap().len(), 1);
+        assert!(remove_from(&registry, "gp_b").is_err());
+    }
+
+    #[test]
+    fn learned_triggers_start_their_gamepak_and_only_theirs() {
+        let scratch = crate::testutil::Scratch::new("gamepak-triggers");
+        let registry = scratch.path().join("gamepaks.json");
+        let open = |target: &str| Action::Open {
+            target: target.into(),
+        };
+        register_action_from(&registry, "gp_a", Some("A"), open("a"), None, None).unwrap();
+        register_action_from(&registry, "gp_b", None, open("b"), None, None).unwrap();
+        add_trigger_from(&registry, "gp_a", "gp_nfc-e9105207").unwrap();
+        add_trigger_from(&registry, "gp_a", "gp_nfc-4726aa64").unwrap();
+        add_trigger_from(&registry, "gp_a", "gp_nfc-4726aa64").unwrap(); // again: fine
+
+        let card = GamePakId::parse("gp_nfc-4726aa64").unwrap();
+        let pak = lookup_from(&registry, &card).unwrap();
+        assert_eq!(pak.id.as_str(), "gp_a");
+        assert_eq!(pak.action, open("a"));
+
+        assert!(add_trigger_from(&registry, "gp_b", "gp_nfc-e9105207").is_err());
+        assert!(add_trigger_from(&registry, "gp_b", "gp_a").is_err());
+        assert!(
+            register_action_from(&registry, "gp_nfc-e9105207", None, open("c"), None, None)
+                .is_err()
+        );
     }
 
     #[test]

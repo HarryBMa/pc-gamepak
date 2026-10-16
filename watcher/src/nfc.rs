@@ -6,9 +6,16 @@ use std::time::Duration;
 
 use pcsc::{Card, Context, Protocols, Scope, ShareMode};
 
-const MAX_NDEF_SIZE: usize = 4096;
+pub(crate) const MAX_NDEF_SIZE: usize = 4096;
 
 pub fn start() {
+    // A PN532 on a serial adapter is no PC/SC reader: drive it through libnfc
+    // when libnfc.conf names one. Every other reader goes through PC/SC.
+    #[cfg(target_os = "linux")]
+    if let Some(device) = crate::libnfc::configured_device() {
+        crate::libnfc::start(device);
+        return;
+    }
     if let Err(error) = thread::Builder::new()
         .name("pc-gamepak-nfc".into())
         .spawn(monitor)
@@ -85,7 +92,7 @@ fn read_type2(card: &Card) -> Result<Vec<u8>, String> {
     Err("no NDEF TLV found on card".into())
 }
 
-fn find_type2_ndef(memory: &[u8]) -> Result<Option<Vec<u8>>, String> {
+pub(crate) fn find_type2_ndef(memory: &[u8]) -> Result<Option<Vec<u8>>, String> {
     let mut cursor = 0usize;
     while cursor < memory.len() {
         let kind = memory[cursor];

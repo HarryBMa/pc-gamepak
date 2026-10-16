@@ -1330,11 +1330,11 @@ stream` then finds it running and resumes it.
 **On the couch PC:**
 
 1. Pair Moonlight with the gaming PC, as usual.
-2. In the wizard's **GamePak actions** tab choose **Game on another PC, through
-   Moonlight**. The host and its apps are offered from Moonlight's own list;
-   pick the host and the game's app, and **Create**.
-3. In **NFC cards**, choose it under *Registered on this PC*, pick the reader,
-   and write a blank tag.
+2. In the wizard's **GamePak actions** tab press **New GamePak** and tap the
+   card it should answer to.
+3. Choose **Game on another PC**. The hosts Moonlight is paired with are
+   offered; pick one, press **Find games on this host**, pick the game, and
+   **Save GamePak**.
 
 A gaming PC that is asleep is woken with the MAC address Moonlight stored when
 it paired, and the couch waits up to 90 seconds for it. The game is started at

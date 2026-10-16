@@ -9,6 +9,60 @@ use std::process::{Child, Command};
 
 use crate::log;
 
+/// A command for the launcher, in the desktop session as it is now.
+///
+/// The watcher can start before anyone logs in — at boot when the user
+/// lingers, or before the desktop has published its variables — and a child
+/// inherits the watcher's environment from then: no `WAYLAND_DISPLAY`, so a
+/// Steam game or a window opened for a trigger has no screen to go to. The
+/// systemd user manager holds the session's current ones; take the display
+/// variables from there.
+///
+/// Those can be stale too — a session that died, or one that failed to start
+/// after publishing them — and a launcher pointed at a socket that is gone
+/// fails to open GTK and exits. So a Wayland socket or an X authority file
+/// that does not exist is not passed on, and a live Wayland socket in the
+/// runtime directory is used instead.
+fn launcher_command(launcher: &Path) -> Command {
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut command = Command::new(launcher);
+    #[cfg(target_os = "linux")]
+    if let Ok(output) = Command::new("systemctl")
+        .args(["--user", "show-environment"])
+        .output()
+    {
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        let socket_live = |name: &str| runtime.as_ref().is_some_and(|dir| dir.join(name).exists());
+        let mut wayland = None;
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            match line.split_once('=') {
+                Some(("WAYLAND_DISPLAY", value)) => wayland = Some(value.to_owned()),
+                Some(("XAUTHORITY", value)) if !Path::new(value).exists() => {}
+                Some((key @ ("DISPLAY" | "XAUTHORITY" | "XDG_SESSION_TYPE"), value)) => {
+                    command.env(key, value);
+                }
+                _ => {}
+            }
+        }
+        let wayland = wayland.filter(|name| socket_live(name)).or_else(|| {
+            // ponytail: first wayland-N socket wins; with two live desktops for
+            // one user, the manager's own value (checked first) decides.
+            std::fs::read_dir(runtime.as_ref()?)
+                .ok()?
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .find(|name| {
+                    name.strip_prefix("wayland-")
+                        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+                })
+        });
+        if let Some(name) = wayland {
+            command.env("WAYLAND_DISPLAY", name);
+        }
+    }
+    command
+}
+
 /// Why a launcher is being opened.
 ///
 /// It changes what the launcher does, not what this does. `on_cartridge_insert`
@@ -34,7 +88,7 @@ pub fn open(path: &Path, why: Why) -> Option<Child> {
         return None;
     };
 
-    let mut command = Command::new(&launcher);
+    let mut command = launcher_command(&launcher);
     command
         .arg("--drive")
         .arg(path)
@@ -73,7 +127,7 @@ pub fn open_nfc(message: &[u8]) -> Option<Child> {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    match Command::new(&launcher)
+    match launcher_command(&launcher)
         .args(["--nfc-ndef", &encoded])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -86,6 +140,32 @@ pub fn open_nfc(message: &[u8]) -> Option<Child> {
         }
         Err(error) => {
             log::line(&format!("could not start NFC launcher: {error}"));
+            None
+        }
+    }
+}
+
+/// Submit a GamePak ID from a trigger, exactly as `pc-gamepak --trigger` does.
+/// The launcher validates it and refuses anything unregistered.
+#[cfg(target_os = "linux")]
+pub fn open_trigger(id: &str) -> Option<Child> {
+    let Some(launcher) = installed_at() else {
+        log::line("pc-gamepak is not installed anywhere I can find it");
+        return None;
+    };
+    match launcher_command(&launcher)
+        .args(["--trigger", id])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => {
+            log::line(&format!("trigger {id} started, pid {}", child.id()));
+            Some(child)
+        }
+        Err(error) => {
+            log::line(&format!("could not start the launcher for {id}: {error}"));
             None
         }
     }
