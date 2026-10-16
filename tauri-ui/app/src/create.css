@@ -831,6 +831,12 @@
   overscroll-behavior: contain;
 }
 
+/* A field after a hint, shown or hidden, is not `.field + .field`, and would
+   sit flush against the hint above it. */
+#custom-fields > .field:not(:first-child) {
+  margin-top: 12px;
+}
+
 /* Ranked: what a person is most likely to have meant, first. */
 #exe-choices {
   list-style: none;

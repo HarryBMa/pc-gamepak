@@ -456,13 +456,19 @@ cover, which says which copy is newer, when it was saved and how much it holds,
 beside the one button that does what it needs: copy to this PC, or to the card.
 Anything a copy replaces is kept, as with every other save here.
 
-<img width="420" alt="The memory card view: each save as a game case on a shelf, the chosen one turned round on the stage below with when it was saved and how much it holds" src="memcard.png" />
+<img width="420" alt="The memory card view: each save as a game case on a shelf, a lamp beside the ones that need something, and the chosen one turned round on the stage below with when it was saved, how long it has been played and how much it holds" src="memcard.png" />
+
+A lamp under a case means it needs you. **Newer on the card** offers *Copy to
+PC*, **Newer on this PC** offers *Copy to card*; **Changed on both** lights neither and
+asks which to keep, because only you know which play-through you meant.
+
+<img width="300" alt="God of War chosen on the memory card: its back cover says Newer on the card, saved yesterday, 13 hours played, and one Copy to PC button sits beside it" src="memcard-sync.png" /> <img width="300" alt="Tunic chosen on the memory card: its back cover says Changed on both, and two equal buttons offer Keep the card's and Keep this PC's" src="memcard-conflict.png" />
 
 A cartridge can be a **combo drive** too — a switch in the wizard — and its own
 games' saves go on its card, one button (or `M`) away from Play. The wizard's
 **Memory card** page writes one: add the games, and it finds where each saves.
 
-<img width="760" alt="The wizard's Memory card page: the drive, the card's name, and each game with the folder its saves are carried from" src="wizard-card.png" />
+<img width="760" alt="The wizard's Memory card page: the drive, the card's name, and four games with the save folder Ludusavi found for each, one of them asking for a folder because Ludusavi knows it only on another system" src="wizard-card.png" />
 
 ### Carrying the compiled shaders
 
@@ -925,6 +931,8 @@ Pegasus or ES-DE and it lists the game with its art. Pegasus still needs a
 where. Both files are rewritten with the cartridge and removed if it stops being
 an emulated one, and a `gamelist.xml` you made yourself is never touched.
 
+<img width="760" alt="The wizard with Chrono Trigger chosen as a ROM: ROM, Super Nintendo, 4.2 MB, the drive CINDER, the platform set to Super Nintendo, and a preview of the launcher it will open" src="wizard-emulated.png" />
+
 <a id="artwork-from-steamgriddb"></a>
 
 ### Artwork from SteamGridDB
@@ -1238,8 +1246,12 @@ endpoint, a QR scanner, a Decky or Playnite plugin. IDs are
 
 **Registry.** `~/.local/state/pc-gamepak/gamepaks.json` on Linux,
 `%LOCALAPPDATA%\PC-GamePak\gamepaks.json` on Windows. The wizard's **GamePak
-actions** tab writes it: name, action, settings, and it shows the ID it
-generated. It can also be edited by hand:
+actions** tab writes it: it lists every GamePak with the cards and barcodes that
+start it, and **New GamePak** takes a tap, what to start and a name.
+
+<img width="760" alt="The wizard's GamePak actions tab: Stardew Valley started by its own ID, an NFC card and a barcode, and Movie night with no card yet, each with Add card" src="wizard-gamepaks.png" />
+
+It can also be edited by hand:
 
 ```json
 {
@@ -1335,6 +1347,8 @@ stream` then finds it running and resumes it.
 3. Choose **Game on another PC**. The hosts Moonlight is paired with are
    offered; pick one, press **Find games on this host**, pick the game, and
    **Save GamePak**.
+
+<img width="760" alt="New GamePak after a tap: NFC card e9105207 heard, Game on another PC chosen, GAMING-PC as the host, and Hades picked from the games it lists" src="wizard-gamepak-new.png" />
 
 A gaming PC that is asleep is woken with the MAC address Moonlight stored when
 it paired, and the couch waits up to 90 seconds for it. The game is started at

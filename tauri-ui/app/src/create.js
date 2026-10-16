@@ -4680,10 +4680,15 @@ async function demoInvoke(command, args) {
       return { title: "Harry's Memory Card", cardOnly: true, blocks: [] };
     case "lookup_save_location":
       await new Promise((r) => setTimeout(r, 400));
-      return /hollow/i.test(args.title)
-        ? { windows: "{home}/AppData/LocalLow/Team Cherry/Hollow Knight",
-            linux: "{appdata}/unity3d/Team Cherry/Hollow Knight" }
-        : null;
+      // A few that Ludusavi's list knows, in the placeholders
+      // core/src/ludusavi.rs turns its paths into; anything else it does not.
+      return {
+        "Hades": { windows: "{documents}/Saved Games/Hades", linux: null },
+        "Hollow Knight": { windows: "{home}/AppData/LocalLow/Team Cherry/Hollow Knight",
+                           linux: "{appdata}/unity3d/Team Cherry/Hollow Knight" },
+        "Tunic": { windows: "{home}/AppData/LocalLow/Andrew Shouldice/Secret Legend/SAVES",
+                   linux: "{appdata}/unity3d/Andrew Shouldice/Secret Legend/SAVES" },
+      }[args.title] ?? null;
     case "pick_save_folder":
       return { path: "/home/harry/.local/share/Tunic", template: "{localappdata}/Tunic" };
     case "create_memory_card":
