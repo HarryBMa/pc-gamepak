@@ -456,7 +456,7 @@ cover, which says which copy is newer, when it was saved and how much it holds,
 beside the one button that does what it needs: copy to this PC, or to the card.
 Anything a copy replaces is kept, as with every other save here.
 
-<img width="420" alt="The memory card view: each save as a game case on a shelf, a lamp beside the ones that need something, and the chosen one turned round on the stage below with when it was saved, how long it has been played and how much it holds" src="memcard.png" />
+<img width="420" alt="The memory card, animated: each save is a game case on a shelf. God of War's case turns round to say Newer on the card; Copy to PC brings it home and it reads Same on this PC and the card. Then the shelf slides to Tunic, changed on both, which offers Keep the card's and Keep this PC's" src="memcard-demo.gif" />
 
 A lamp under a case means it needs you. **Newer on the card** offers *Copy to
 PC*, **Newer on this PC** offers *Copy to card*; **Changed on both** lights neither and
@@ -1348,7 +1348,7 @@ stream` then finds it running and resumes it.
    offered; pick one, press **Find games on this host**, pick the game, and
    **Save GamePak**.
 
-<img width="760" alt="New GamePak after a tap: NFC card e9105207 heard, Game on another PC chosen, GAMING-PC as the host, and Hades picked from the games it lists" src="wizard-gamepak-new.png" />
+<img width="760" alt="Making a GamePak, animated: New GamePak waits for a card, NFC card e9105207 is tapped, Game on another PC is chosen, GAMING-PC typed as the host, Find games on this host lists its games, Hades is picked and saved, and the list shows Hades, a game on GAMING-PC started by that card" src="gamepak-demo.gif" />
 
 A gaming PC that is asleep is woken with the MAC address Moonlight stored when
 it paired, and the couch waits up to 90 seconds for it. The game is started at

@@ -4590,6 +4590,26 @@ async function start() {
        npx http-server tauri-ui  →  http://localhost:8080/app/create.html
    ========================================================================== */
 
+/** The browser preview's GamePak registry, kept as the real one is. */
+let demoGamePaks = [
+  { id: "gp_stardew", title: "Stardew Valley", action: { type: "steam", appId: 413150 },
+    triggers: ["gp_nfc-4726aa64", "gp_3501170818305"] },
+  { id: "gp_0123456789abcdef", title: "Movie night", triggers: [],
+    action: { type: "local", path: "/media/films/The Matrix.mkv" } },
+];
+
+/** An action as add_gamepak's settings a and b describe it, as the registry stores it. */
+function demoAction(kind, a, b) {
+  switch (kind) {
+    case "steam": return { type: "steam", appId: Number(a) };
+    case "moonlight": return { type: "moonlight", target: a, app: b };
+    case "remote": return { type: "remote", moonlight: a, app: b };
+    case "local": return { type: "local", path: a };
+    case "exec": return { type: "exec", program: a };
+    default: return { type: kind, target: a };
+  }
+}
+
 /** The browser preview's shelf. One cartridge plugged in, one on the shelf. */
 let demoShelf = [
   { id: "1758900000", title: "God of War Collection",
@@ -4751,15 +4771,16 @@ async function demoInvoke(command, args) {
           totalBytes: 128_035_676_160, freeBytes: 18_253_611_008, hasCartridge: true,
           cartridgeTitle: "God of War Collection" },
       ];
-    case "add_gamepak":
-      return "gp_0123456789abcdef";
+    case "add_gamepak": {
+      // As the launcher does: the ID given, or a new one.
+      const id = args.id || `gp_${Math.random().toString(16).slice(2, 18).padEnd(16, "0")}`;
+      demoGamePaks = demoGamePaks.filter((pak) => pak.id !== id);
+      demoGamePaks.push({ id, title: args.title.trim(), triggers: [],
+                          action: demoAction(args.kind, args.a.trim(), args.b?.trim()) });
+      return id;
+    }
     case "registered_gamepaks":
-      return [
-        { id: "gp_stardew", title: "Stardew Valley", action: { type: "steam", appId: 413150 },
-          triggers: ["gp_nfc-4726aa64", "gp_3501170818305"] },
-        { id: "gp_0123456789abcdef", title: "Movie night", triggers: [],
-          action: { type: "local", path: "/media/films/The Matrix.mkv" } },
-      ];
+      return structuredClone(demoGamePaks);
     case "last_trigger":
       // The preview "taps" a card two seconds after it starts listening.
       demoTapAt ??= Date.now() + 2000;
@@ -4769,9 +4790,16 @@ async function demoInvoke(command, args) {
     case "moonlight_apps":
       return ["Desktop", "Steam Big Picture", "Stardew Valley", "Hades", "Cities: Skylines"];
     case "add_gamepak_trigger":
-    case "remove_gamepak":
-    case "remove_gamepak_trigger":
+      demoGamePaks.find((pak) => pak.id === args.id)?.triggers.push(args.trigger);
       return undefined;
+    case "remove_gamepak":
+      demoGamePaks = demoGamePaks.filter((pak) => pak.id !== args.id);
+      return undefined;
+    case "remove_gamepak_trigger": {
+      const pak = demoGamePaks.find((p) => p.id === args.id);
+      if (pak) pak.triggers = pak.triggers.filter((t) => t !== args.trigger);
+      return undefined;
+    }
     case "executable_choices":
       return [
         { relative: "TUNIC.exe", name: "TUNIC.exe", score: 120 },
