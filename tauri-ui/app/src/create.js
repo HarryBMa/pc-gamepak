@@ -24,10 +24,11 @@
  *   suggest_collection_name({ titles }) -> string
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
- *   add_gamepak(title, kind, a, b, c, d, id) -> "gp_…" (generic action wizard)
+ *   add_gamepak(title, kind, a, b, id) -> "gp_…" (generic action wizard)
  *   registered_gamepaks()              -> [{ id, title, action, triggers }]
  *   remove_gamepak(id)                 -> ()
  *   moonlight_apps(host)               -> [app name] (`moonlight list <host>`)
+ *   moonlight_hosts()                  -> [{ name, apps }] (hosts paired in Moonlight)
  *   remove_gamepak_trigger(id, trigger) -> ()
  *   last_trigger()                     -> [id, ms] | null (what Learn waits on)
  *   add_gamepak_trigger(id, trigger)   -> ()
@@ -164,16 +165,11 @@ const el = {
   gpB: $("gp-b"),
   gpBField: $("gp-b-field"),
   gpBLabel: $("gp-b-label"),
+  gpAList: $("gp-a-list"),
   gpMl: $("gp-ml"),
   gpMlFind: $("gp-ml-find"),
   gpMlSearch: $("gp-ml-search"),
   gpMlResults: $("gp-ml-results"),
-  gpC: $("gp-c"),
-  gpCField: $("gp-c-field"),
-  gpCLabel: $("gp-c-label"),
-  gpD: $("gp-d"),
-  gpDField: $("gp-d-field"),
-  gpDLabel: $("gp-d-label"),
   gpTitle: $("gp-title"),
   gpFormStatus: $("gp-form-status"),
   gpCancel: $("gp-cancel"),
@@ -3463,20 +3459,15 @@ async function openMemcardPage() {
 // GamePak actions — a card or barcode, and what it starts
 // ===========================================================================
 
-// Per action type: the labels for settings a–d, null where it has none.
+// Per action type: the labels for settings a and b, null where it has none.
 // "game" has no fields: it is picked from the installed games instead.
 const ACTION_FIELDS = {
-  moonlight: ["Moonlight host (name or address)", "App name", null, null],
-  remote: [
-    "Host (its address, as Moonlight knows it)",
-    "Host key (64 characters, from the host)",
-    "GamePak ID (as registered on the host)",
-    "App to stream (optional, Desktop)",
-  ],
-  local: ["File path", null, null, null],
-  exec: ["Program", "Arguments (optional, space-separated)", null, null],
-  open: ["URL", null, null, null],
-  service: ["Service name", null, null, null],
+  moonlight: ["Moonlight host (name or address)", "App name"],
+  remote: ["Gaming PC (as Moonlight names it)", "Game (as the gaming PC lists it)"],
+  local: ["File path", null],
+  exec: ["Program", "Arguments (optional, space-separated)"],
+  open: ["URL", null],
+  service: ["Service name", null],
 };
 
 let gamepaks = [];
@@ -3708,7 +3699,7 @@ function openGamePakForm() {
   mlApps = [];
   el.gpMlSearch.hidden = true;
   el.gpMlResults.replaceChildren();
-  for (const input of [el.gpA, el.gpB, el.gpC, el.gpD]) input.value = "";
+  for (const input of [el.gpA, el.gpB]) input.value = "";
   chooseKind(null);
   setListen("waiting", "Waiting for a card or barcode…");
   el.gpHome.hidden = true;
@@ -3748,7 +3739,8 @@ function chooseKind(kind) {
     button.setAttribute("aria-checked", String(button.dataset.kind === kind));
   }
   el.gpGame.hidden = kind !== "game";
-  el.gpMl.hidden = kind !== "moonlight";
+  el.gpMl.hidden = kind !== "moonlight" && kind !== "remote";
+  if (kind === "moonlight" || kind === "remote") suggestMoonlightHosts();
   el.gpFields.hidden = !kind || kind === "game";
   if (kind === "game") renderGameResults();
   if (kind && kind !== "game") {
@@ -3756,8 +3748,6 @@ function chooseKind(kind) {
     for (const [label, field, text] of [
       [el.gpALabel, null, labels[0]],
       [el.gpBLabel, el.gpBField, labels[1]],
-      [el.gpCLabel, el.gpCField, labels[2]],
-      [el.gpDLabel, el.gpDField, labels[3]],
     ]) {
       label.textContent = text ?? "";
       if (field) field.hidden = !text;
@@ -3800,6 +3790,14 @@ function renderGameResults() {
     none.textContent = library.length ? "No installed game matches." : "No installed games found.";
     el.gpGameResults.append(none);
   }
+}
+
+/** Offer the hosts Moonlight is paired with for field A. Free text still works. */
+async function suggestMoonlightHosts() {
+  const hosts = await invoke("moonlight_hosts").catch(() => []);
+  el.gpAList.replaceChildren(
+    ...hosts.map((host) => Object.assign(document.createElement("option"), { value: host.name })),
+  );
 }
 
 /** Ask Moonlight what the host in field A offers, and list it to pick from. */
@@ -3858,14 +3856,8 @@ function chosenAction() {
       : { kind: "exec", a: gpGame.executable };
   }
   if (!gpKind || !el.gpA.value.trim()) return null;
-  const [, b, c, d] = ACTION_FIELDS[gpKind];
-  return {
-    kind: gpKind,
-    a: el.gpA.value,
-    b: b ? el.gpB.value : null,
-    c: c ? el.gpC.value : null,
-    d: d ? el.gpD.value : null,
-  };
+  const [, b] = ACTION_FIELDS[gpKind];
+  return { kind: gpKind, a: el.gpA.value, b: b ? el.gpB.value : null };
 }
 
 function updateGamePakSave() {
@@ -3884,11 +3876,8 @@ async function saveGamePak() {
       kind: action.kind,
       a: action.a,
       b: action.b ?? null,
-      c: action.c ?? null,
-      d: action.d ?? null,
       id: trigger,
     });
-    // A game on another PC keeps the host's ID; the card is added to it.
     if (trigger && trigger !== id) {
       await invoke("add_gamepak_trigger", { id, trigger });
     }
@@ -4237,7 +4226,7 @@ el.gpKinds.addEventListener("click", (event) => {
 el.gpGameSearch.addEventListener("input", renderGameResults);
 el.gpMlFind.addEventListener("click", findMoonlightApps);
 el.gpMlSearch.addEventListener("input", renderMoonlightApps);
-for (const input of [el.gpA, el.gpB, el.gpC, el.gpD]) {
+for (const input of [el.gpA, el.gpB]) {
   input.addEventListener("input", updateGamePakSave);
 }
 el.gpTitle.addEventListener("input", () => {
@@ -4601,6 +4590,26 @@ async function start() {
        npx http-server tauri-ui  →  http://localhost:8080/app/create.html
    ========================================================================== */
 
+/** The browser preview's GamePak registry, kept as the real one is. */
+let demoGamePaks = [
+  { id: "gp_stardew", title: "Stardew Valley", action: { type: "steam", appId: 413150 },
+    triggers: ["gp_nfc-4726aa64", "gp_3501170818305"] },
+  { id: "gp_0123456789abcdef", title: "Movie night", triggers: [],
+    action: { type: "local", path: "/media/films/The Matrix.mkv" } },
+];
+
+/** An action as add_gamepak's settings a and b describe it, as the registry stores it. */
+function demoAction(kind, a, b) {
+  switch (kind) {
+    case "steam": return { type: "steam", appId: Number(a) };
+    case "moonlight": return { type: "moonlight", target: a, app: b };
+    case "remote": return { type: "remote", moonlight: a, app: b };
+    case "local": return { type: "local", path: a };
+    case "exec": return { type: "exec", program: a };
+    default: return { type: kind, target: a };
+  }
+}
+
 /** The browser preview's shelf. One cartridge plugged in, one on the shelf. */
 let demoShelf = [
   { id: "1758900000", title: "God of War Collection",
@@ -4691,10 +4700,15 @@ async function demoInvoke(command, args) {
       return { title: "Harry's Memory Card", cardOnly: true, blocks: [] };
     case "lookup_save_location":
       await new Promise((r) => setTimeout(r, 400));
-      return /hollow/i.test(args.title)
-        ? { windows: "{home}/AppData/LocalLow/Team Cherry/Hollow Knight",
-            linux: "{appdata}/unity3d/Team Cherry/Hollow Knight" }
-        : null;
+      // A few that Ludusavi's list knows, in the placeholders
+      // core/src/ludusavi.rs turns its paths into; anything else it does not.
+      return {
+        "Hades": { windows: "{documents}/Saved Games/Hades", linux: null },
+        "Hollow Knight": { windows: "{home}/AppData/LocalLow/Team Cherry/Hollow Knight",
+                           linux: "{appdata}/unity3d/Team Cherry/Hollow Knight" },
+        "Tunic": { windows: "{home}/AppData/LocalLow/Andrew Shouldice/Secret Legend/SAVES",
+                   linux: "{appdata}/unity3d/Andrew Shouldice/Secret Legend/SAVES" },
+      }[args.title] ?? null;
     case "pick_save_folder":
       return { path: "/home/harry/.local/share/Tunic", template: "{localappdata}/Tunic" };
     case "create_memory_card":
@@ -4757,25 +4771,35 @@ async function demoInvoke(command, args) {
           totalBytes: 128_035_676_160, freeBytes: 18_253_611_008, hasCartridge: true,
           cartridgeTitle: "God of War Collection" },
       ];
-    case "add_gamepak":
-      return args?.kind === "remote" && args.c ? args.c : "gp_0123456789abcdef";
+    case "add_gamepak": {
+      // As the launcher does: the ID given, or a new one.
+      const id = args.id || `gp_${Math.random().toString(16).slice(2, 18).padEnd(16, "0")}`;
+      demoGamePaks = demoGamePaks.filter((pak) => pak.id !== id);
+      demoGamePaks.push({ id, title: args.title.trim(), triggers: [],
+                          action: demoAction(args.kind, args.a.trim(), args.b?.trim()) });
+      return id;
+    }
     case "registered_gamepaks":
-      return [
-        { id: "gp_stardew", title: "Stardew Valley", action: { type: "steam", appId: 413150 },
-          triggers: ["gp_nfc-4726aa64", "gp_3501170818305"] },
-        { id: "gp_0123456789abcdef", title: "Movie night", triggers: [],
-          action: { type: "local", path: "/media/films/The Matrix.mkv" } },
-      ];
+      return structuredClone(demoGamePaks);
     case "last_trigger":
       // The preview "taps" a card two seconds after it starts listening.
       demoTapAt ??= Date.now() + 2000;
       return Date.now() < demoTapAt ? ["gp_3501170818305", 1] : ["gp_nfc-e9105207", demoTapAt];
+    case "moonlight_hosts":
+      return [{ name: "GAMING-PC", apps: ["Desktop", "Hades"] }];
     case "moonlight_apps":
       return ["Desktop", "Steam Big Picture", "Stardew Valley", "Hades", "Cities: Skylines"];
     case "add_gamepak_trigger":
-    case "remove_gamepak":
-    case "remove_gamepak_trigger":
+      demoGamePaks.find((pak) => pak.id === args.id)?.triggers.push(args.trigger);
       return undefined;
+    case "remove_gamepak":
+      demoGamePaks = demoGamePaks.filter((pak) => pak.id !== args.id);
+      return undefined;
+    case "remove_gamepak_trigger": {
+      const pak = demoGamePaks.find((p) => p.id === args.id);
+      if (pak) pak.triggers = pak.triggers.filter((t) => t !== args.trigger);
+      return undefined;
+    }
     case "executable_choices":
       return [
         { relative: "TUNIC.exe", name: "TUNIC.exe", score: 120 },

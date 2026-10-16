@@ -12,6 +12,29 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### The memory card, as a memory card
+
+The memory card view is now a stage: the card itself hovers in the middle, a
+slab of smoked plastic with its grip, label and connector, and every save on it
+stands as a game case on a track round it, the chosen one at the front, stepped
+forward and lit. Left and right turn the track (as do the d-pad, a scroll
+wheel and the arrows either side); a click brings a case to the front. Opening
+it slots the card in and fans the saves out of it. Under the stage, a panel
+gives the save's state, when it was saved, how long it has been played and
+what it takes on each side, with the button that state calls for. Copying,
+deleting (still two presses) and opening the folder are as before.
+
+It is CSS 3D, drawn only while something moves, with no new dependency.
+Reduced motion puts everything straight in place, and where the webview cannot
+really draw 3D (WebKitGTK without a GPU) the saves are laid out as a flat strip.
+
+### The Iced launcher is gone
+
+`iced-ui/` and `docs/ICED.md` are removed. The experiment answered its
+question: Iced started faster but was not much lighter as built, and could not
+draw skins or the launcher's animations without a skin format of its own.
+Tauri is the one launcher.
+
 ### GamePak actions: any card or barcode, any game, Play to start
 
 The wizard's **GamePak actions** tab lists every GamePak with what it starts
@@ -30,15 +53,16 @@ adapter is read through libnfc when `/etc/nfc/libnfc.conf` names it, and a
 card may carry its ID as a Text record (`gp_stardew`), as a phone writes it,
 on NTAG or MIFARE Classic.
 
-### Start on tap: prime a game on the gaming PC, stream it on Play
+### Start on tap: the game starts on the gaming PC, the stream on Play
 
 Tap a GamePak card at the couch and the game starts on the gaming PC at once,
-with no stream; the couch launcher opens at READY with its cover. Play starts
-`moonlight stream`, and Eject ends the stream and closes the game on the
-gaming PC, letting it save first. The gaming PC runs `pc-gamepak --host-agent`,
-which answers only requests signed with its key, and only for GamePaks in its
-own registry. Set it up from the wizard's GamePak actions tab, under **Game on
-another PC**. See the manual's *Start on tap*.
+with no stream; the couch launcher opens at READY with the game's box art. Play
+runs `moonlight stream`, which resumes the running game, and Eject runs
+`moonlight quit`. The gaming PC needs nothing but Apollo or Sunshine with the
+game in its app list: the couch PC starts the app with Moonlight's own
+pairing, and wakes the gaming PC with the MAC address Moonlight stored. Set it
+up under **GamePak actions → New GamePak → Game on another PC**, which offers
+Moonlight's hosts and their games. See the manual's *Start on tap*.
 
 ### Select GamePaks with NFC
 

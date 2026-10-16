@@ -61,11 +61,12 @@
     </div>
 
     <!--
-      The memory card: every save on the drive as a game case on a shelf. Choose
-      one and it is pulled off the shelf onto the stage below, turning round to
-      its back cover, where the details are printed; beside it, the one button
-      that does what it needs. The whole window on a memory card; on a combo
-      drive, one button away from the cartridge.
+      The memory card: the card itself in the middle, as hardware, and every
+      save on the drive as a game case on a track round it. The chosen save
+      stands at the front; the panel under the stage says where it stands and
+      holds the one button that does what it needs. The whole window on a
+      memory card; on a combo drive, one button away from the cartridge.
+      memcard-scene.js builds the card and moves everything in 3D.
     -->
     <section id="memcard" hidden aria-labelledby="mc-title">
       <header class="mc__head" data-tauri-drag-region>
@@ -84,28 +85,46 @@
         <div class="mc__bar"><i id="mc-bar-fill"></i></div>
         <p id="mc-cap" class="mc__cap"></p>
       </div>
-      <ul id="mc-blocks" role="listbox" aria-label="Saves"></ul>
-      <p id="mc-empty" class="mc__empty" hidden>No saves on this card yet.</p>
-      <footer id="mc-info" class="mc__info">
-        <!-- The chosen save, pulled off the shelf. Its back cover carries the
-             details; clicking it opens the save's folder. -->
-        <div class="mc__stage" id="mc-stage">
-          <div id="mc-hero" class="mc__hero" role="button" tabindex="-1"
-               title="Open the save folder" aria-hidden="true"></div>
+
+      <!-- The stage. The camera looks into #mc-scene; #mc-world holds the card
+           (added by script) and the track of saves. -->
+      <div id="mc-scene" class="mc__scene">
+        <div id="mc-world" class="mc__world">
+          <div class="mc__floor" aria-hidden="true"></div>
+          <ul id="mc-blocks" class="mc__track" role="listbox" aria-label="Saves"></ul>
         </div>
-        <div class="mc__side">
-          <h2 id="mc-game" class="sr-only"></h2>
-          <p id="mc-state" class="sr-only"></p>
-          <div class="mc__actions">
-            <button id="mc-to-pc" class="btn btn--primary" type="button">
-              <span class="btn__label">Copy to PC</span>
-              <span class="pad-badge" aria-hidden="true">A</span>
-            </button>
-            <button id="mc-to-card" class="btn btn--primary" type="button">
-              <span class="btn__label">Copy to card</span>
-              <span class="pad-badge" aria-hidden="true">A</span>
-            </button>
-          </div>
+        <p id="mc-empty" class="mc__empty" hidden>No saves on this card yet.</p>
+        <button id="mc-prev" class="icon-btn mc__step mc__step--prev" type="button"
+                aria-label="Previous save" title="Previous — ←">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" width="14" height="14"
+               aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" /></svg>
+        </button>
+        <button id="mc-next" class="icon-btn mc__step mc__step--next" type="button"
+                aria-label="Next save" title="Next — →">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" width="14" height="14"
+               aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" /></svg>
+        </button>
+      </div>
+
+      <!-- The chosen save: what it is, where it stands, what to do. -->
+      <footer id="mc-panel" class="mc__panel">
+        <div class="mc__title-row">
+          <h2 id="mc-game" class="mc__game"></h2>
+          <span id="mc-count" class="mc__count" aria-live="polite"></span>
+        </div>
+        <p id="mc-state" class="mc__state"></p>
+        <ul id="mc-facts" class="mc__facts"></ul>
+        <div class="mc__actions">
+          <button id="mc-to-pc" class="btn btn--primary" type="button">
+            <span class="btn__label">Copy to PC</span>
+            <span class="pad-badge" aria-hidden="true">A</span>
+          </button>
+          <button id="mc-to-card" class="btn btn--primary" type="button">
+            <span class="btn__label">Copy to card</span>
+            <span class="pad-badge" aria-hidden="true">A</span>
+          </button>
           <div class="mc__more">
             <button id="mc-folder" class="mc__link" type="button" title="O">Open folder</button>
             <button id="mc-remove" class="mc__link mc__delete" type="button" title="Delete">
