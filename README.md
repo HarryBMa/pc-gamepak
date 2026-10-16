@@ -22,7 +22,6 @@ Plug one in and a launcher appears with the game's cover art and two buttons.
 [![Works offline](https://img.shields.io/badge/Works-offline-2e7d52)](docs/MANUAL.md)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](#build-from-source)
 [![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8B8?logo=tauri&logoColor=white)](#build-from-source)
-[![iced](https://img.shields.io/badge/iced-experiment-red?logo=iced&logoColor=white)](#build-from-source)
 
 <img width="560" alt="A cartridge going into a USB-C port and the launcher opening with it" src="docs/cartridge-demo.gif" />
 
@@ -188,7 +187,7 @@ Tauri, so `cd core && cargo test` covers the logic on any machine.
 ## More
 
 [Installing on Linux](docs/INSTALL.md) · [The manual](docs/MANUAL.md) ·
-[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) · [Tauri and Iced](docs/ICED.md) ·
+[Writing a skin](docs/SKINNING.md) · [Other frontends](docs/FRONTENDS.md) ·
 [Where the project is](docs/STATUS.md) · [What changed](CHANGELOG.md) ·
 [Contributing](CONTRIBUTING.md)
 

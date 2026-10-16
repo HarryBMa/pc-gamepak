@@ -12,6 +12,13 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### The Iced launcher is gone
+
+`iced-ui/` and `docs/ICED.md` are removed. The experiment answered its
+question: Iced started faster but was not much lighter as built, and could not
+draw skins or the launcher's animations without a skin format of its own.
+Tauri is the one launcher.
+
 ### GamePak actions: any card or barcode, any game, Play to start
 
 The wizard's **GamePak actions** tab lists every GamePak with what it starts
