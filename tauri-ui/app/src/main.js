@@ -2042,12 +2042,27 @@ async function demoInvoke(command, args) {
     case "shader_slots":
       return [];
     // `?state=memcard` is a memory card; `&combo` makes a cartridge one too.
-    case "memory_card":
+    // `&saves=N` shows N saves (the six repeated), `&saves=error` an unreadable
+    // card, for looking at a card emptier or fuller than the six.
+    case "memory_card": {
+      const saves = new URLSearchParams(location.search).get("saves");
+      if (saves === "error") throw "the drive stopped answering";
+      if (saves !== null) {
+        const count = Number(saves);
+        const many = Array.from({ length: count }, (_, i) => {
+          const base = demoBlocks[i % demoBlocks.length];
+          return i < demoBlocks.length
+            ? base
+            : { ...base, slot: { ...base.slot, id: `${base.slot.id}-${i}` }, title: `${base.title} ${Math.floor(i / demoBlocks.length) + 1}` };
+        });
+        demoBlocks.splice(0, demoBlocks.length, ...many);
+      }
       return {
         title: state === "memcard" ? "Harry's Memory Card" : "Cinder & Salt",
         cardOnly: state === "memcard",
         blocks: demoBlocks,
       };
+    }
     case "memcard_copy": {
       const block = demoBlocks.find((b) => b.slot.id === args.slotId);
       if (block) Object.assign(block, { direction: "inSync", hostBytes: block.cartridgeBytes || block.hostBytes, cartridgeBytes: block.cartridgeBytes || block.hostBytes });

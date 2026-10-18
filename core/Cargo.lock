@@ -103,6 +103,7 @@ version = "1.1.0"
 dependencies = [
  "getrandom",
  "image",
+ "rustls",
  "serde",
  "serde_json",
  "ureq",

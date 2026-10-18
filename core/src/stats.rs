@@ -647,6 +647,22 @@ mod tests {
         assert_eq!(for_game(scratch.path(), "steam://rungameid/1").seconds, 600);
     }
 
+    /// Close a session whose start was moved `pretend` seconds into the past.
+    ///
+    /// `record_session_end` reads the wall clock in whole seconds, so a test
+    /// that crosses a second boundary between launch and close (a slow CI
+    /// runner does) sees a second or two more than it pretended. The tests
+    /// care that the time is about right and is then counted exactly once,
+    /// so they check the stored hours against what this returns.
+    fn close_after(session: &Session, pretend: u64) -> u64 {
+        let added = record_session_end(session).expect("close");
+        assert!(
+            (pretend..=pretend + 2).contains(&added),
+            "closed with {added}s, not about {pretend}s"
+        );
+        added
+    }
+
     #[test]
     fn a_session_closed_properly_leaves_nothing_to_recover() {
         let scratch = Scratch::new("stats-clean-close");
@@ -655,12 +671,12 @@ mod tests {
         touch_session(&session).expect("heartbeat");
         session.started_unix -= 1800;
 
-        assert_eq!(record_session_end(&session).expect("close"), 1800);
+        let added = close_after(&session, 1800);
         assert_eq!(recover(scratch.path()), None, "the record was spent");
         // And the duration was counted once, not once here and once on recovery.
         assert_eq!(
             for_game(scratch.path(), "steam://rungameid/1").seconds,
-            1800
+            added
         );
     }
 
@@ -748,11 +764,10 @@ mod tests {
         // Pretend Play was pressed an hour ago rather than sleeping for one.
         session.started_unix -= 3600;
 
-        let added = record_session_end(&session).expect("close");
-        assert_eq!(added, 3600);
+        let added = close_after(&session, 3600);
         assert_eq!(
             for_game(scratch.path(), "steam://rungameid/620").seconds,
-            3600
+            added
         );
     }
 
@@ -815,14 +830,14 @@ mod tests {
         let mut session =
             record_launch(scratch.path(), "steam://rungameid/620", "Portal 2").expect("record");
         session.started_unix -= 60;
-        record_session_end(&session).expect("close");
+        let added = close_after(&session, 60);
 
         let entry = for_game(scratch.path(), "steam://rungameid/620");
         assert_eq!(
             entry.launches, 10,
             "the other machine's nine are still there"
         );
-        assert_eq!(entry.seconds, 36_060);
+        assert_eq!(entry.seconds, 36_000 + added);
         assert_eq!(entry.first_played, 1_700_000_000, "first play is not today");
         assert!(entry.last_played > 1_700_003_600);
     }

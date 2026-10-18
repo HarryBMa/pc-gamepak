@@ -1,29 +1,34 @@
 /**
  * The memory card view.
  *
- * Every save a drive carries, as blocks in a grid, the way a console's memory
- * card browser showed them: each save named under its icon, a lamp saying where
- * it stands, the chosen one lifted, and a panel underneath that says where that
- * save is newer and what can be done with it. A drive with `memorycard.conf`
- * opens straight into this; a combo cartridge reaches it with a button or the
- * pad's View, and goes back the same way.
+ * The card itself in the middle of the window, as a piece of hardware, and
+ * every save it carries as a game case on a track round it: the chosen one at
+ * the front, stepped forward and lit, its neighbours turning away round the
+ * curve. Under the stage, a panel says where that save stands and what can be
+ * done with it. A drive with `memorycard.conf` opens straight into this; a
+ * combo cartridge reaches it with a button or the pad's View, and goes back the
+ * same way. memcard-scene.js does the 3D; this file decides what is chosen and
+ * what the buttons do.
  *
- * Nothing here decides anything. Which copy is newer comes from the save
- * module's own comparison (`direction`), and every copy it asks for is backed
- * up by the backend first.
+ * Nothing here decides anything about the saves. Which copy is newer comes
+ * from the save module's own comparison (`direction`), and every copy it asks
+ * for is backed up by the backend first.
  *
- * Keys: arrows move, Enter copies the way the state suggests, Delete asks to
- * delete, O opens the save folder, Esc or M goes back. Pad: A copies, Y asks to
- * delete, B goes back. X does nothing here on purpose: on the cartridge it
- * ejects, and a button that ejects on one screen must not delete on the next.
+ * Keys: left and right (or up and down) move, Enter copies the way the state
+ * suggests, Delete asks to delete, O opens the save folder, Esc or M goes back.
+ * Pad: A copies, Y asks to delete, B goes back. X does nothing here on purpose:
+ * on the cartridge it ejects, and a button that ejects on one screen must not
+ * delete on the next.
  */
+
+import { buildCard, createScene } from "./memcard-scene.js";
 
 const $ = (id) => document.getElementById(id);
 
 /** How long an armed Delete waits for its second press. */
 const ARMED_MS = 4000;
 
-/** Only these get a lamp: the saves that ask for something. */
+/** Only these get a lamp on the case: the saves that ask for something. */
 function needsAttention(tone) {
   return tone === "warn" || tone === "bad";
 }
@@ -61,12 +66,17 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
     capacity: $("mc-capacity"),
     barFill: $("mc-bar-fill"),
     cap: $("mc-cap"),
+    stage: $("mc-scene"),
+    world: $("mc-world"),
     blocks: $("mc-blocks"),
     empty: $("mc-empty"),
+    prev: $("mc-prev"),
+    next: $("mc-next"),
+    count: $("mc-count"),
+    panel: $("mc-panel"),
     game: $("mc-game"),
     state: $("mc-state"),
-    stage: $("mc-stage"),
-    hero: $("mc-hero"),
+    facts: $("mc-facts"),
     toPc: $("mc-to-pc"),
     toCard: $("mc-to-card"),
     remove: $("mc-remove"),
@@ -74,6 +84,7 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
     close: $("mc-close"),
   };
   const label = (button) => button.querySelector(".btn__label");
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
 
   let drivePath = "";
   let view = null;
@@ -83,9 +94,18 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
   /** Delete asks twice: the first press arms it, the second does it. */
   let armed = false;
   let disarmTimer = null;
-  const spinner = createSpinner(el.blocks);
-  const stage = createStage(el.stage, el.hero);
-  el.hero.addEventListener("click", () => void reveal());
+  /** True from opening until the first draw: the ring starts in place. */
+  let opening = false;
+
+  const card = buildCard();
+  el.world.prepend(card);
+  const scene = createScene({
+    stage: el.stage,
+    world: el.world,
+    track: el.blocks,
+    card,
+    onPick: (index) => select(index),
+  });
 
   function blocks() {
     return view?.blocks ?? [];
@@ -98,7 +118,9 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
 
   function render() {
     el.title.textContent = view.title;
-    el.empty.hidden = blocks().length > 0;
+    const count = blocks().length;
+    el.root.classList.toggle("is-empty", count === 0);
+    el.empty.hidden = count > 0;
     el.blocks.replaceChildren(
       ...blocks().map((block, index) => {
         const { state, tone } = describe(block);
@@ -109,36 +131,18 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
         li.dataset.index = String(index);
         li.dataset.tone = tone;
         li.setAttribute("aria-label", `${block.title}. ${state}.`);
-
-        const icon = cube(block);
-        li.addEventListener("pointerenter", () => (li.dataset.hover = "1"));
-        li.addEventListener("pointerleave", () => delete li.dataset.hover);
-
-        // Under the box: its name, with a lamp only on a save that needs
-        // something, and what it takes on the card.
-        const name = document.createElement("span");
-        name.className = "mc__label";
-        const lamp = document.createElement("i");
-        lamp.className = "lamp";
-        lamp.dataset.tone = tone;
-        lamp.hidden = !needsAttention(tone);
-        lamp.setAttribute("aria-hidden", "true");
-        name.append(lamp, document.createTextNode(block.title));
-        const size = document.createElement("span");
-        size.className = "mc__size";
-        size.textContent = block.cartridgeBytes ? formatBytes(block.cartridgeBytes) : "Not on the card";
-
-        li.append(icon, name, size);
-        li.addEventListener("click", () => select(index));
+        li.append(gameCase(block, tone));
         return li;
       }),
     );
-    select(Math.min(selected, Math.max(blocks().length - 1, 0)), true);
+    scene.setItems([...el.blocks.children]);
+    select(Math.min(selected, Math.max(count - 1, 0)), { force: true, instant: opening });
+    opening = false;
   }
 
-  function select(index, force = false) {
+  function select(index, { force = false, instant = false } = {}) {
     if (!force && index === selected) return;
-    const moved = index !== selected || !el.hero.firstChild;
+    const changed = index !== selected;
     selected = index;
     disarm();
     const hadFocus = el.blocks.contains(document.activeElement);
@@ -147,57 +151,54 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
       li.setAttribute("aria-selected", String(on));
       // One stop in the tab order, on the save that is chosen.
       li.tabIndex = on ? 0 : -1;
-      if (on && hadFocus) li.focus();
+      if (on && hadFocus) li.focus({ preventScroll: true });
     }
-    const li = el.blocks.children[index];
-    li?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    scene.select(index, { instant });
     renderInfo();
-    // Pulled off the shelf: the case flies from its slot to the stage and
-    // turns to its back cover. A refresh after a copy only reprints it.
-    const block = blocks()[index];
-    if (block) stage.show(cube(block, { back: backCover(block) }), moved ? li : null);
-    else stage.clear();
+    // The panel turns over to the new save; a refresh after a copy only
+    // reprints it.
+    if (changed && !still.matches) {
+      el.panel.animate(
+        [{ opacity: 0.25, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }],
+        { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+      );
+    }
   }
 
-  /** The back of the case: the save's details, printed. */
-  function backCover(block) {
-    const { state, tone } = describe(block);
-    const back = document.createElement("span");
-    back.className = "mc__back";
-    const title = document.createElement("b");
-    title.className = "mc__back-title";
-    title.textContent = block.title;
-    const status = document.createElement("span");
-    status.className = "mc__back-state";
-    status.dataset.tone = tone;
+  /** The panel under the stage: the chosen save, and what it needs. */
+  function renderInfo() {
+    const block = blocks()[selected];
+    const count = blocks().length;
+    el.root.classList.toggle("has-block", Boolean(block));
+    el.count.textContent = count ? `${selected + 1} of ${count}` : "";
+    const ends = !scene.closed;
+    el.prev.disabled = count < 2 || (ends && selected === 0);
+    el.next.disabled = count < 2 || (ends && selected === count - 1);
+    if (!block) return;
+    const { state, tone, suggest } = describe(block);
+    el.game.textContent = block.title;
+
     const lamp = document.createElement("i");
     lamp.className = "lamp";
     lamp.dataset.tone = tone;
-    lamp.hidden = !needsAttention(tone);
-    status.append(lamp, document.createTextNode(state));
-    back.append(title, status);
-    const newest = Math.max(block.cartridgeNewest || 0, block.hostNewest || 0);
-    const rows = [];
-    if (newest) rows.push(`Saved ${since(newest)}`);
-    if (block.seconds >= 60) rows.push(`${duration(block.seconds)} played`);
-    if (block.cartridgeBytes) rows.push(`${formatBytes(block.cartridgeBytes)} on the card`);
-    for (const text of rows) {
-      const row = document.createElement("span");
-      row.className = "mc__back-row";
-      row.textContent = text;
-      back.append(row);
-    }
-    return back;
-  }
+    lamp.setAttribute("aria-hidden", "true");
+    el.state.replaceChildren(lamp, document.createTextNode(state));
+    el.state.dataset.tone = tone;
 
-  function renderInfo() {
-    const block = blocks()[selected];
-    el.root.classList.toggle("has-block", Boolean(block));
-    if (!block) return;
-    const { state, suggest } = describe(block);
-    // Read out for a screen reader; seen on the case's back cover.
-    el.game.textContent = block.title;
-    el.state.textContent = state;
+    // Only what the drive and this PC actually know: no row for a figure that
+    // is missing.
+    const facts = [];
+    const newest = Math.max(block.cartridgeNewest || 0, block.hostNewest || 0);
+    if (newest) facts.push(`Saved ${since(newest)}`);
+    if (block.seconds >= 60) {
+      const launches = block.launches > 1 ? ` · ${block.launches} launches` : "";
+      facts.push(`${duration(block.seconds)} played${launches}`);
+    }
+    if (block.cartridgeBytes) facts.push(`${formatBytes(block.cartridgeBytes)} on the card`);
+    if (block.hostBytes) facts.push(`${formatBytes(block.hostBytes)} on this PC`);
+    el.facts.replaceChildren(
+      ...facts.map((text) => Object.assign(document.createElement("li"), { textContent: text })),
+    );
 
     // Only the copy that fixes it. Both, unfilled, when both changed: the
     // choice is the player's, so neither is lit as the answer.
@@ -223,7 +224,15 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
   }
 
   async function refresh() {
-    view = await invoke("memory_card", { drivePath });
+    try {
+      view = await invoke("memory_card", { drivePath });
+      el.empty.textContent = "No saves on this card yet.";
+    } catch (error) {
+      // Still a card on screen, saying what went wrong, rather than a window
+      // that never opens.
+      view = { title: view?.title ?? "Memory card", blocks: [] };
+      el.empty.textContent = `This card could not be read: ${error}`;
+    }
     render();
     void renderCapacity();
   }
@@ -238,11 +247,15 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
     }
     const total = health?.totalBytes ?? 0;
     el.capacity.hidden = !total;
+    // The card's moulded label carries its size, as a console card's did —
+    // but only a size the drive reported.
+    card.querySelector(".mcx__size").textContent = total ? formatBytes(total) : "";
     if (!total) return;
     const saves = blocks().reduce((sum, block) => sum + (block.cartridgeBytes || 0), 0);
     const used = total - (health.freeBytes ?? 0);
     el.barFill.style.transform = `scaleX(${Math.min(1, used / total).toFixed(3)})`;
-    el.cap.textContent = `${formatBytes(saves)} of saves · ${formatBytes(health.freeBytes ?? 0)} free of ${formatBytes(total)}`;
+    const held = saves ? `${formatBytes(saves)} of saves` : "No saves";
+    el.cap.textContent = `${held} · ${formatBytes(health.freeBytes ?? 0)} free of ${formatBytes(total)}`;
   }
 
   async function copy(to) {
@@ -314,23 +327,44 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
     );
   }
 
-  /** How many blocks sit on a row, measured, as the launcher's rail does. */
-  function columns() {
-    const rows = [...el.blocks.children];
-    if (rows.length < 2) return 1;
-    const top = rows[0].offsetTop;
-    return Math.max(1, rows.filter((row) => row.offsetTop === top).length);
-  }
-
+  /**
+   * One step along the track. The track is one line, so both axes move along
+   * it, as the launcher's rail does. A ring wraps; an arc stops at its ends and
+   * gives a little, so a held direction cannot run off the end unnoticed.
+   */
   function move(x, y) {
     const count = blocks().length;
-    if (count < 2) return;
-    // A shelf that is one row has no row above or below: up and down move
-    // along it, as the launcher's rail does.
-    const across = columns();
-    select((selected + x + y * (across >= count ? 1 : across) + count) % count);
+    const step = Math.sign(x || y);
+    if (count < 2 || !step) return;
+    const next = selected + step;
+    if (scene.closed) {
+      select((next + count) % count);
+    } else if (next < 0 || next >= count) {
+      scene.bump(step);
+    } else {
+      select(next);
+    }
   }
 
+  // A wheel or a trackpad moves one save per notch, not per pixel.
+  let wheel = 0;
+  let wheelAt = 0;
+  el.stage.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      wheel += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      const now = performance.now();
+      if (Math.abs(wheel) < 40 || now - wheelAt < 130) return;
+      move(Math.sign(wheel), 0);
+      wheel = 0;
+      wheelAt = now;
+    },
+    { passive: false },
+  );
+
+  el.prev.addEventListener("click", () => move(-1, 0));
+  el.next.addEventListener("click", () => move(1, 0));
   el.toPc.addEventListener("click", () => copy("pc"));
   el.toCard.addEventListener("click", () => copy("card"));
   el.remove.addEventListener("click", remove);
@@ -351,19 +385,19 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
       drivePath = path;
       onClose = close;
       selected = 0;
+      opening = true;
       const name = back ? "Back to cartridge" : "Close";
       el.close.setAttribute("aria-label", name);
       el.close.title = `${name} — Esc`;
       await refresh();
       el.root.hidden = false;
-      spinner.start();
-      stage.start();
+      scene.start();
+      scene.enter();
     },
 
     hide() {
       disarm();
-      spinner.stop();
-      stage.stop();
+      scene.stop();
       el.root.hidden = true;
     },
 
@@ -395,196 +429,42 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
 }
 
 /**
- * A save as a game case on a shelf: the art on the cover, the game's name
- * running down the spine, lids top and bottom, a soft shadow on the floor
- * under it and a faded reflection that turns with it. A game with no art gets
- * a cover in the card's accent with its initials.
+ * A save as a game case: the art on the cover, the game's name running down
+ * the spine, lids top and bottom, a lamp on the corner when it needs something,
+ * and the shadow it stands in. A game with no art gets a cover in the card's
+ * accent with its initials.
  */
-function cube(block, { back = null } = {}) {
+function gameCase(block, tone) {
   const wrap = document.createElement("span");
-  wrap.className = "mc__icon";
-  const box = document.createElement("span");
-  box.className = "mc__cube";
+  wrap.className = "mc__case";
   const art = block.icon && /^(data:image\/|src\/)/.test(block.icon) ? block.icon : "";
   // Absolute, because a url() inside a custom property resolves against the
   // stylesheet that uses it, not the page — which breaks a relative path.
   if (art) wrap.style.setProperty("--art", `url("${new URL(art, document.baseURI).href}")`);
   else wrap.classList.add("is-blank");
-  for (const face of ["front", "back", "right", "left", "top", "bottom"]) {
+  // The front last: if 3D is ever painted flattened, it is the face on top.
+  for (const face of ["back", "right", "left", "top", "bottom", "front"]) {
     const side = document.createElement("span");
     side.className = `mc__face mc__face--${face}`;
     if (!art && face === "front") side.textContent = initials(block.title);
-    if (back && face === "back") side.append(back);
     if (face === "left") {
       const spine = document.createElement("span");
       spine.textContent = block.title;
       side.append(spine);
     }
-    box.append(side);
+    if (face === "front" && needsAttention(tone)) {
+      const lamp = document.createElement("i");
+      lamp.className = "lamp mc__case-lamp";
+      lamp.dataset.tone = tone;
+      lamp.setAttribute("aria-hidden", "true");
+      side.append(lamp);
+    }
+    wrap.append(side);
   }
   const shadow = document.createElement("span");
   shadow.className = "mc__shadow";
-  const reflection = document.createElement("span");
-  reflection.className = "mc__refl";
-  const plane = document.createElement("span");
-  plane.className = "mc__refl-plane";
-  reflection.append(plane);
-  wrap.append(shadow, reflection, box);
+  wrap.append(shadow);
   return wrap;
-}
-
-/**
- * The stage: where the chosen case is pulled to.
- *
- * On a new choice the case starts where its slot on the shelf is — same place,
- * same size, facing front — and a spring carries it to the stage, growing and
- * turning round to its back cover, with a little overshoot so it lands rather
- * than stops. At rest it sits turned slightly off square so its spine shows,
- * and tips a few degrees towards the pointer. One loop while the card is open.
- */
-function createStage(stage, hero) {
-  const still = matchMedia("(prefers-reduced-motion: reduce)");
-  const REST = 162;
-  const s = { p: 1, v: 0, dx: 0, dy: 0, scale: 1, tiltX: 0, tiltY: 0, aimX: 0, aimY: 0 };
-  let frame = 0;
-  let last = 0;
-
-  stage.addEventListener("pointermove", (event) => {
-    const box = stage.getBoundingClientRect();
-    s.aimX = ((event.clientX - box.left) / box.width - 0.5) * 2;
-    s.aimY = ((event.clientY - box.top) / box.height - 0.5) * 2;
-  });
-  stage.addEventListener("pointerleave", () => {
-    s.aimX = 0;
-    s.aimY = 0;
-  });
-
-  function apply() {
-    const box = hero.querySelector(".mc__cube");
-    const p = s.p;
-    hero.style.transform =
-      `translate(${(s.dx * (1 - p)).toFixed(1)}px, ${(s.dy * (1 - p)).toFixed(1)}px) ` +
-      `scale(${(s.scale + (1 - s.scale) * p).toFixed(4)})`;
-    if (box) {
-      box.style.transform =
-        `rotateX(${(-6 - s.tiltY * 7).toFixed(2)}deg) ` +
-        `rotateY(${(REST * p + s.tiltX * 12).toFixed(2)}deg)`;
-    }
-  }
-
-  function tick(now) {
-    const dt = Math.min((now - last) / 1000, 0.034);
-    last = now;
-    // Slightly under-damped: it arrives, overshoots a touch, settles.
-    const force = 190 * (1 - s.p) - 20 * s.v;
-    s.v += force * dt;
-    s.p += s.v * dt;
-    const k = 1 - Math.exp(-dt * 6);
-    s.tiltX += (s.aimX - s.tiltX) * k;
-    s.tiltY += (s.aimY - s.tiltY) * k;
-    apply();
-    frame = requestAnimationFrame(tick);
-  }
-
-  return {
-    /** Put a case on the stage, flown in from `from` (a shelf slot) if given. */
-    show(caseEl, from) {
-      hero.replaceChildren(caseEl);
-      hero.style.transform = "";
-      const origin = from?.querySelector(".mc__cube");
-      const a = origin?.getBoundingClientRect();
-      const b = hero.getBoundingClientRect();
-      // Nothing to fly from — no slot, reduced motion, or the card not laid
-      // out yet on first open: it is simply there.
-      if (!a?.width || !b.width || still.matches) {
-        s.p = 1;
-        s.v = 0;
-        apply();
-        return;
-      }
-      s.scale = a.width / b.width;
-      s.dx = a.left + a.width / 2 - (b.left + b.width / 2);
-      s.dy = a.top + a.height / 2 - (b.top + b.height / 2);
-      s.p = 0;
-      s.v = 0;
-      apply();
-    },
-    clear() {
-      hero.replaceChildren();
-    },
-    start() {
-      if (frame) return;
-      last = performance.now();
-      frame = requestAnimationFrame(tick);
-    },
-    stop() {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    },
-  };
-}
-
-/**
- * Turn the boxes.
- *
- * Driven here rather than by a CSS animation because a CSS animation can only
- * pause wherever it happens to be, and a box has to come to rest facing you:
- * a held box (selected, or under the pointer) eases round to the nearest front
- * and levels out, and the rest keep turning, each at its own pace. One loop,
- * only while the card is open.
- *
- * Deliberately not stopped by reduced motion: the turn is slow (about once in
- * twenty seconds), ambient rather than something to follow, and it comes to
- * rest on its own the moment a save is chosen or pointed at. Windows reports
- * reduced motion whenever "Animation effects" is off, which is common, and a
- * shelf of cases frozen side-on read as broken.
- */
-function createSpinner(list) {
-  const state = new WeakMap();
-  let frame = 0;
-  let last = 0;
-
-  function tick(now) {
-    const dt = Math.min((now - last) / 1000, 0.05);
-    last = now;
-    for (const li of list.children) {
-      const box = li.querySelector(".mc__cube");
-      if (!box) continue;
-      let s = state.get(li);
-      if (!s) {
-        // Out of step from the start, so the shelf does not turn as one.
-        s = { angle: Number(li.dataset.index || 0) * 47, tilt: -8 };
-        state.set(li, s);
-      }
-      const held = li.getAttribute("aria-selected") === "true" || li.dataset.hover;
-      if (held) {
-        const front = Math.round(s.angle / 360) * 360;
-        const k = 1 - Math.exp(-dt * 9);
-        s.angle += (front - s.angle) * k;
-        s.tilt += (0 - s.tilt) * k;
-      } else {
-        // About one turn in twenty seconds: a shelf, not a carousel.
-        s.angle += dt * (16 + (Number(li.dataset.index || 0) % 3) * 3);
-        s.tilt += (-8 - s.tilt) * (1 - Math.exp(-dt * 3));
-      }
-      box.style.transform = `rotateX(${s.tilt.toFixed(2)}deg) rotateY(${s.angle.toFixed(2)}deg)`;
-      const plane = li.querySelector(".mc__refl-plane");
-      if (plane) plane.style.transform = `rotateY(${s.angle.toFixed(2)}deg)`;
-    }
-    frame = requestAnimationFrame(tick);
-  }
-
-  return {
-    start() {
-      if (frame) return;
-      last = performance.now();
-      frame = requestAnimationFrame(tick);
-    },
-    stop() {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    },
-  };
 }
 
 function initials(title) {

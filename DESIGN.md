@@ -184,8 +184,12 @@ Controls are gently squared (5px); build cards and rows a little softer (11px); 
 ### Build Cards
 - `well` background, hairline border, 11px radius, 10×12px padding; a dashed border when empty. States an answer with the way to change it (Choose / Change).
 
-### Save Blocks (signature)
-- The memory card's grid: 104px-minimum blocks with the game's icon, its name under it, and a lamp in the corner. The selected block lifts 3px with an accent border, and only its icon floats.
+### The Memory Card Stage (signature)
+- The memory card as hardware: a slab of smoked plastic with a moulded grip, a recessed label (its capacity, only when the drive reported one, and a stripe of the accent) and the connector's pins along its bottom edge. It hovers over the middle of the stage and leans after the pointer and the turning track; it never moves on its own.
+- Saves as game cases on a circular track round it, on a floor seen from slightly above: a ring for five to thirteen, a short arc for fewer, an arc with faded ends for more. The chosen case stands at the front, a step forward and a little larger, turned just off square so its spine shows, with an accent border. Cases round the curve fall into shade rather than shrink to nothing, so the size of the collection reads at a glance.
+- A lamp on a case's cover for a save that needs something, in the lamp's shape, readable from across the track.
+- Motion is springs towards targets set by the selection alone, drawn only while something moves; the card slots in and the saves fan out of it on opening. Reduced motion puts everything straight in place. Built from CSS 3D transforms (no WebGL), with a flat strip where 3D is missing.
+- Under the stage, a fixed-height panel: the save's name, its state with its lamp, only the facts the drive and the PC actually hold, and the one filled button the state calls for.
 
 ## Do's and Don'ts
 
