@@ -606,13 +606,13 @@ mod tests {
         assert!(read(scratch.path()).open_session.is_none());
     }
 
-    /// Move an open session's start back, so it reads as having run that long.
+    /// Move an open session's start back from its heartbeat by that duration.
     ///
     /// The alternative is a test that sleeps for an hour.
     fn ran_for(root: &Path, seconds: u64) {
         let mut stats = read(root);
         let open = stats.open_session.as_mut().expect("a session is open");
-        open.started -= seconds;
+        open.started = open.heartbeat.saturating_sub(seconds);
         write(root, &stats).expect("write");
     }
 
