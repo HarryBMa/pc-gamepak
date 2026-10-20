@@ -120,6 +120,8 @@ pub struct CartridgeInfo {
     pub memory_card: bool,
     /// What the cartridge is for: `PC`, `SNES`, `GBA`... See [`platform`].
     pub platform: String,
+    /// The box it slides into, when it carries a sleeve kit. See [`crate::sleeve`].
+    pub sleeve: Option<crate::sleeve::Sleeve>,
 }
 
 impl CartridgeInfo {
@@ -146,6 +148,7 @@ impl CartridgeInfo {
             how_long: HowLong::default(),
             memory_card: false,
             platform: "PC".to_string(),
+            sleeve: None,
         }
     }
 }
@@ -440,6 +443,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
                 how_long: HowLong::default(),
                 memory_card: crate::memcard::is_combo_drive(root, &content),
                 platform: platform(collection_platform.as_ref()),
+                sleeve: crate::sleeve::read(root),
             });
         }
 
@@ -491,6 +495,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             how_long: HowLong::from_keys(ini.get("general")),
             memory_card: crate::memcard::is_combo_drive(root, &content),
             platform: platform(ini_get(&ini, "general", "platform")),
+            sleeve: crate::sleeve::read(root),
         });
     }
 
@@ -539,6 +544,7 @@ pub fn read_cartridge_info(drive_path: &str) -> Result<CartridgeInfo, String> {
             games: Vec::new(),
             memory_card: false,
             platform: platform(None),
+            sleeve: crate::sleeve::read(root),
         });
     }
 

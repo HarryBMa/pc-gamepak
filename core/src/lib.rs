@@ -48,6 +48,7 @@ pub mod saves;
 pub mod settings;
 pub mod sgdb;
 pub mod shaders;
+pub mod sleeve;
 pub mod stats;
 pub mod steam;
 pub mod steamlib;

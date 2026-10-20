@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PC GamePak</title>
+    <link rel="stylesheet" href="src/tv.css" />
+  </head>
+  <body>
+    <!--
+      The TV launcher: the whole library on a shelf, for a controller across a
+      room. Drawn on a 1920 by 1080 stage that tv.js scales to the screen, so
+      what is laid out here is what a television shows. The popup (index.html)
+      is the same app for a desk; Settings → TV mode, or --tv, picks this.
+    -->
+    <div id="tv" class="tv">
+      <div class="tv__stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      <header class="tv__head">
+        <div class="tv__brand">
+          <span class="tv__mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="tv__wordmark">PC-GAMEPAK</span>
+        </div>
+        <nav class="tv__tabs" aria-label="Sections">
+          <button id="tab-shelf" class="tv__tab" type="button" data-view="shelf">Cartridges</button>
+          <button id="tab-card" class="tv__tab" type="button" data-view="card">Memory card</button>
+          <button id="tab-settings" class="tv__tab" type="button">Settings</button>
+        </nav>
+        <div class="tv__status">
+          <button id="tv-chip" class="tv__chip" type="button" hidden>
+            <span class="tv__chip-card" aria-hidden="true"></span>
+            <span id="tv-chip-name"></span>
+          </button>
+          <span id="tv-clock" class="tv__clock"></span>
+        </div>
+      </header>
+
+      <main class="tv__main">
+        <!-- Home: every cartridge, the one in the slot first. -->
+        <section id="view-shelf" class="tv__view tv__view--shelf" aria-label="Cartridges">
+          <ul id="shelf" class="tv__shelf" role="listbox" aria-label="Cartridges"></ul>
+          <div id="shelf-empty" class="tv__empty" hidden>
+            <p class="tv__empty-title">No cartridges yet</p>
+            <p>Plug one in, or make one in the wizard.</p>
+          </div>
+          <div class="tv__selected">
+            <div class="tv__selected-text">
+              <p id="sel-state" class="tv__eyebrow"></p>
+              <h1 id="sel-title" class="tv__title"></h1>
+              <p id="sel-sub" class="tv__sub"></p>
+            </div>
+            <div id="sel-tags" class="tv__tags"></div>
+          </div>
+        </section>
+
+        <!-- A cartridge: its box, its words, its games. -->
+        <section id="view-detail" class="tv__view tv__view--detail" aria-labelledby="detail-headline" hidden>
+          <div id="detail-art" class="tv__detail-art"></div>
+          <div class="tv__detail-body">
+            <p id="detail-state" class="tv__eyebrow"></p>
+            <h1 id="detail-headline" class="tv__headline"></h1>
+            <p id="detail-blurb" class="tv__blurb"></p>
+            <ul id="detail-games" class="tv__rows" role="listbox" aria-label="Games on this cartridge"></ul>
+            <p id="detail-note" class="tv__note"></p>
+          </div>
+        </section>
+
+        <!-- The memory card in the slot: its saves, and what each needs. -->
+        <section id="view-card" class="tv__view tv__view--card" aria-labelledby="card-title" hidden>
+          <div class="tv__card-side">
+            <div id="card-art" class="tv__card-art" aria-hidden="true"></div>
+            <p id="card-slot" class="tv__eyebrow"></p>
+          </div>
+          <div class="tv__card-body">
+            <p id="card-cap" class="tv__kicker"></p>
+            <h1 id="card-title" class="tv__card-title"></h1>
+            <ul id="card-saves" class="tv__rows tv__rows--saves" role="listbox" aria-label="Saves on this card"></ul>
+            <p id="card-empty" class="tv__note" hidden></p>
+            <div class="tv__actions">
+              <button id="card-to-pc" class="tv__btn tv__btn--fill" type="button">Copy to this PC</button>
+              <button id="card-to-card" class="tv__btn tv__btn--fill" type="button">Copy to the card</button>
+              <button id="card-folder" class="tv__btn" type="button">Open folder</button>
+              <button id="card-delete" class="tv__btn tv__btn--danger" type="button">Delete</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="tv__foot">
+        <div id="tv-prompts" class="tv__prompts"></div>
+        <div id="tv-foot-right" class="tv__foot-right"></div>
+      </footer>
+
+      <p id="tv-toast" class="tv__toast" role="status" aria-live="polite" hidden></p>
+    </div>
+    <script type="module" src="src/tv.js"></script>
+  </body>
+</html>

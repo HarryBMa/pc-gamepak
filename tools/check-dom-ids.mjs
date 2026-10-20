@@ -21,6 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PAGES = [
   { html: "tauri-ui/app/index.html", scripts: ["tauri-ui/app/src/main.js", "tauri-ui/app/src/memcard.js"] },
   { html: "tauri-ui/app/create.html", scripts: ["tauri-ui/app/src/create.js"] },
+  { html: "tauri-ui/app/tv.html", scripts: ["tauri-ui/app/src/tv.js"] },
 ];
 
 const idsIn = (html) =>

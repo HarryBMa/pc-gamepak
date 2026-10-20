@@ -453,6 +453,17 @@
               </button>
             </div>
 
+            <!-- The sleeve kit CoverForge exports: the box the TV launcher
+                 turns in 3D, and the words printed on it. Written straight to
+                 the cartridge, like Refetch: there is nothing to preview it
+                 against here. -->
+            <div class="build-group">
+              <p class="build-label">Sleeve</p>
+              <p id="edit-sleeve-note" class="hint"></p>
+              <button id="btn-sleeve-add" class="link" type="button">Add a sleeve kit…</button>
+              <button id="btn-sleeve-remove" class="link" type="button" hidden>Remove the sleeve</button>
+            </div>
+
             <div class="build-group" id="edit-games-group">
               <p class="build-label">Games</p>
               <ul id="edit-games" aria-label="Games on this cartridge"></ul>
@@ -848,6 +859,13 @@
             <span class="opt__body">
               <span class="opt__label">Launch directly on trigger</span>
               <span class="opt__hint">A tapped card or scanned barcode starts its game at once. Off: the launcher opens at READY and Play starts it.</span>
+            </span>
+          </label>
+          <label class="opt">
+            <input id="set-tv-mode" type="checkbox" />
+            <span class="opt__body">
+              <span class="opt__label">TV mode</span>
+              <span class="opt__hint">Open the full-screen launcher, with your whole library on a shelf, made for a controller. Off: the small popup.</span>
             </span>
           </label>
           <div>

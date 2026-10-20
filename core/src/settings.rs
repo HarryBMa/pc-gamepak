@@ -134,6 +134,12 @@ pub struct Settings {
     /// title and cover up — and Play starts it, as a cartridge does. On, a
     /// tap is the Play press, for a setup with no screen to press it on.
     pub launch_on_trigger: bool,
+
+    // ---- The launcher ------------------------------------------------------
+    /// Open the TV launcher instead of the popup: full screen, the whole
+    /// library on a shelf, made for a controller across a room. **Off**: the
+    /// popup is what a desk wants, and `--tv` opens the TV launcher anyway.
+    pub tv_mode: bool,
 }
 
 impl Default for Settings {
@@ -162,6 +168,7 @@ impl Default for Settings {
             save_sync: false,
             track_playtime: true,
             launch_on_trigger: false,
+            tv_mode: false,
             idle_pause_minutes: crate::playtrack::DEFAULT_IDLE_MINUTES,
             hltb_enabled: false,
             ludusavi_enabled: false,

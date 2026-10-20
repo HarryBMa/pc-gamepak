@@ -29,12 +29,12 @@ const $ = (id) => document.getElementById(id);
 const ARMED_MS = 4000;
 
 /** Only these get a lamp on the case: the saves that ask for something. */
-function needsAttention(tone) {
+export function needsAttention(tone) {
   return tone === "warn" || tone === "bad";
 }
 
 /** What each state is called, and which way the obvious copy goes. */
-function describe(block) {
+export function describe(block) {
   const onPc = block.hostBytes > 0;
   const onCard = block.cartridgeBytes > 0;
   switch (block.direction) {

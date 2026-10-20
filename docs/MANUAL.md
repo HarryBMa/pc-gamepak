@@ -686,6 +686,45 @@ the way up.
 The wizard is deliberately not controller-driven. Making a cartridge is a desk
 job.
 
+### TV mode
+
+The popup is a launcher for a desk: one window the size of a cover, for the
+cartridge in the slot. **TV mode** is the same app for a television. It opens
+full screen, and its home is a shelf of every cartridge you have made, as
+boxes. The one in the slot comes first, lit, and is the only one Play
+starts. The others are there so the shelf reads as a library, and selecting
+one says it is on the shelf rather than pretending it can start.
+
+Turn it on in the wizard's **Settings → TV mode**, or start the launcher with
+`--tv` to try it once.
+
+Each cartridge stands as its sleeve, the PC GamePak box that
+[CoverForge](https://github.com/HarryBMa/cover-forge)'s cartridge-sleeve
+template prints, turned in 3D. When the cartridge carries a sleeve kit (see
+[Cartridge format](#cartridge-format)) the box is built from the kit's faces,
+and the cartridge's page shows its headline, blurb and PEGI rating. Without
+one, the box is drawn from what every cartridge has: the cover on the front,
+and the sleeve's spine on each side. Nothing is made up to fill a space: no
+rating unless the kit says one, no blurb unless it has one.
+
+| Control | Home | A cartridge | The memory card |
+|---|---|---|---|
+| D-pad or left stick | Move along the shelf | Move down the games | Move down the saves |
+| **A** | Play, or open a collection | Play | Copy the newer side over |
+| **X** | Eject | Eject | Eject |
+| **Y** | The cartridge's page | | Delete the save (press twice) |
+| **B** | | Back to the shelf | Back to the shelf |
+| **View** | The memory card | The memory card | Back to the shelf |
+
+**X is Eject on every screen**, as it is in the popup. The design this came
+from put the memory card on X; a button that ejects on one screen must not do
+something else on the next, so the memory card is on View (or `M`) instead.
+The keyboard has the same set: arrows, Enter, `E`, `I`, `M`, Esc.
+
+The boxes are CSS 3D transforms. Where the webview cannot draw 3D (WebKitGTK
+without a GPU, for one) they are painted flat, front face forward, so a
+cover is always what you see.
+
 </details>
 
 <a id="making-a-cartridge"></a>
@@ -782,7 +821,8 @@ on this drive** appears:
 
 <img width="760" alt="The Edit page for a collection: the cartridge and its name, the combo drive and platform options, the artwork slots, and the games with controls to reorder them, pick the primary one, change a picture and remove them" src="wizard-edit.png" />
 
-You can rename the cartridge, change its artwork, rename the individual games,
+You can rename the cartridge, change its artwork, give it a sleeve kit for
+[TV mode](#tv-mode), rename the individual games,
 reorder them — the order is the order of the launcher's rail — and take one off
 the list. Adding a game means writing the cartridge again, since that is when files
 move.
@@ -1474,8 +1514,51 @@ CARTRIDGE/
 ```
 
 Everything under `.gamepak/` is written by the launcher, not by you — apart
-from `skin.css`, which is a cartridge's own. Deleting the directory loses the
-history and the carried saves and breaks nothing else.
+from `skin.css` and `sleeve/`, which are a cartridge's own. Deleting the
+directory loses the history and the carried saves and breaks nothing else.
+
+**The sleeve kit** is the box TV mode turns in 3D, and the words printed on
+it. CoverForge exports it; the wizard's Edit page puts it on a cartridge
+(**Sleeve → Add a sleeve kit…**). It can also be written by hand:
+
+```
+.gamepak/sleeve/
+├── sleeve.json
+├── front.png          71.5 × 101 mm
+├── back.png           71.5 × 101 mm
+├── spine.png          16 × 101 mm, the left side as the front faces you
+├── spine-right.png    16 × 101 mm
+└── box.png            optional: a finished render of the whole box
+```
+
+```json
+{
+  "format": "pc-gamepak-sleeve",
+  "version": 1,
+  "faces": { "front": "front.png", "back": "back.png",
+             "spine": "spine.png", "spineRight": "spine-right.png" },
+  "tagline": "Moonrise · Moonfall · Moonset",
+  "headline": "THREE NIGHTS.\nONE LONG DAWN.",
+  "blurb": "Climb the mountain before the moon comes down…",
+  "features": "1 PLAYER · ACTION ADVENTURE · WINDOWS 10 / 11",
+  "rating": "12",
+  "descriptor": "Fantasy violence",
+  "accent": "#6ed7ff"
+}
+```
+
+Every field is optional. The headline's last line is drawn in `accent`.
+`rating` is a PEGI label (3, 7, 12, 16 or 18), and anything else is dropped.
+CoverForge's export is the same JSON as one file, with each face inlined as a
+`data:image/png;base64,…` URI, so it travels as a single download. The wizard
+unpacks it into the layout above.
+
+A cartridge is not a trusted input, so the launcher reads only the faces the
+kit names, only from its own folder, only PNG, JPEG or WebP up to 8 MB, and
+checks every word it shows. Importing a kit checks each picture by its first
+bytes, not its name, and builds the new kit beside the old one before
+swapping it in, so a kit that fails to import leaves the old sleeve as it
+was.
 
 `executable=` takes any URI the OS can handle — `steam://`, `heroic://`, `gog://`,
 `epic://`, `playnite://`, `lutris://`, `http://`, `https://` — or a path to a file

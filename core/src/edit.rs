@@ -49,6 +49,8 @@ pub struct Editable {
     pub memory_card: bool,
     /// The cartridge's `platform=`, `PC` when it has none.
     pub platform: String,
+    /// True when the cartridge carries a sleeve kit for the TV launcher.
+    pub has_sleeve: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -191,6 +193,7 @@ fn from_info(drive_path: &str, info: CartridgeInfo) -> Editable {
         holds_game: info.holds_game,
         memory_card: info.memory_card,
         platform: info.platform.clone(),
+        has_sleeve: info.sleeve.is_some(),
         games,
     }
 }

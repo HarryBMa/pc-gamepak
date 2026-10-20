@@ -261,6 +261,7 @@ mod tests {
             how_long: Default::default(),
             memory_card: false,
             platform: "PC".into(),
+            sleeve: None,
         }
     }
 

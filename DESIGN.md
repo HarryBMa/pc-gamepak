@@ -191,6 +191,12 @@ Controls are gently squared (5px); build cards and rows a little softer (11px); 
 - Motion is springs towards targets set by the selection alone, drawn only while something moves; the card slots in and the saves fan out of it on opening. Reduced motion puts everything straight in place. Built from CSS 3D transforms (no WebGL), with a flat strip where 3D is missing.
 - Under the stage, a fixed-height panel: the save's name, its state with its lamp, only the facts the drive and the PC actually hold, and the one filled button the state calls for.
 
+### The TV Shelf
+- A 1920 × 1080 stage scaled to the screen, so a television shows what was laid out. Ink, line and plate come from the sleeve's own navy (`#080b20`, `#26305e`, `#1a2463`), with the PC-GAMEPAK colour stripes across the top. Rajdhani for the words and Exo 2 italic for the wordmark, as CoverForge prints them.
+- Cartridges stand as their sleeves (71.5 × 101 × 16 mm, in proportion) turned a little off square. The selected one is larger, lit from behind and underlined; the rest stay in their colours. A cartridge that is not in the slot says "On the shelf" before anything else, and Play does not pretend it can start.
+- Faces are built back to front, so where 3D is flattened the front is still the face you see. The glow is its own layer behind the box, because a filter or opacity on the box would flatten it.
+- Words on a page are the kit's, never filled in: no rating, blurb or genre unless the kit or the cartridge has one.
+
 ## Do's and Don'ts
 
 ### Do:

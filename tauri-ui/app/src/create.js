@@ -24,6 +24,9 @@
  *   suggest_collection_name({ titles }) -> string
  *   pick_cover_image()               -> { path, preview } | null
  *   pick_game_folder()               -> { path, name, sizeBytes, choices } | null
+ *   pick_sleeve_kit()                -> path | null
+ *   install_sleeve_kit({ drivePath, kitPath }) -> Sleeve (core/src/sleeve.rs)
+ *   remove_sleeve_kit({ drivePath }) -> ()
  *   add_gamepak(title, kind, a, b, id) -> "gp_…" (generic action wizard)
  *   registered_gamepaks()              -> [{ id, title, action, triggers }]
  *   remove_gamepak(id)                 -> ()
@@ -199,6 +202,9 @@ const el = {
   btnChangeCart: $("btn-change-cart"),
   editFormWrap: $("edit-form-wrap"),
   btnRefetchArt: $("btn-refetch-art"),
+  editSleeveNote: $("edit-sleeve-note"),
+  btnSleeveAdd: $("btn-sleeve-add"),
+  btnSleeveRemove: $("btn-sleeve-remove"),
   btnRemoveLogo: $("btn-remove-logo"),
   editTitle: $("edit-title"),
   editArtSlots: $("edit-art-slots"),
@@ -286,6 +292,7 @@ const el = {
   onInsertHint: $("on-insert-hint"),
   setPlaytime: $("set-playtime"),
   setLaunchOnTrigger: $("set-launch-on-trigger"),
+  setTvMode: $("set-tv-mode"),
   setIdle: $("set-idle"),
   setIdleRow: $("set-idle-row"),
   setHltb: $("set-hltb"),
@@ -2805,6 +2812,7 @@ function applySettings() {
   // only because Play was pressed.
   el.setPlaytime.checked = settings.trackPlaytime !== false;
   el.setLaunchOnTrigger.checked = Boolean(settings.launchOnTrigger);
+  el.setTvMode.checked = Boolean(settings.tvMode);
   el.setIdle.value = String(settings.idlePauseMinutes ?? 10);
   el.setIdleRow.hidden = !el.setPlaytime.checked;
   el.setHltb.checked = Boolean(settings.hltbEnabled);
@@ -3134,6 +3142,7 @@ async function saveSettings() {
         onCartridgeInsert: el.setOnInsert.value,
         trackPlaytime: el.setPlaytime.checked,
         launchOnTrigger: el.setLaunchOnTrigger.checked,
+        tvMode: el.setTvMode.checked,
         idlePauseMinutes: Number(el.setIdle.value) || 0,
         hltbEnabled: el.setHltb.checked,
         ludusaviEnabled: el.setLudusavi.checked,
@@ -3175,6 +3184,7 @@ async function openEditor(drivePath) {
   el.editMemcard.checked = Boolean(editing.memoryCard);
   fillPlatforms(el.editPlatform, editing.platform);
   renderEditArt();
+  renderEditSleeve();
   el.editStatus.textContent = "";
   el.editFormWrap.hidden = false;
   if (el.pickDialog.open) el.pickDialog.close();
@@ -3238,6 +3248,46 @@ async function refetchArtwork() {
   } finally {
     el.btnRefetchArt.disabled = false;
   }
+}
+
+function renderEditSleeve() {
+  const has = Boolean(editing?.hasSleeve);
+  el.editSleeveNote.textContent = has
+    ? "This cartridge carries a sleeve. TV mode builds its box from it."
+    : "TV mode draws the box from the cover. A sleeve kit from CoverForge gives it the real one.";
+  el.btnSleeveAdd.textContent = has ? "Replace the sleeve kit…" : "Add a sleeve kit…";
+  el.btnSleeveRemove.hidden = !has;
+}
+
+/** Put CoverForge's sleeve kit on the cartridge, replacing any it had. */
+async function addSleeve() {
+  if (!editing) return;
+  const kitPath = await invoke("pick_sleeve_kit");
+  if (!kitPath) return;
+  el.btnSleeveAdd.disabled = true;
+  el.editStatus.textContent = "Putting the sleeve on the cartridge…";
+  try {
+    await invoke("install_sleeve_kit", { drivePath: editing.drivePath, kitPath });
+    editing.hasSleeve = true;
+    el.editStatus.textContent = "The sleeve is on the cartridge.";
+  } catch (error) {
+    el.editStatus.textContent = String(error);
+  } finally {
+    el.btnSleeveAdd.disabled = false;
+    renderEditSleeve();
+  }
+}
+
+async function removeSleeve() {
+  if (!editing) return;
+  try {
+    await invoke("remove_sleeve_kit", { drivePath: editing.drivePath });
+    editing.hasSleeve = false;
+    el.editStatus.textContent = "The sleeve is off. TV mode draws the box from the cover.";
+  } catch (error) {
+    el.editStatus.textContent = String(error);
+  }
+  renderEditSleeve();
 }
 
 function renderEditGames() {
@@ -4245,6 +4295,8 @@ $("sidebar").addEventListener("keydown", (event) => {
   void showTab(next).then(() => $(`tab-${next}`).focus());
 });
 el.btnRefetchArt.addEventListener("click", refetchArtwork);
+el.btnSleeveAdd.addEventListener("click", addSleeve);
+el.btnSleeveRemove.addEventListener("click", removeSleeve);
 // Staged like every other change here, and written on Update.
 el.btnRemoveLogo.addEventListener("click", () => {
   art.logo = { remove: true };
@@ -4742,6 +4794,11 @@ async function demoInvoke(command, args) {
             "Search indexing switched off for the cartridge.",
           ]
         : ["Defender scans the cartridge again.", "Search indexing switched back on."];
+    case "pick_sleeve_kit":
+      return "/home/harry/Downloads/moonfall-sleeve.json";
+    case "install_sleeve_kit":
+    case "remove_sleeve_kit":
+      return null;
     case "pick_cover_image":
       return { path: "/home/harry/Pictures/collection.jpg", preview: "src/demo/gow-collection.jpg" };
     case "game_cover":

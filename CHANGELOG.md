@@ -12,6 +12,25 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### TV mode: the shelf, and the box in 3D
+
+A second launcher for a television, beside the popup. It opens full screen on
+a shelf of every cartridge you have made, each standing as its PC GamePak
+sleeve and turning in 3D, the one in the slot first. Select one for its page:
+the box, its headline and blurb, and its games. The memory card has a screen
+of its own. A controller drives all of it. Turn it on in **Settings → TV
+mode**, or start the launcher with `--tv`. The popup is unchanged and stays
+the default.
+
+Boxes come from **sleeve kits**, which CoverForge's cartridge-sleeve template
+exports: a picture per face and the words on the back. The wizard's Edit page
+puts one on a cartridge, under `.gamepak/sleeve/`. A cartridge without a kit
+is drawn from its cover, and nothing is invented to fill the space. The
+manual's *Cartridge format* has the layout.
+
+X is Eject on every TV screen, as in the popup. The memory card is on View,
+or `M`.
+
 ### The memory card, as a memory card
 
 The memory card view is now a stage: the card itself hovers in the middle, a

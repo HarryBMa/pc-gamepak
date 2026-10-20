@@ -1,0 +1,1149 @@
+/* ==========================================================================
+   The TV launcher
+   ==========================================================================
+   A 1920 by 1080 stage, scaled whole to the screen by tv.js, so a television
+   shows exactly what is laid out here. Its own look, not the popup's: the
+   PC-GAMEPAK sleeve's — a midnight ground, the six colour bars, Exo 2 italic
+   for names and Rajdhani for everything else, and pad prompts in the face
+   buttons' colours. */
+
+@font-face {
+  font-family: "Exo 2";
+  font-style: italic;
+  font-weight: 800 900;
+  font-display: block;
+  src: url("fonts/exo2-italic-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 500;
+  font-display: block;
+  src: url("fonts/rajdhani-500-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 600;
+  font-display: block;
+  src: url("fonts/rajdhani-600-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 700;
+  font-display: block;
+  src: url("fonts/rajdhani-700-latin.woff2") format("woff2");
+}
+
+:root {
+  --ground: #080b20;
+  --ink: #f2f4fa;
+  --ink-2: #c3cbe0;
+  --ink-3: #a9b5d6;
+  --line: #26305e;
+  --plate: #1a2463;
+  --accent: #6ed7ff;
+  --on-light: #080b20;
+  --on-light-2: #3a4466;
+  --danger: #e83246;
+  --pad-a: #3cb95a;
+  --pad-b: #e83246;
+  --pad-x: #1e96eb;
+  --pad-y: #facd28;
+  --pad-ink: #06101f;
+  --spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --display: "Exo 2", "Arial Black", Impact, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ground);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* `hidden` wins over every display a rule here sets. */
+[hidden] {
+  display: none !important;
+}
+
+/* --- The stage ------------------------------------------------------------ */
+
+.tv {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--ground);
+  font-family: Rajdhani, "Arial Narrow", sans-serif;
+  transform: translate(-50%, -50%) scale(var(--k, 1));
+}
+
+.tv__stripe {
+  display: flex;
+  flex: none;
+  height: 8px;
+}
+
+.tv__stripe i {
+  flex: 1;
+}
+
+.tv__stripe i:nth-child(1), .tv__mark i:nth-child(1) { background: #e83246; }
+.tv__stripe i:nth-child(2), .tv__mark i:nth-child(2) { background: #f78c1e; }
+.tv__stripe i:nth-child(3), .tv__mark i:nth-child(3) { background: #facd28; }
+.tv__stripe i:nth-child(4), .tv__mark i:nth-child(4) { background: #3cb95a; }
+.tv__stripe i:nth-child(5), .tv__mark i:nth-child(5) { background: #1e96eb; }
+.tv__stripe i:nth-child(6), .tv__mark i:nth-child(6) { background: #8c50c8; }
+
+/* --- Header --------------------------------------------------------------- */
+
+.tv__head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 40px 72px 0;
+}
+
+.tv__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tv__mark {
+  display: flex;
+  gap: 3px;
+  height: 34px;
+  transform: skewX(-24deg);
+}
+
+.tv__mark i {
+  width: 7px;
+}
+
+.tv__wordmark {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 36px;
+  letter-spacing: 0.5px;
+}
+
+.tv__tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tv__tab {
+  padding: 10px 26px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-2);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tv__tab:hover {
+  color: var(--ink);
+}
+
+.tv__tab[aria-current="page"] {
+  background: var(--ink);
+  color: var(--on-light);
+}
+
+.tv__status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 28px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.tv__chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  padding: 8px 18px 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: none;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#tv-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tv__chip-card {
+  flex: none;
+  width: 22px;
+  height: 34px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: var(--plate);
+}
+
+.tv__clock {
+  font-size: 30px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Views ---------------------------------------------------------------- */
+
+.tv__main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.tv__view {
+  position: absolute;
+  inset: 0;
+}
+
+.tv__view[hidden] {
+  display: none;
+}
+
+.tv__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.tv__eyebrow::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Not in the slot: said in words and a hollow dot, not only a dimmer colour. */
+.tv__eyebrow.is-away {
+  color: var(--ink-3);
+}
+
+.tv__eyebrow.is-away::before {
+  background: none;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.tv__kicker {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* --- Home: the shelf ------------------------------------------------------ */
+
+.tv__view--shelf {
+  display: flex;
+  flex-direction: column;
+}
+
+.tv__shelf {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 36px;
+  margin: 0;
+  padding: 0 72px 0;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  scroll-padding-inline: 72px;
+}
+
+.tv__shelf::-webkit-scrollbar {
+  display: none;
+}
+
+/* Few cartridges sit in the middle of the shelf, as on the design. */
+.tv__shelf.is-short {
+  justify-content: center;
+}
+
+.tv__item {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 22px;
+  perspective: 1600px;
+  cursor: pointer;
+  outline: none;
+}
+
+.tv__item .sv {
+  --h: 400px;
+  --turn: 24deg;
+  transition: width 380ms var(--spring), height 380ms var(--spring);
+}
+
+.tv__item[aria-selected="true"] {
+  padding-bottom: 0;
+}
+
+.tv__item[aria-selected="true"] .sv {
+  --h: 560px;
+  --turn: 20deg;
+}
+
+/* The chosen one's underline, as on the design. */
+.tv__item::after {
+  content: "";
+  width: 220px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition: opacity 200ms ease, transform 380ms var(--spring);
+}
+
+.tv__item[aria-selected="true"]::after {
+  opacity: 1;
+  transform: none;
+}
+
+.tv__item:focus-visible .sv {
+  outline: 4px solid var(--accent);
+  outline-offset: 10px;
+}
+
+.tv__selected {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 36px 72px 0;
+  min-height: 210px;
+}
+
+.tv__selected-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tv__title {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 84px;
+  line-height: 0.95;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.tv__sub {
+  margin: 0;
+  overflow: hidden;
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv__tags {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tv__tag {
+  padding: 8px 16px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.tv__tag--pegi {
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.tv__empty {
+  position: absolute;
+  inset: 0 0 240px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  font-size: 30px;
+  color: var(--ink-2);
+}
+
+.tv__empty p {
+  margin: 0;
+}
+
+.tv__empty-title {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 56px;
+  color: var(--ink);
+}
+
+/* --- A cartridge ---------------------------------------------------------- */
+
+.tv__view--detail {
+  display: flex;
+  align-items: center;
+  gap: 96px;
+  padding: 0 120px;
+}
+
+.tv__detail-art {
+  position: relative;
+  flex: none;
+  width: 640px;
+  height: 820px;
+  perspective: 2000px;
+}
+
+.tv__detail-art .sv {
+  --h: 760px;
+  --turn: 22deg;
+  position: absolute;
+  right: 0;
+  top: 30px;
+}
+
+/* The back cover, behind the box, as on the design: a flat print turned a
+   little, since a translucent 3D box would flatten in every webview. */
+.tv__back-print {
+  position: absolute;
+  left: 0;
+  top: 120px;
+  width: 400px;
+  aspect-ratio: 71.5 / 101;
+  background: var(--art) center / cover no-repeat;
+  opacity: 0.55;
+  transform: perspective(1400px) rotateY(26deg);
+  transform-origin: left center;
+}
+
+.tv__detail-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.tv__headline {
+  margin: 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 76px;
+  line-height: 1;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.tv__headline .is-accent {
+  color: var(--sleeve-accent, var(--accent));
+}
+
+.tv__blurb {
+  margin: 0;
+  max-width: 880px;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.tv__blurb:empty {
+  display: none;
+}
+
+.tv__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.tv__row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 28px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  cursor: pointer;
+  outline: none;
+}
+
+.tv__row[aria-selected="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-light);
+}
+
+.tv__row:focus-visible {
+  outline: 4px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.tv__row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 34px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.tv__row-side {
+  flex: none;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.tv__note {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.tv__note:empty {
+  display: none;
+}
+
+.tv__note.has-card::before {
+  content: "";
+  flex: none;
+  width: 22px;
+  height: 34px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: var(--plate);
+}
+
+/* --- The memory card ------------------------------------------------------ */
+
+.tv__view--card {
+  display: flex;
+  align-items: center;
+  gap: 110px;
+  padding: 0 120px;
+}
+
+.tv__card-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  perspective: 1600px;
+}
+
+/* The NFC memory card, CR80 (54 by 85.6 mm), as the set prints it. */
+.tv__card-art {
+  position: relative;
+  width: 404px;
+  aspect-ratio: 54 / 85.6;
+  overflow: hidden;
+  border-radius: 26px;
+  background: linear-gradient(160deg, #141b4d, #070a24 70%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.08),
+    0 40px 80px -30px rgba(0, 0, 0, 0.9);
+  transform: rotateY(-16deg) rotateZ(3deg);
+}
+
+.tv__card-art::before {
+  /* The colour bars, running corner to corner. */
+  content: "";
+  position: absolute;
+  left: -40%;
+  right: -40%;
+  top: 46%;
+  height: 22%;
+  background: linear-gradient(
+    #e83246 0 16.6%, #f78c1e 16.6% 33.3%, #facd28 33.3% 50%,
+    #3cb95a 50% 66.6%, #1e96eb 66.6% 83.3%, #8c50c8 83.3%
+  );
+  transform: rotate(-36deg);
+}
+
+.tv__card-logo {
+  position: absolute;
+  left: 34px;
+  top: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 30px;
+}
+
+.tv__card-logo .tv__mark {
+  height: 26px;
+}
+
+.tv__card-logo .tv__mark i {
+  width: 5px;
+}
+
+.tv__card-word {
+  position: absolute;
+  left: 30px;
+  top: 112px;
+  margin: 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 76px;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+.tv__card-word span {
+  color: var(--accent);
+}
+
+.tv__card-plate {
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  bottom: 96px;
+  padding: 16px 20px;
+  border: 3px solid var(--accent);
+  border-radius: 14px;
+  background: #070a24;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 28px;
+  line-height: 1.05;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.tv__card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.tv__card-title {
+  margin: -6px 0 0;
+  overflow: hidden;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 96px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+/* More saves below than fit: the list fades out at the foot rather than
+   cutting a row in half, and the chosen one is scrolled into view. */
+.tv__rows.is-more {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 90px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 90px), transparent);
+}
+
+.tv__rows--saves {
+  max-height: 440px;
+}
+
+.tv__rows--saves .tv__row {
+  padding: 16px 24px;
+  gap: 28px;
+}
+
+.tv__save-art {
+  flex: none;
+  width: 68px;
+  height: 96px;
+  border-radius: 4px;
+  background: var(--art, none) center / cover no-repeat, var(--plate);
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 26px;
+  color: var(--ink);
+}
+
+.tv__save-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tv__save-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tv__row[aria-selected="true"] .tv__save-sub {
+  color: var(--on-light-2);
+}
+
+/* A save's state in a shape as well as a colour, as in the popup. */
+.lamp {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.lamp[data-tone="warn"] {
+  background: #f6c343;
+  transform: rotate(45deg);
+}
+
+.lamp[data-tone="bad"] {
+  background: var(--danger);
+}
+
+.lamp[data-tone="good"] {
+  border-radius: 50%;
+  background: var(--pad-a);
+}
+
+.lamp[data-tone="muted"] {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.tv__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.tv__btn {
+  padding: 16px 30px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 26px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tv__btn[hidden] {
+  display: none;
+}
+
+.tv__btn--fill {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--pad-ink);
+}
+
+.tv__btn--danger:hover,
+.tv__btn--danger.is-armed {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.tv__btn:focus-visible,
+.tv__tab:focus-visible,
+.tv__chip:focus-visible,
+.tv__prompt:focus-visible {
+  outline: 4px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.tv__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* --- Footer: the pad's prompts -------------------------------------------- */
+
+.tv__foot {
+  display: flex;
+  align-items: center;
+  gap: 44px;
+  padding: 36px 72px 44px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.tv__prompts {
+  display: flex;
+  align-items: center;
+  gap: 44px;
+}
+
+.tv__prompt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tv__prompt:disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.tv__badge {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--pad-ink);
+  font-weight: 700;
+}
+
+.tv__badge[data-button="A"] { background: var(--pad-a); }
+.tv__badge[data-button="B"] { background: var(--pad-b); }
+.tv__badge[data-button="X"] { background: var(--pad-x); }
+.tv__badge[data-button="Y"] { background: var(--pad-y); }
+
+.tv__badge[data-button="View"] {
+  width: auto;
+  padding: 0 12px;
+  border-radius: 20px;
+  background: var(--ink-2);
+  font-size: 18px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.tv__foot-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.tv__toast {
+  position: absolute;
+  left: 50%;
+  bottom: 130px;
+  max-width: 1200px;
+  margin: 0;
+  padding: 18px 30px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--on-light);
+  font-size: 26px;
+  font-weight: 700;
+  text-align: center;
+  transform: translateX(-50%);
+  box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.8);
+}
+
+.tv__toast.is-error {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* --- The sleeve (sleeve3d.js) --------------------------------------------- */
+
+.sv {
+  --h: 400px;
+  --w: calc(var(--h) * 71.5 / 101);
+  --d: calc(var(--h) * 16 / 101);
+  position: relative;
+  width: var(--w);
+  height: var(--h);
+  transform-style: preserve-3d;
+}
+
+/* The chosen one is lit from behind, as on the design: a layer in the same
+   3D space rather than a filter, which would flatten the box. */
+.tv__item[aria-selected="true"] .sv::before,
+.tv__detail-art .sv::before {
+  content: "";
+  position: absolute;
+  inset: -14% -22%;
+  background: radial-gradient(closest-side, rgba(110, 215, 255, 0.3), transparent);
+  transform: translateZ(calc(var(--d) * -2));
+  pointer-events: none;
+}
+
+.sv__box {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--turn, 24deg));
+  transition: transform 380ms var(--spring);
+}
+
+.sv__face {
+  position: absolute;
+  overflow: hidden;
+  backface-visibility: hidden;
+  background: var(--art, none) center / cover no-repeat, #11163a;
+}
+
+.sv__face--front,
+.sv__face--back {
+  inset: 0;
+  border-radius: 2px;
+}
+
+.sv__face--front {
+  transform: translateZ(calc(var(--d) / 2));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.sv__face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
+}
+
+.sv__face--left,
+.sv__face--right {
+  top: 0;
+  left: calc(50% - var(--d) / 2);
+  width: var(--d);
+  height: var(--h);
+}
+
+.sv__face--left {
+  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+}
+
+.sv__face--right {
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+}
+
+.sv__face--top,
+.sv__face--bottom {
+  top: calc(50% - var(--d) / 2);
+  left: 0;
+  width: var(--w);
+  height: var(--d);
+  background: #05071a;
+}
+
+.sv__face--top {
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
+}
+
+.sv__face--bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+}
+
+.sv__initials {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--h) * 0.18);
+}
+
+/* A side drawn from the title, in the sleeve's own layout: the colour bars at
+   the open end, a PC badge, the name running down, the rating at the foot. */
+.sv__drawn-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--d) * 0.18);
+  height: 100%;
+  padding-bottom: calc(var(--d) * 0.25);
+  background: linear-gradient(90deg, #0b1033, #141b4d 50%, #0b1033);
+  color: var(--ink);
+}
+
+.sv__stripes {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 9%;
+  flex: none;
+}
+
+.sv__stripes i {
+  flex: 1;
+}
+
+.sv__pc {
+  flex: none;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #000000;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--d) * 0.36);
+  line-height: 1;
+}
+
+.sv__spine-title {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  font-weight: 700;
+  font-size: calc(var(--d) * 0.42);
+  letter-spacing: 0.08em;
+  line-height: var(--d);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.sv__pegi {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--d) * 0.62);
+  height: calc(var(--d) * 0.72);
+  border-radius: 2px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: calc(var(--d) * 0.36);
+}
+
+.sv__shadow {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: calc(var(--h) * -0.05);
+  height: calc(var(--h) * 0.06);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.75), transparent);
+  transform: translateZ(calc(var(--d) * -1));
+}
+
+/* A finished render: a picture, already in 3D. */
+.sv.is-render {
+  width: auto;
+  transform-style: flat;
+}
+
+.sv__render {
+  display: block;
+  height: var(--h);
+  width: auto;
+  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.6));
+}
+
+.tv__item[aria-selected="true"] .sv.is-render .sv__render,
+.tv__detail-art .sv.is-render .sv__render {
+  filter: drop-shadow(0 0 36px rgba(110, 215, 255, 0.35));
+}
+
+/* --- Less motion ---------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .tv *,
+  .tv *::before,
+  .tv *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

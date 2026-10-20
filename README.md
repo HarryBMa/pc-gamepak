@@ -57,6 +57,10 @@ cartridge is ever executed automatically** — pressing Play is the gate.
   rail to pick from.
 - **Real eject.** The button parks the drive and powers it down, elevating only
   if the unprivileged path fails.
+- **TV mode.** A full-screen launcher for a television: every cartridge on a
+  shelf as its box, in 3D, built from the sleeve kit
+  [CoverForge](https://github.com/HarryBMa/cover-forge) exports, or from the
+  cover when there is none. Off by default; Settings → TV mode, or `--tv`.
 - **Controller and keyboard.** A pad navigates the list and works the buttons;
   so do the arrow keys, Enter, `E` and `I`.
 - **Skinnable, by the cartridge.** A `.gamepak/skin.css` on the drive restyles

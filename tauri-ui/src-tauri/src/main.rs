@@ -82,7 +82,7 @@ use gamepak_core::cartridge::{self, CartridgeInfo};
 use gamepak_core::remote;
 use gamepak_core::{
     busy, create, created, drives, edit, format, frontend, health, home, idle, insert, ludusavi,
-    memcard, playlog, playtrack, saves, settings, sgdb, shaders, stats, tuning, unboxed,
+    memcard, playlog, playtrack, saves, settings, sgdb, shaders, sleeve, stats, tuning, unboxed,
 };
 
 use std::collections::HashMap;
@@ -1481,6 +1481,40 @@ async fn pick_cover_image(window: tauri::WebviewWindow) -> Option<PickedCover> {
     })
 }
 
+/// Ask the user for a sleeve kit: the `sleeve.json` CoverForge exported, or
+/// the one inside an unpacked kit folder.
+#[tauri::command]
+async fn pick_sleeve_kit(window: tauri::WebviewWindow) -> Option<String> {
+    let file = window
+        .dialog()
+        .file()
+        .set_title("Choose a sleeve kit")
+        .add_filter("Sleeve kit", &["json"])
+        .blocking_pick_file()?;
+    Some(file.into_path().ok()?.to_string_lossy().into_owned())
+}
+
+/// Put a sleeve kit on a cartridge, replacing the one it had. Only a real
+/// cartridge: a registered GamePak has no drive to write to.
+#[tauri::command]
+fn install_sleeve_kit(drive_path: String, kit_path: String) -> Result<sleeve::Sleeve, String> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Err("Only a cartridge can carry a sleeve.".into());
+    }
+    cartridge::read_cartridge_info(&drive_path)?;
+    sleeve::install(Path::new(&drive_path), Path::new(&kit_path))
+}
+
+/// Take the sleeve kit off a cartridge.
+#[tauri::command]
+fn remove_sleeve_kit(drive_path: String) -> Result<(), String> {
+    if remote::marker_id(&drive_path).is_some() {
+        return Err("Only a cartridge can carry a sleeve.".into());
+    }
+    cartridge::read_cartridge_info(&drive_path)?;
+    sleeve::remove(Path::new(&drive_path))
+}
+
 /// What the picker came back with, and what is inside it.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -2305,6 +2339,8 @@ fn main() {
     }
     let settings = args.iter().any(|arg| arg == "--settings");
     let wizard = settings || args.iter().any(|arg| arg == "--create");
+    // The TV launcher instead of the popup: asked for, or chosen in Settings.
+    let tv = args.iter().any(|arg| arg == "--tv") || settings::load().tv_mode;
 
     // What the user asked for on insert, settled before Tauri is touched — so
     // `none` costs a process start and nothing else, and `auto_launch_game`
@@ -2401,6 +2437,9 @@ fn main() {
             set_settings,
             suggest_collection_name,
             pick_cover_image,
+            pick_sleeve_kit,
+            install_sleeve_kit,
+            remove_sleeve_kit,
             pick_game_folder,
             pick_rom_file,
             cartridge_health,
@@ -2455,7 +2494,19 @@ fn main() {
                 // resizing comment in open_wizard explicitly argues against.
                 open_wizard(app.handle(), settings)?;
             } else {
-                let launcher =
+                let launcher = if tv {
+                    // The whole screen, for a controller across a room. Not
+                    // always on top: a game it starts must be able to take
+                    // the screen from it.
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("tv.html".into()))
+                        .title("PC GamePak")
+                        .inner_size(1280.0, 720.0)
+                        .resizable(true)
+                        .fullscreen(true)
+                        .decorations(false)
+                        .visible(false)
+                        .build()?
+                } else {
                     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                         .title("PC GamePak")
                         .inner_size(420.0, 630.0)
@@ -2466,7 +2517,8 @@ fn main() {
                         .always_on_top(true)
                         .center()
                         .visible(false)
-                        .build()?;
+                        .build()?
+                };
                 round_dwm_corners(&launcher);
                 set_window_icons(&launcher, LAUNCHER_ICON);
                 // Closing the window while a game it can see is running only
