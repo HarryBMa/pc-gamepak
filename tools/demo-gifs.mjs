@@ -119,6 +119,34 @@ const DEMOS = {
       await page.waitForTimeout(1200);
     },
   },
+  // TV mode with a pad's worth of keys: along the shelf and back, into the
+  // XCOM sleeve's page and down its games, then the memory card and its saves.
+  "tv-demo": {
+    viewport: [1280, 720],
+    width: 960,
+    async setup(page) {
+      await page.goto("/tauri-ui/app/tv.html");
+      await page.waitForTimeout(2600);
+    },
+    async run(page) {
+      const press = async (key, wait) => {
+        await page.keyboard.press(key);
+        await page.waitForTimeout(wait);
+      };
+      await page.waitForTimeout(1200); // the holo sticker catches the light
+      for (let i = 0; i < 3; i += 1) await press("ArrowRight", 850);
+      for (let i = 0; i < 3; i += 1) await press("ArrowLeft", 650);
+      await page.waitForTimeout(500);
+      await press("i", 2400); // the XCOM page
+      await press("ArrowDown", 800);
+      await press("ArrowDown", 1000);
+      await press("Escape", 1300);
+      await press("m", 2200); // the memory card
+      await press("ArrowDown", 900);
+      await press("ArrowDown", 1400);
+      await press("m", 1500);
+    },
+  },
   // A card tapped at New GamePak becomes a game on another PC in four clicks.
   "gamepak-demo": {
     viewport: [1030, 660],

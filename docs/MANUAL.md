@@ -451,14 +451,18 @@ save-sync tool eats an eighty-hour run.
 
 A drive with a `memorycard.conf` carries saves and no games — the other half
 of a cartridge, the way a console's memory card was. Plug one in and the card
-itself sits in the middle of the window, with every save on it standing as a
-game case on a track round it. The chosen save is at the front; under the
+itself sits in the middle of the window, and every save on it stands round it
+on a track as a memory card of its own, with its game's art on the label: on
+a console a save was a block on the card, and here each one is a card. The
+cards are the PC GamePak set's: cut at one corner like an SD card, with the
+mark, a grip, gold contacts and CoverForge's holographic PC-GAMEPAK sticker,
+which catches the light. The chosen save is at the front; under the
 stage it says which copy is newer, when it was saved, how long it has been
 played and how much it holds, beside the one button that does what it needs:
 copy to this PC, or to the card. Anything a copy replaces is kept, as with
 every other save here.
 
-<img width="420" alt="The memory card, animated: the card slots into the middle of a dark stage and the saves fan out of it onto a ring round it. God of War comes to the front saying Newer on the card; Copy to PC brings it home and it reads Same on this PC and the card. Then the ring turns to Tunic, changed on both, which offers Keep the card's and Keep this PC's" src="memcard-demo.gif" />
+<img width="420" alt="The memory card, animated: the drive's own memory card, labelled MEMORY CARD and 128 GB, slots into the middle of a dark stage and the saves fan out of it onto a ring round it, each a smaller memory card with its game's art on the label and a holographic sticker. God of War comes to the front saying Newer on the card; Copy to PC brings it home and it reads Same on this PC and the card. Then the ring turns to Tunic, changed on both, which offers Keep the card's and Keep this PC's" src="memcard-demo.gif" />
 
 Left and right (or the d-pad, a scroll wheel, or the arrows either side of the
 stage) turn the track; clicking a case brings it to the front. A lamp on a
@@ -697,6 +701,8 @@ one says it is on the shelf rather than pretending it can start.
 
 Turn it on in the wizard's **Settings → TV mode**, or start the launcher with
 `--tv` to try it once.
+
+<img width="720" alt="TV mode, animated: a shelf of cartridge boxes with XCOM in the slot, its holographic sticker shimmering; the selection moves along the shelf and back, opens XCOM's page with its headline, blurb and three games, then the memory card screen, with the drive's memory card on the left and each save as a small card beside its name" src="tv-demo.gif" />
 
 Each cartridge stands as its sleeve, the PC GamePak box that
 [CoverForge](https://github.com/HarryBMa/cover-forge)'s cartridge-sleeve
@@ -1546,6 +1552,18 @@ it. CoverForge exports it; the wizard's Edit page puts it on a cartridge
   "accent": "#6ed7ff"
 }
 ```
+
+A design with holo foil (a CoverForge Studio object marked holo, like the
+PC-GAMEPAK holo sticker) adds a mask per face that has any, a PNG opaque
+where the foil shows, and the foil's look (`pastel`, `silver`, `oil` or
+`glitter`):
+
+```json
+"foil": { "style": "glitter", "front": "front-foil.png" }
+```
+
+TV mode lays a shimmer over the face through the mask, so the sticker moves
+and the print around it does not.
 
 Every field is optional. The headline's last line is drawn in `accent`.
 `rating` is a PEGI label (3, 7, 12, 16 or 18), and anything else is dropped.

@@ -28,6 +28,7 @@
 
 import { connect as connectGamepad } from "./gamepad.js";
 import { describe, needsAttention } from "./memcard.js";
+import { buildMemoryCard } from "./card3d.js";
 import { buildSleeve } from "./sleeve3d.js";
 
 const tauri = window.__TAURI__;
@@ -236,7 +237,6 @@ function selectedItem() {
 function renderShelf() {
   const items = state.library;
   el.shelfEmpty.hidden = items.length > 0;
-  el.shelf.classList.toggle("is-short", items.length <= 6);
   el.shelf.replaceChildren(
     ...items.map((item, index) => {
       const li = document.createElement("li");
@@ -407,7 +407,8 @@ function blocks() {
 
 function renderCard() {
   const card = state.card;
-  el.cardArt.replaceChildren(...cardFace(card?.title ?? ""));
+  // The set's card, with the card's name on its plate.
+  el.cardArt.replaceChildren(buildMemoryCard({ plate: card?.title ?? "" }));
   el.cardSlot.textContent = card ? "Card in the slot" : "No card in the slot";
   el.cardSlot.classList.toggle("is-away", !card);
   el.cardTitle.textContent = card?.title ?? "Memory card";
@@ -433,11 +434,11 @@ function renderCard() {
       li.setAttribute("role", "option");
       li.dataset.index = String(index);
       li.setAttribute("aria-label", `${block.title}. ${said}.`);
+      // The save as a memory card of its own, as on the popup, with its
+      // game's art on the label (the row says its name).
       const art = document.createElement("span");
       art.className = "tv__save-art";
-      const icon = safeArt(block.icon);
-      if (icon) art.style.setProperty("--art", `url("${new URL(icon, document.baseURI).href}")`);
-      else art.textContent = (block.title || "?").trim().charAt(0).toUpperCase();
+      art.append(buildMemoryCard({ kind: "save", art: block.icon }));
       const text = document.createElement("span");
       text.className = "tv__save-text";
       const title = document.createElement("span");
@@ -461,29 +462,6 @@ function renderCard() {
     }),
   );
   selectSave(state.cardIndex, true);
-}
-
-/** The card itself, as the set prints it: the mark, the word, the name. */
-function cardFace(name) {
-  const logo = document.createElement("span");
-  logo.className = "tv__card-logo";
-  const mark = document.createElement("span");
-  mark.className = "tv__mark";
-  for (let i = 0; i < 6; i += 1) mark.append(document.createElement("i"));
-  logo.append(mark, document.createTextNode("PC-GAMEPAK"));
-  const word = document.createElement("p");
-  word.className = "tv__card-word";
-  const accent = document.createElement("span");
-  accent.textContent = "Card";
-  word.append("Memory", document.createElement("br"), accent);
-  const parts = [logo, word];
-  if (name) {
-    const plate = document.createElement("span");
-    plate.className = "tv__card-plate";
-    plate.textContent = name;
-    parts.push(plate);
-  }
-  return parts;
 }
 
 function selectSave(index, force = false) {

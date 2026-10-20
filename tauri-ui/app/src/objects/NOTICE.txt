@@ -1,0 +1,7 @@
+gp-holo.svg and gp-planet.svg are CoverForge's PC-GAMEPAK stamps (the
+holographic sticker and the planet), copied from its generated stamp set
+(src/studio/stamps.generated.ts in github.com/HarryBMa/cover-forge).
+
+CoverForge is released under CC0 1.0 Universal. The sticker's lettering is
+Exo 2, converted to outlines (SIL Open Font License 1.1, see
+../fonts/LICENSES.txt).

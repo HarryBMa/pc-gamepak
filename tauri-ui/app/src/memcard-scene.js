@@ -27,6 +27,8 @@
  * once the ring settles and the pointer is still, nothing runs.
  */
 
+import { buildMemoryCard } from "./card3d.js";
+
 /** How far apart neighbours sit on an arc, in degrees. */
 const STEP_ARC = 40;
 const STEP_MIN = 26;
@@ -76,32 +78,13 @@ function snap(s) {
 }
 
 /**
- * The card itself: a slab of moulded plastic with a grip at the top, a recessed
- * label, a moulded arrow and the connector along its bottom edge.
+ * The card itself, hovering over the track: the drive's own memory card
+ * (card3d.js), with the shadow it casts on the floor under it.
  */
 export function buildCard() {
   const card = document.createElement("div");
   card.className = "mcx";
-  const slab = document.createElement("div");
-  slab.className = "mcx__slab";
-  // The front last: in 3D the order does not matter, and if 3D is ever
-  // painted flattened, the last face drawn is the one on top.
-  for (const face of ["back", "left", "right", "top", "bottom", "front"]) {
-    const side = document.createElement("div");
-    side.className = `mcx__face mcx__face--${face}`;
-    slab.append(side);
-  }
-  const front = slab.querySelector(".mcx__face--front");
-  front.innerHTML = `
-    <span class="mcx__grip"></span>
-    <span class="mcx__label">
-      <span class="mcx__stripe"></span>
-      <span class="mcx__word">Memory<br />Card</span>
-      <span class="mcx__size"></span>
-    </span>
-    <span class="mcx__arrow"></span>
-    <span class="mcx__teeth"></span>`;
-  card.append(slab);
+  card.append(buildMemoryCard());
   const shadow = document.createElement("div");
   shadow.className = "mcx__shadow";
   card.append(shadow);

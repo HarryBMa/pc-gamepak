@@ -185,8 +185,8 @@ Controls are gently squared (5px); build cards and rows a little softer (11px); 
 - `well` background, hairline border, 11px radius, 10×12px padding; a dashed border when empty. States an answer with the way to change it (Choose / Change).
 
 ### The Memory Card Stage (signature)
-- The memory card as hardware: a slab of smoked plastic with a moulded grip, a recessed label (its capacity, only when the drive reported one, and a stripe of the accent) and the connector's pins along its bottom edge. It hovers over the middle of the stage and leans after the pointer and the turning track; it never moves on its own.
-- Saves as game cases on a circular track round it, on a floor seen from slightly above: a ring for five to thirteen, a short arc for fewer, an arc with faded ends for more. The chosen case stands at the front, a step forward and a little larger, turned just off square so its spine shows, with an accent border. Cases round the curve fall into shade rather than shrink to nothing, so the size of the collection reads at a glance.
+- The memory card as hardware, the PC GamePak set's: 24 by 32 with one corner cut, like an SD card, every edge a face of its own (the cut one too), the mark and a moulded grip across the top, a label window, gold contacts along the foot, and CoverForge's holographic PC-GAMEPAK sticker, which shimmers. Its colours and type are its own, not the window's: navy, the six bars, Exo 2 italic. The drive's card has the set's label (the planet over the bars, MEMORY CARD, and a plate with its capacity, only when the drive reported one). It hovers over the middle of the stage and leans after the pointer and the turning track; it never moves on its own.
+- Each save is a memory card of its own, with its game's art and name on the label, on a circular track round the drive's card, on a floor seen from slightly above: a ring for five to thirteen, a short arc for fewer, an arc with faded ends for more. The chosen card stands at the front, a step forward and a little larger, turned just off square so its edge shows, ringed in the accent. Cards round the curve fall into shade rather than shrink to nothing, so the size of the collection reads at a glance.
 - A lamp on a case's cover for a save that needs something, in the lamp's shape, readable from across the track.
 - Motion is springs towards targets set by the selection alone, drawn only while something moves; the card slots in and the saves fan out of it on opening. Reduced motion puts everything straight in place. Built from CSS 3D transforms (no WebGL), with a flat strip where 3D is missing.
 - Under the stage, a fixed-height panel: the save's name, its state with its lamp, only the facts the drive and the PC actually hold, and the one filled button the state calls for.
@@ -196,6 +196,8 @@ Controls are gently squared (5px); build cards and rows a little softer (11px); 
 - Cartridges stand as their sleeves (71.5 × 101 × 16 mm, in proportion) turned a little off square. The selected one is larger, lit from behind and underlined; the rest stay in their colours. A cartridge that is not in the slot says "On the shelf" before anything else, and Play does not pretend it can start.
 - Faces are built back to front, so where 3D is flattened the front is still the face you see. The glow is its own layer behind the box, because a filter or opacity on the box would flatten it.
 - Words on a page are the kit's, never filled in: no rating, blurb or genre unless the kit or the cartridge has one.
+- Holo foil from the kit shimmers through its mask, slowly, and only the foil: the print round it stays still. Reduced motion stills it.
+- The memory card screen shows the drive's card, turned and lit from behind, and each save as a small card beside its name, the same objects as the popup's (objects.css).
 
 ## Do's and Don'ts
 

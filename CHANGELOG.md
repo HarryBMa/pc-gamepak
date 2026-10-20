@@ -31,11 +31,24 @@ manual's *Cartridge format* has the layout.
 X is Eject on every TV screen, as in the popup. The memory card is on View,
 or `M`.
 
+A kit can carry **holo foil**: CoverForge's holographic PC-GAMEPAK sticker
+shimmers on the box, through a mask the export cuts for each face. The
+preview's cartridge is an XCOM collection with the sleeve and sticker made for
+it in CoverForge.
+
+### Memory cards that look like memory cards
+
+The memory card is now the PC GamePak set's card, in both windows: cut at one
+corner like an SD card, with the mark, a grip, gold contacts and the
+holographic PC-GAMEPAK sticker. And every save is a memory card of its own,
+with its game's art on the label, standing round the drive's card in the
+popup and beside each save in TV mode.
+
 ### The memory card, as a memory card
 
-The memory card view is now a stage: the card itself hovers in the middle, a
-slab of smoked plastic with its grip, label and connector, and every save on it
-stands as a game case on a track round it, the chosen one at the front, stepped
+The memory card view is now a stage: the card itself hovers in the middle, with
+its grip, label and connector, and every save on it stands on a track round
+it, the chosen one at the front, stepped
 forward and lit. Left and right turn the track (as do the d-pad, a scroll
 wheel and the arrows either side); a click brings a case to the front. Opening
 it slots the card in and fans the saves out of it. Under the stage, a panel

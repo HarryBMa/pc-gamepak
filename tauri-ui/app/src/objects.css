@@ -1,0 +1,596 @@
+/* ==========================================================================
+   The PC GamePak objects: the sleeve and the memory card, in 3D
+   ==========================================================================
+   Shared by the popup (index.html) and TV mode (tv.html), so a save on the
+   popup's memory card and a cartridge on the TV shelf are the same box, and
+   the card in the popup's slot is the card on the TV. Their colours and type
+   are their own, not either window's theme: they are things in the room,
+   printed the way CoverForge prints them. */
+
+@font-face {
+  font-family: "Exo 2";
+  font-style: italic;
+  font-weight: 800 900;
+  font-display: swap;
+  src: url("fonts/exo2-italic-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/rajdhani-500-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/rajdhani-600-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/rajdhani-700-latin.woff2") format("woff2");
+}
+
+:root {
+  --obj-ink: #f2f4fa;
+  --obj-display: "Exo 2", "Arial Black", Impact, sans-serif;
+  --obj-accent: #6ed7ff;
+}
+
+/* --- The sleeve (sleeve3d.js) --------------------------------------------- */
+
+.sv {
+  --h: 400px;
+  --w: calc(var(--h) * 71.5 / 101);
+  --d: calc(var(--h) * 16 / 101);
+  position: relative;
+  width: var(--w);
+  height: var(--h);
+  transform-style: preserve-3d;
+}
+
+.sv__box {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--turn, 24deg));
+  transition: transform 380ms cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+
+.sv__face {
+  position: absolute;
+  overflow: hidden;
+  backface-visibility: hidden;
+  background: var(--art, none) center / cover no-repeat, #11163a;
+}
+
+.sv__face--front,
+.sv__face--back {
+  inset: 0;
+  border-radius: 2px;
+}
+
+.sv__face--front {
+  transform: translateZ(calc(var(--d) / 2));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.sv__face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
+}
+
+.sv__face--left,
+.sv__face--right {
+  top: 0;
+  left: calc(50% - var(--d) / 2);
+  width: var(--d);
+  height: var(--h);
+}
+
+.sv__face--left {
+  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+}
+
+.sv__face--right {
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+}
+
+.sv__face--top,
+.sv__face--bottom {
+  top: calc(50% - var(--d) / 2);
+  left: 0;
+  width: var(--w);
+  height: var(--d);
+  background: #05071a;
+}
+
+.sv__face--top {
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
+}
+
+.sv__face--bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+}
+
+.sv__initials {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--h) * 0.18);
+}
+
+/* A side drawn from the title, in the sleeve's own layout: the colour bars at
+   the open end, a PC badge, the name running down, the rating at the foot. */
+.sv__drawn-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--d) * 0.18);
+  height: 100%;
+  padding-bottom: calc(var(--d) * 0.25);
+  background: linear-gradient(90deg, #0b1033, #141b4d 50%, #0b1033);
+  color: var(--obj-ink);
+}
+
+.sv__stripes {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 9%;
+  flex: none;
+}
+
+.sv__stripes i {
+  flex: 1;
+}
+
+.sv__pc {
+  flex: none;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #000000;
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--d) * 0.36);
+  line-height: 1;
+}
+
+.sv__spine-title {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  font-weight: 700;
+  font-size: calc(var(--d) * 0.42);
+  letter-spacing: 0.08em;
+  line-height: var(--d);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.sv__pegi {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--d) * 0.62);
+  height: calc(var(--d) * 0.72);
+  border-radius: 2px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: calc(var(--d) * 0.36);
+}
+
+.sv__shadow {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: calc(var(--h) * -0.05);
+  height: calc(var(--h) * 0.06);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.75), transparent);
+  transform: translateZ(calc(var(--d) * -1));
+}
+
+/* Holo foil: a rainbow sheet seen through the kit's mask, multiplied into the
+   print so a white sticker turns to colour and its ink stays ink. It drifts,
+   as foil does when the light moves across it. Each style is CoverForge's,
+   roughly: pastel and silver soft, oil deep, glitter flecked. */
+.sv__foil {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: var(--mask) center / 100% 100% no-repeat;
+  mask: var(--mask) center / 100% 100% no-repeat;
+  mix-blend-mode: multiply;
+  background:
+    repeating-linear-gradient(60deg, rgba(255, 255, 255, 0) 0 3px, rgba(255, 255, 255, 0.35) 3px 4px),
+    linear-gradient(115deg,
+      #ff9ad5, #ffd28a, #fdf59a, #a8f5c2, #96e6ff, #b9a8ff, #ff9ad5,
+      #ffd28a, #fdf59a, #a8f5c2, #96e6ff, #b9a8ff, #ff9ad5);
+  background-size: 100% 100%, 400% 400%;
+  background-position: 0 0, 0% 30%;
+  animation: sv-holo 7s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.sv__foil--silver {
+  filter: saturate(0.45) brightness(1.08);
+}
+
+.sv__foil--oil {
+  filter: saturate(1.6) brightness(0.9);
+}
+
+/* Glitter: flecks of colour over the sheen, each its own size and step so
+   they never line up. */
+.sv__foil--glitter {
+  background:
+    radial-gradient(circle, rgba(60, 120, 255, 0.55) 0 0.6px, transparent 1.2px) 0 0 / 7px 9px,
+    radial-gradient(circle, rgba(255, 60, 160, 0.5) 0 0.6px, transparent 1.2px) 3px 4px / 11px 8px,
+    radial-gradient(circle, rgba(40, 200, 120, 0.5) 0 0.7px, transparent 1.3px) 5px 1px / 13px 12px,
+    linear-gradient(115deg,
+      #ff8fd0, #ffc970, #fbf27e, #8ff0b4, #7fdcff, #a996ff, #ff8fd0,
+      #ffc970, #fbf27e, #8ff0b4, #7fdcff, #a996ff, #ff8fd0) 0% 30% / 400% 400%;
+  animation-name: sv-holo-glitter;
+}
+
+@keyframes sv-holo {
+  to {
+    background-position: 0 0, 100% 70%;
+  }
+}
+
+@keyframes sv-holo-glitter {
+  to {
+    background-position: 0 0, 3px 4px, 5px 1px, 100% 70%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv__foil {
+    animation: none;
+  }
+}
+
+/* A finished render: a picture, already in 3D. */
+.sv.is-render {
+  width: auto;
+  transform-style: flat;
+}
+
+.sv__render {
+  display: block;
+  height: var(--h);
+  width: auto;
+  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.6));
+}
+
+/* --- The memory card (card3d.js) ----------------------------------------- */
+
+/* A memory card, 24 by 32 with its top right corner cut off. Everything is in
+   --u, a twenty-fourth of its width (a millimetre on a real one), so it is the
+   same card at any size. The front and back are cut to the shape; the edges
+   are faces of their own, the cut one turned to follow the corner. */
+.mcard {
+  --cw: 240px;
+  --u: calc(var(--cw) / 24);
+  --ch: calc(var(--u) * 32);
+  --cut: calc(var(--u) * 5);
+  --cd: max(3px, calc(var(--u) * 1.8));
+  --body: #10164a;
+  position: relative;
+  width: var(--cw);
+  height: var(--ch);
+  transform-style: preserve-3d;
+  color: var(--obj-ink);
+}
+
+.mcard__slab {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.mcard__face {
+  position: absolute;
+  overflow: hidden;
+  opacity: var(--fade, 1);
+}
+
+.mcard__face--front,
+.mcard__face--back {
+  inset: 0;
+  backface-visibility: hidden;
+  /* The cut corner, and the other three a little rounded. */
+  clip-path: polygon(
+    calc(var(--u) * 0.9) 0, calc(100% - var(--cut)) 0, 100% var(--cut),
+    100% calc(100% - var(--u) * 0.9), calc(100% - var(--u) * 0.9) 100%,
+    calc(var(--u) * 0.9) 100%, 0 calc(100% - var(--u) * 0.9), 0 calc(var(--u) * 0.9)
+  );
+}
+
+.mcard__face--front {
+  transform: translateZ(calc(var(--cd) / 2));
+  background:
+    /* moulded grain */
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    linear-gradient(160deg, #222c78, var(--body) 45%, #070a24);
+}
+
+/* The light along the top edge of the moulding. */
+.mcard__face--front::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.14), transparent 30%);
+  pointer-events: none;
+}
+
+.mcard__face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--cd) / 2));
+  background: linear-gradient(160deg, #141b4d, #070a24);
+}
+
+/* The edges: a strip as deep as the card, stood up along each side. */
+.mcard__face--top,
+.mcard__face--bottom {
+  height: var(--cd);
+  background: #20296a;
+}
+
+.mcard__face--top {
+  left: calc(var(--u) * 0.9);
+  top: calc(var(--cd) / -2);
+  width: calc(var(--cw) - var(--cut) - var(--u) * 0.9);
+  transform: rotateX(90deg);
+}
+
+.mcard__face--bottom {
+  left: calc(var(--u) * 0.9);
+  top: calc(var(--ch) - var(--cd) / 2);
+  width: calc(var(--cw) - var(--u) * 1.8);
+  transform: rotateX(-90deg);
+  background: #0b1036;
+}
+
+.mcard__face--left,
+.mcard__face--right {
+  width: var(--cd);
+  background: #1a2463;
+}
+
+.mcard__face--left {
+  left: calc(var(--cd) / -2);
+  top: calc(var(--u) * 0.9);
+  height: calc(var(--ch) - var(--u) * 1.8);
+  transform: rotateY(-90deg);
+}
+
+.mcard__face--right {
+  left: calc(var(--cw) - var(--cd) / 2);
+  top: var(--cut);
+  height: calc(var(--ch) - var(--cut) - var(--u) * 0.9);
+  transform: rotateY(90deg);
+  background: #121a52;
+}
+
+/* The cut corner's edge, the length of the cut's diagonal, turned 45° to lie
+   along it. */
+.mcard__face--cut {
+  --len: calc(var(--cut) * 1.4142);
+  left: calc(var(--cw) - var(--cut) / 2 - var(--len) / 2);
+  top: calc(var(--cut) / 2 - var(--cd) / 2);
+  width: var(--len);
+  height: var(--cd);
+  transform: rotateZ(45deg) rotateX(90deg);
+  background: #2a3584;
+}
+
+/* The mark and the name, across the top. */
+.mcard__head {
+  position: absolute;
+  left: calc(var(--u) * 1.6);
+  top: calc(var(--u) * 1.3);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.6);
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.7);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mcard__mark {
+  display: flex;
+  gap: calc(var(--u) * 0.18);
+  height: calc(var(--u) * 1.7);
+  transform: skewX(-20deg);
+}
+
+.mcard__mark i {
+  width: calc(var(--u) * 0.42);
+}
+
+/* The grip, moulded into the left of the top. */
+.mcard__grip {
+  position: absolute;
+  left: calc(var(--u) * 1.6);
+  top: calc(var(--u) * 3.8);
+  width: calc(var(--u) * 13);
+  height: calc(var(--u) * 1.4);
+  background: repeating-linear-gradient(90deg,
+    rgba(255, 255, 255, 0.16) 0 calc(var(--u) * 0.18),
+    rgba(0, 0, 0, 0.45) calc(var(--u) * 0.18) calc(var(--u) * 0.4),
+    transparent calc(var(--u) * 0.4) calc(var(--u) * 0.9));
+  border-radius: calc(var(--u) * 0.2);
+}
+
+/* The label window, set into the face. */
+.mcard__label {
+  position: absolute;
+  left: calc(var(--u) * 1.6);
+  right: calc(var(--u) * 1.6);
+  top: calc(var(--u) * 6);
+  height: calc(var(--u) * 20.4);
+  overflow: hidden;
+  border-radius: calc(var(--u) * 0.9);
+  box-shadow: inset 0 calc(var(--u) * 0.2) calc(var(--u) * 0.5) rgba(0, 0, 0, 0.7),
+    0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.12);
+}
+
+.mcard__label--save {
+  background: var(--art, none) center / cover no-repeat, linear-gradient(160deg, #2a3584, #10164a);
+}
+
+.mcard__initials {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--u) * 7);
+}
+
+/* A save's game, along the foot of its label. */
+.mcard__title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: calc(var(--u) * 3) calc(var(--u) * 1.2) calc(var(--u) * 1);
+  background: linear-gradient(transparent, rgba(5, 7, 26, 0.92) 55%);
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--u) * 2.1);
+  line-height: 1;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* The drive's label: the set's colour bars, the planet, the word, the plate. */
+.mcard__label--drive {
+  background: linear-gradient(160deg, #1a2463, #070a24 75%);
+}
+
+.mcard__bars {
+  position: absolute;
+  left: -40%;
+  right: -40%;
+  top: 60%;
+  height: 24%;
+  background: linear-gradient(
+    #e83246 0 16.6%, #f78c1e 16.6% 33.3%, #facd28 33.3% 50%,
+    #3cb95a 50% 66.6%, #1e96eb 66.6% 83.3%, #8c50c8 83.3%
+  );
+  transform: rotate(-32deg);
+}
+
+/* The planet, risen over the bars at the foot of the label. */
+.mcard__planet {
+  position: absolute;
+  left: calc(var(--u) * 0.4);
+  bottom: calc(var(--u) * 0.4);
+  width: calc(var(--u) * 9.5);
+}
+
+.mcard__word {
+  position: absolute;
+  left: calc(var(--u) * 1.2);
+  top: calc(var(--u) * 1.3);
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: calc(var(--u) * 3.5);
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+.mcard__word span {
+  color: var(--obj-accent);
+}
+
+/* The name, or the size. Never smaller than the launcher's smallest text, so
+   a small card's plate still reads. */
+.mcard__plate {
+  position: absolute;
+  left: calc(var(--u) * 1.2);
+  right: calc(var(--u) * 1.2);
+  top: calc(var(--u) * 8.4);
+  padding: calc(var(--u) * 0.7) calc(var(--u) * 0.9);
+  border: max(1px, calc(var(--u) * 0.22)) solid var(--obj-accent);
+  border-radius: calc(var(--u) * 0.7);
+  background: #070a24;
+  font-family: var(--obj-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: max(calc(var(--u) * 1.9), 11px);
+  line-height: 1.05;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.mcard__plate:empty {
+  display: none;
+}
+
+/* CoverForge's holo PC-GAMEPAK sticker, stuck over the corner of the label. */
+.mcard__sticker {
+  position: absolute;
+  right: calc(var(--u) * 0.9);
+  top: calc(var(--u) * 23.2);
+  width: calc(var(--u) * 8.4);
+  aspect-ratio: 7 / 4;
+  transform: rotate(-4deg);
+  filter: drop-shadow(0 calc(var(--u) * 0.15) calc(var(--u) * 0.2) rgba(0, 0, 0, 0.6));
+}
+
+.mcard__sticker img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* On a save's card, the sticker goes up on the corner of the label, clear of
+   the game's name along its foot. */
+.mcard--save .mcard__sticker {
+  top: calc(var(--u) * 6.6);
+  right: calc(var(--u) * 1);
+  transform: rotate(5deg);
+}
+
+/* The contacts along the foot. */
+.mcard__pins {
+  position: absolute;
+  left: calc(var(--u) * 2.2);
+  right: calc(var(--u) * 2.2);
+  bottom: calc(var(--u) * 0.9);
+  height: calc(var(--u) * 1.9);
+  display: flex;
+  justify-content: space-between;
+}
+
+.mcard__pins i {
+  width: calc(var(--u) * 1.5);
+  border-radius: calc(var(--u) * 0.2) calc(var(--u) * 0.2) 0 0;
+  background: linear-gradient(#f3d27a, #b8862e);
+  box-shadow: inset 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.5);
+}

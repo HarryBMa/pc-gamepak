@@ -1,48 +1,54 @@
 /**
  * The TV launcher's stand-in backend, for looking at it in a browser.
  *
- * Loaded only when there is no Tauri. The games are made up and drawn with the
- * preview's own pictures, so the screenshots and demos made from it carry
- * nobody's box art. `?drive=` (empty for no cartridge), `?state=memcard` (a
- * card on its own) and `?view=card` pick what is in the slot and what shows.
+ * Loaded only when there is no Tauri. The cartridge in the slot is an XCOM
+ * collection carrying a real sleeve kit: the faces and words CoverForge
+ * exported from the PC GamePak sleeve made for it (src/demo/xcom-*.jpg). The
+ * rest of the shelf is made up, drawn with the preview's own pictures.
+ * `?drive=` (empty for no cartridge), `?state=memcard` (a card on its own) and
+ * `?view=card` pick what is in the slot and what shows.
  */
 
 const params = new URLSearchParams(location.search);
 const now = () => Math.floor(Date.now() / 1000);
 
 /** The cartridge in the slot: a collection that carries a sleeve kit. */
-const MOONFALL = {
-  title: "Moonfall Trilogy",
-  cover: "src/demo/gow-collection.jpg",
+const XCOM = {
+  title: "XCOM",
+  cover: "src/demo/xcom-front.jpg",
   drive_path: "X",
-  executable: "steam://rungameid/1",
+  executable: "steam://rungameid/200510",
   is_bundle: true,
   memory_card: true,
   platform: "PC",
   games: [
-    { title: "Moonrise", executable: "steam://rungameid/1", cover: "src/demo/gow-1.jpg" },
-    { title: "Moonfall", executable: "steam://rungameid/2", cover: "src/demo/gow-2.jpg" },
-    { title: "Moonset", executable: "steam://rungameid/3", cover: "src/demo/gow-collection.jpg" },
+    { title: "XCOM: Enemy Unknown", executable: "steam://rungameid/200510", cover: "src/demo/xcom-front.jpg" },
+    { title: "XCOM 2", executable: "steam://rungameid/268500", cover: "src/demo/xcom-front.jpg" },
+    { title: "XCOM: Chimera Squad", executable: "steam://rungameid/882100", cover: "src/demo/xcom-front.jpg" },
   ],
   sleeve: {
-    front: "src/demo/gow-collection.jpg",
-    back: "src/demo/gow-2.jpg",
-    spine: "",
-    spineRight: "",
+    front: "src/demo/xcom-front.jpg",
+    back: "src/demo/xcom-back.jpg",
+    spine: "src/demo/xcom-spine.jpg",
+    spineRight: "src/demo/xcom-spine-right.jpg",
     boxRender: "",
-    tagline: "Moonrise · Moonfall · Moonset",
-    headline: "THREE NIGHTS.\nONE LONG DAWN.",
+    tagline: "Enemy Unknown  •  XCOM 2  •  Chimera Squad",
+    headline: "THREE CAMPAIGNS.\nONE WAR FOR EARTH.",
     blurb:
-      "Climb the mountain before the moon comes down, hold the valley through the longest night, then find out who was waiting at the top.",
-    features: "1 PLAYER · ACTION ADVENTURE · WINDOWS 10 / 11",
-    rating: "12",
-    descriptor: "Fantasy violence",
+      "Earth has one line of defence, and you command it. Stop the first invasion, lead the resistance twenty years after the aliens won, then hold a fragile peace in City 31. The complete Firaxis XCOM saga, together on one PC GamePak.",
+    features: "1 player  ·  Turn-based strategy  ·  Windows 10 / 11",
+    rating: "18",
+    descriptor: "Violence",
     accent: "#6ed7ff",
-    legal: "",
+    legal:
+      "XCOM © Take-Two Interactive Software. Developed by Firaxis Games, published by 2K. Fan-made sleeve for personal use only. Not for sale.",
+    // The PC-GAMEPAK holo sticker on the front, in CoverForge's glitter foil.
+    foil: { style: "glitter", front: "src/demo/xcom-front-foil.png", back: "", spine: "", spineRight: "" },
   },
 };
 
 const CREATED = [
+  { id: "0", title: "XCOM", games: ["XCOM: Enemy Unknown", "XCOM 2", "XCOM: Chimera Squad"], driveLabel: "XCOM", cover: "src/demo/xcom-front.jpg" },
   { id: "1", title: "Moonfall Trilogy", games: ["Moonrise", "Moonfall", "Moonset"], driveLabel: "MOON", cover: "src/demo/gow-collection.jpg" },
   { id: "2", title: "Cinder & Salt", games: ["Cinder & Salt"], driveLabel: "CINDER", cover: "src/demo/cover.jpg" },
   { id: "3", title: "Hollow Peaks", games: ["Hollow Peaks"], driveLabel: "PEAKS", cover: "src/demo/gow-1.jpg" },
@@ -69,7 +75,8 @@ function block(id, title, icon, direction, hostBytes, cartridgeBytes, ago) {
 }
 
 const BLOCKS = [
-  block("moonfall", "Moonfall Trilogy", "src/demo/gow-collection.jpg", "pull", 30_000_000, 33_500_000, 86_400),
+  block("xcom2", "XCOM 2", "src/demo/xcom-front.jpg", "pull", 30_000_000, 33_500_000, 86_400),
+  block("moonfall", "Moonfall Trilogy", "src/demo/gow-collection.jpg", "inSync", 8_200_000, 8_200_000, 4 * 86_400),
   block("cinder", "Cinder & Salt", "src/demo/cover.jpg", "inSync", 2_400_000, 2_400_000, 2 * 86_400),
   block("peaks", "Hollow Peaks", "src/demo/gow-1.jpg", "conflict", 800_000, 810_000, 6 * 86_400),
   block("storm", "Stormline", "src/demo/gow-2.jpg", "push", 41_000_000, 38_000_000, 3_600),
@@ -85,7 +92,7 @@ export async function demoInvoke(command, args) {
       return { title: "Harry's Memory Card", cardOnly, blocks: BLOCKS };
     case "parse_cartridge":
       if (cardOnly) throw "not a cartridge";
-      return MOONFALL;
+      return XCOM;
     case "can_eject":
       return true;
     case "cartridge_health":

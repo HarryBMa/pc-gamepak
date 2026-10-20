@@ -16,6 +16,7 @@
 //! .gamepak/sleeve/spine.png        16 × 101 mm, the left side as the front faces you
 //! .gamepak/sleeve/spine-right.png  16 × 101 mm
 //! .gamepak/sleeve/box.png          optional: a rendered picture of the whole box
+//! .gamepak/sleeve/front-foil.png   optional: where holo foil shows, in the alpha
 //! ```
 //!
 //! ```json
@@ -31,7 +32,8 @@
 //!   "rating": "18",
 //!   "descriptor": "Violence",
 //!   "accent": "#6ed7ff",
-//!   "legal": "…"
+//!   "legal": "…",
+//!   "foil": { "style": "glitter", "front": "front-foil.png" }
 //! }
 //! ```
 //!
@@ -60,6 +62,8 @@ const MAX_JSON_BYTES: u64 = 64 * 1024;
 const MAX_TEXT_CHARS: usize = 1200;
 /// The PEGI labels printed on PC boxes.
 pub const RATINGS: [&str; 5] = ["3", "7", "12", "16", "18"];
+/// CoverForge's holo foil looks. A kit naming another is shown as the first.
+pub const FOIL_STYLES: [&str; 4] = ["pastel", "silver", "oil", "glitter"];
 
 /// A cartridge's sleeve, ready for the window: faces as `data:` URIs, empty
 /// where the kit has none, and the words checked.
@@ -82,6 +86,32 @@ pub struct Sleeve {
     /// `#rgb` or `#rrggbb`, or empty.
     pub accent: String,
     pub legal: String,
+    /// Holo foil on the sleeve (a sticker, a logo), when the design has any.
+    pub foil: Option<Foil>,
+}
+
+/// Where a sleeve's holo foil shows, face by face, and how it shimmers. Each
+/// mask is a PNG `data:` URI, opaque where the foil is, or empty for a face
+/// with none.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Foil {
+    /// One of [`FOIL_STYLES`].
+    pub style: String,
+    pub front: String,
+    pub back: String,
+    pub spine: String,
+    pub spine_right: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct KitFoil {
+    style: Option<String>,
+    front: Option<String>,
+    back: Option<String>,
+    spine: Option<String>,
+    spine_right: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +137,8 @@ struct Kit {
     accent: Option<String>,
     #[serde(default)]
     legal: Option<String>,
+    #[serde(default)]
+    foil: Option<KitFoil>,
 }
 
 #[derive(Deserialize, Default)]
@@ -147,6 +179,25 @@ fn read_dir(dir: &Path) -> Option<Sleeve> {
             .map(|path| cover_as_data_uri(&path.to_string_lossy()))
             .unwrap_or_default()
     };
+    // A foil mask needs its alpha, so only a PNG is one.
+    let mask = |name: &Option<String>| {
+        let png = name
+            .as_ref()
+            .filter(|n| n.to_ascii_lowercase().ends_with(".png"));
+        face(&png.cloned())
+    };
+    let foil = kit.foil.as_ref().map(|f| Foil {
+        style: foil_style(f.style.as_deref()),
+        front: mask(&f.front),
+        back: mask(&f.back),
+        spine: mask(&f.spine),
+        spine_right: mask(&f.spine_right),
+    });
+    let foil = foil.filter(|f| {
+        [&f.front, &f.back, &f.spine, &f.spine_right]
+            .iter()
+            .any(|m| !m.is_empty())
+    });
     let sleeve = Sleeve {
         front: face(&kit.faces.front),
         back: face(&kit.faces.back),
@@ -169,6 +220,7 @@ fn read_dir(dir: &Path) -> Option<Sleeve> {
             .filter(|a| is_hex_colour(a))
             .unwrap_or_default(),
         legal: text(kit.legal),
+        foil,
     };
     (sleeve != Sleeve::default()).then_some(sleeve)
 }
@@ -185,6 +237,16 @@ fn is_plain_image_name(name: &str) -> bool {
         && [".png", ".jpg", ".jpeg", ".webp"]
             .iter()
             .any(|ext| lower.ends_with(ext))
+}
+
+/// The kit's foil style, or the first one for anything else.
+fn foil_style(value: Option<&str>) -> String {
+    let value = value.unwrap_or_default().trim().to_ascii_lowercase();
+    if FOIL_STYLES.contains(&value.as_str()) {
+        value
+    } else {
+        FOIL_STYLES[0].to_string()
+    }
 }
 
 fn is_hex_colour(value: &str) -> bool {
@@ -211,7 +273,7 @@ fn text(value: Option<String>) -> String {
 
 /// The largest kit file the wizard will import: five faces at the cover's
 /// limit, as base64, and the words.
-const MAX_KIT_BYTES: u64 = 6 * MAX_COVER_BYTES * 4 / 3 + MAX_JSON_BYTES;
+const MAX_KIT_BYTES: u64 = 10 * MAX_COVER_BYTES * 4 / 3 + MAX_JSON_BYTES;
 
 /// Each face as it is written on the cartridge, without its extension.
 const FACE_FILES: [&str; 5] = ["front", "back", "spine", "spine-right", "box"];
@@ -269,6 +331,39 @@ pub fn install(root: &Path, kit: &Path) -> Result<Sleeve, String> {
         faces.push(Some((format!("{stem}.{ext}"), bytes)));
     }
 
+    // Foil masks, the same way, but only PNG: the mask is in its alpha.
+    let kit_foil = parsed.foil.as_ref();
+    let mut masks: Vec<Option<(String, Vec<u8>)>> = Vec::new();
+    if let Some(f) = kit_foil {
+        for (stem, value) in FACE_FILES
+            .iter()
+            .zip([&f.front, &f.back, &f.spine, &f.spine_right])
+        {
+            let Some(value) = value.as_deref().map(str::trim).filter(|v| !v.is_empty()) else {
+                masks.push(None);
+                continue;
+            };
+            let bytes = face_bytes(here, value).map_err(|why| format!("The {stem} foil {why}."))?;
+            if image_extension(&bytes) != Some("png") {
+                return Err(format!("The {stem} foil isn't a PNG picture."));
+            }
+            masks.push(Some((format!("{stem}-foil.png"), bytes)));
+        }
+    }
+    let mask_name = |i: usize| {
+        masks
+            .get(i)
+            .and_then(|m| m.as_ref())
+            .map(|(name, _)| name.clone())
+    };
+    let foil_json = masks.iter().any(Option::is_some).then(|| {
+        serde_json::json!({
+            "style": foil_style(kit_foil.and_then(|f| f.style.as_deref())),
+            "front": mask_name(0), "back": mask_name(1),
+            "spine": mask_name(2), "spineRight": mask_name(3),
+        })
+    });
+
     let name = |i: usize| faces[i].as_ref().map(|(name, _)| name.clone());
     let clean_text = |value: &Option<String>| Some(text(value.clone())).filter(|t| !t.is_empty());
     let description = serde_json::json!({
@@ -286,6 +381,7 @@ pub fn install(root: &Path, kit: &Path) -> Result<Sleeve, String> {
         "descriptor": clean_text(&parsed.descriptor),
         "accent": parsed.accent.as_deref().map(|a| a.trim().to_ascii_lowercase()).filter(|a| is_hex_colour(a)),
         "legal": clean_text(&parsed.legal),
+        "foil": foil_json,
     });
 
     let assets = root.join(crate::create::ASSET_DIR);
@@ -296,7 +392,7 @@ pub fn install(root: &Path, kit: &Path) -> Result<Sleeve, String> {
     let _ = std::fs::remove_dir_all(&stale);
     let write = || -> std::io::Result<()> {
         std::fs::create_dir_all(&fresh)?;
-        for (name, bytes) in faces.iter().flatten() {
+        for (name, bytes) in faces.iter().chain(&masks).flatten() {
             std::fs::write(fresh.join(name), bytes)?;
         }
         let json = serde_json::to_string_pretty(&description).map_err(std::io::Error::other)?;
@@ -626,6 +722,66 @@ mod tests {
             assert!(install(scratch.path(), &path).is_err(), "{name}");
             assert_eq!(read(scratch.path()).unwrap().headline, "KEEP ME", "{name}");
         }
+    }
+
+    /// A PNG with an alpha channel's worth of header: enough for the checks.
+    const MASK: &[u8] = b"\x89PNG\r\n\x1a\nmask";
+
+    #[test]
+    fn a_kits_foil_is_installed_and_read_back() {
+        let scratch = Scratch::new("sleeve-foil");
+        let json = format!(
+            r#"{{"format":"pc-gamepak-sleeve","version":1,"faces":{{"front":"{}"}},
+                "foil":{{"style":"Glitter","front":"{}"}}}}"#,
+            data_uri("png", PNG),
+            data_uri("png", MASK),
+        );
+        let kit = scratch.write("download/sleeve.json", json.as_bytes());
+        let sleeve = install(scratch.path(), &kit).expect("installed");
+        let foil = sleeve.foil.clone().expect("foil");
+        assert_eq!(foil.style, "glitter");
+        assert!(foil.front.starts_with("data:image/png;base64,"));
+        assert_eq!((foil.back.as_str(), foil.spine.as_str()), ("", ""));
+        assert!(scratch
+            .path()
+            .join(".gamepak/sleeve/front-foil.png")
+            .exists());
+        assert_eq!(read(scratch.path()), Some(sleeve));
+    }
+
+    #[test]
+    fn foil_must_be_a_png_and_a_known_style() {
+        let scratch = Scratch::new("sleeve-foil-bad");
+        let json = format!(
+            r#"{{"format":"pc-gamepak-sleeve","version":1,"headline":"X","foil":{{"front":"{}"}}}}"#,
+            data_uri("jpeg", &[0xff, 0xd8, 0xff, 0xe0]),
+        );
+        let path = scratch.write("a/sleeve.json", json.as_bytes());
+        assert!(
+            install(scratch.path(), &path).is_err(),
+            "a JPEG has no alpha to mask with"
+        );
+
+        scratch.write(".gamepak/sleeve/f.png", MASK);
+        scratch.write(".gamepak/sleeve/f.jpg", PNG);
+        kit(
+            &scratch,
+            r#"{"format":"pc-gamepak-sleeve","version":1,"headline":"X","foil":{"style":"plaid","front":"f.png","back":"f.jpg"}}"#,
+        );
+        let foil = read(scratch.path()).unwrap().foil.unwrap();
+        assert_eq!(foil.style, "pastel");
+        assert!(!foil.front.is_empty());
+        assert_eq!(foil.back, "", "only a .png is a mask");
+
+        kit(
+            &scratch,
+            r#"{"format":"pc-gamepak-sleeve","version":1,"headline":"X","foil":{"style":"oil"}}"#,
+        );
+        assert_eq!(
+            read(scratch.path()).unwrap().foil,
+            None,
+            "a style with no masks is no foil"
+        );
     }
 
     #[test]

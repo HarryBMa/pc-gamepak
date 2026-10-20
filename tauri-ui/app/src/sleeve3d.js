@@ -9,6 +9,9 @@
  * carries a finished render of the whole box (`box.png`) is shown as that
  * picture instead, which is what CoverForge's own 3D view made.
  *
+ * Holo foil in the kit (CoverForge's holo stickers) is a shimmer laid over a
+ * face through the kit's mask for it, so only the foil moves.
+ *
  * Nothing on a drawn face is invented: no rating unless the kit gives one, no
  * back cover text unless it has one. Sizes are in `--h`; the rest follow.
  */
@@ -95,12 +98,23 @@ export function buildSleeve(item) {
     bottom: "",
     front,
   };
+  // Holo foil, by the face it is on: a mask of where it shows.
+  const foil = sleeve.foil ?? {};
+  const masks = { front: foil.front, back: foil.back, left: foil.spine, right: foil.spineRight };
+  const style = /^(pastel|silver|oil|glitter)$/.test(foil.style) ? foil.style : "pastel";
   for (const [name, src] of Object.entries(faces)) {
     const face = el("span", `sv__face sv__face--${name}`);
     if (src) face.style.setProperty("--art", art(src));
     else if (name === "front") face.append(el("span", "sv__initials", initials(title)));
     else if (name === "left" || name === "right") face.append(drawnSpine(title, sleeve.rating));
     else if (name === "back") face.classList.add("is-plain");
+    const mask = src && safeArt(masks[name]);
+    if (mask) {
+      // Over the print, through the mask: the sticker shimmers, the rest is ink.
+      const shine = el("span", `sv__foil sv__foil--${style}`);
+      shine.style.setProperty("--mask", art(mask));
+      face.append(shine);
+    }
     box.append(face);
   }
   wrap.append(box, el("span", "sv__shadow"));

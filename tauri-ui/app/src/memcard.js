@@ -22,6 +22,7 @@
  */
 
 import { buildCard, createScene } from "./memcard-scene.js";
+import { buildMemoryCard, setPlate } from "./card3d.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -247,9 +248,9 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
     }
     const total = health?.totalBytes ?? 0;
     el.capacity.hidden = !total;
-    // The card's moulded label carries its size, as a console card's did —
+    // The card's plate carries its size, as a console card's label did —
     // but only a size the drive reported.
-    card.querySelector(".mcx__size").textContent = total ? formatBytes(total) : "";
+    setPlate(card, total ? formatBytes(total) : "");
     if (!total) return;
     const saves = blocks().reduce((sum, block) => sum + (block.cartridgeBytes || 0), 0);
     const used = total - (health.freeBytes ?? 0);
@@ -429,49 +430,23 @@ export function createMemoryCard({ invoke, toast, formatBytes, duration, since }
 }
 
 /**
- * A save as a game case: the art on the cover, the game's name running down
- * the spine, lids top and bottom, a lamp on the corner when it needs something,
- * and the shadow it stands in. A game with no art gets a cover in the card's
- * accent with its initials.
+ * A save as a memory card of its own (card3d.js): its game's art and name on
+ * the label, and a lamp on the corner when it needs something. On a console a
+ * save was a block on the card; here each one is a card, standing round the
+ * drive's.
  */
 function gameCase(block, tone) {
-  const wrap = document.createElement("span");
-  wrap.className = "mc__case";
-  const art = block.icon && /^(data:image\/|src\/)/.test(block.icon) ? block.icon : "";
-  // Absolute, because a url() inside a custom property resolves against the
-  // stylesheet that uses it, not the page — which breaks a relative path.
-  if (art) wrap.style.setProperty("--art", `url("${new URL(art, document.baseURI).href}")`);
-  else wrap.classList.add("is-blank");
-  // The front last: if 3D is ever painted flattened, it is the face on top.
-  for (const face of ["back", "right", "left", "top", "bottom", "front"]) {
-    const side = document.createElement("span");
-    side.className = `mc__face mc__face--${face}`;
-    if (!art && face === "front") side.textContent = initials(block.title);
-    if (face === "left") {
-      const spine = document.createElement("span");
-      spine.textContent = block.title;
-      side.append(spine);
-    }
-    if (face === "front" && needsAttention(tone)) {
-      const lamp = document.createElement("i");
-      lamp.className = "lamp mc__case-lamp";
-      lamp.dataset.tone = tone;
-      lamp.setAttribute("aria-hidden", "true");
-      side.append(lamp);
-    }
-    wrap.append(side);
+  const sleeve = buildMemoryCard({ kind: "save", art: block.icon, title: block.title });
+  sleeve.classList.add("mc__case");
+  if (needsAttention(tone)) {
+    const lamp = document.createElement("i");
+    lamp.className = "lamp mc__case-lamp";
+    lamp.dataset.tone = tone;
+    lamp.setAttribute("aria-hidden", "true");
+    sleeve.querySelector(".mcard__face--front").append(lamp);
   }
   const shadow = document.createElement("span");
   shadow.className = "mc__shadow";
-  wrap.append(shadow);
-  return wrap;
-}
-
-function initials(title) {
-  return (title || "")
-    .split(/\s+/)
-    .filter((word) => /[\p{L}\p{N}]/u.test(word))
-    .slice(0, 2)
-    .map((word) => [...word][0].toUpperCase())
-    .join("");
+  sleeve.append(shadow);
+  return sleeve;
 }

@@ -7,32 +7,6 @@
    for names and Rajdhani for everything else, and pad prompts in the face
    buttons' colours. */
 
-@font-face {
-  font-family: "Exo 2";
-  font-style: italic;
-  font-weight: 800 900;
-  font-display: block;
-  src: url("fonts/exo2-italic-latin.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Rajdhani";
-  font-weight: 500;
-  font-display: block;
-  src: url("fonts/rajdhani-500-latin.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Rajdhani";
-  font-weight: 600;
-  font-display: block;
-  src: url("fonts/rajdhani-600-latin.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Rajdhani";
-  font-weight: 700;
-  font-display: block;
-  src: url("fonts/rajdhani-700-latin.woff2") format("woff2");
-}
-
 :root {
   --ground: #080b20;
   --ink: #f2f4fa;
@@ -305,9 +279,15 @@ button {
   display: none;
 }
 
-/* Few cartridges sit in the middle of the shelf, as on the design. */
-.tv__shelf.is-short {
-  justify-content: center;
+/* Few cartridges sit in the middle of the shelf, as on the design. Auto
+   margins rather than centring: a shelf that overflows keeps its first box
+   in reach, where a centred one would push it off the start. */
+.tv__shelf > :first-child {
+  margin-left: auto;
+}
+
+.tv__shelf > :last-child {
+  margin-right: auto;
 }
 
 .tv__item {
@@ -618,93 +598,29 @@ button {
   perspective: 1600px;
 }
 
-/* The NFC memory card, CR80 (54 by 85.6 mm), as the set prints it. */
+/* The drive's memory card (objects.css), turned as the design shows it, lit
+   from behind by a layer of its own: a filter would flatten it. */
 .tv__card-art {
   position: relative;
   width: 404px;
-  aspect-ratio: 54 / 85.6;
-  overflow: hidden;
-  border-radius: 26px;
-  background: linear-gradient(160deg, #141b4d, #070a24 70%);
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.08),
-    0 40px 80px -30px rgba(0, 0, 0, 0.9);
-  transform: rotateY(-16deg) rotateZ(3deg);
+  height: calc(404px * 32 / 24);
+  transform-style: preserve-3d;
 }
 
+/* Pushed back behind the card, so the half of the card that turns away is
+   still in front of it. */
 .tv__card-art::before {
-  /* The colour bars, running corner to corner. */
   content: "";
   position: absolute;
-  left: -40%;
-  right: -40%;
-  top: 46%;
-  height: 22%;
-  background: linear-gradient(
-    #e83246 0 16.6%, #f78c1e 16.6% 33.3%, #facd28 33.3% 50%,
-    #3cb95a 50% 66.6%, #1e96eb 66.6% 83.3%, #8c50c8 83.3%
-  );
-  transform: rotate(-36deg);
+  inset: -12% -30%;
+  transform: translateZ(-240px) scale(1.2);
+  background: radial-gradient(closest-side, rgba(110, 215, 255, 0.22), transparent);
+  pointer-events: none;
 }
 
-.tv__card-logo {
-  position: absolute;
-  left: 34px;
-  top: 40px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 900;
-  font-size: 30px;
-}
-
-.tv__card-logo .tv__mark {
-  height: 26px;
-}
-
-.tv__card-logo .tv__mark i {
-  width: 5px;
-}
-
-.tv__card-word {
-  position: absolute;
-  left: 30px;
-  top: 112px;
-  margin: 0;
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 900;
-  font-size: 76px;
-  line-height: 0.92;
-  text-transform: uppercase;
-}
-
-.tv__card-word span {
-  color: var(--accent);
-}
-
-.tv__card-plate {
-  position: absolute;
-  left: 26px;
-  right: 26px;
-  bottom: 96px;
-  padding: 16px 20px;
-  border: 3px solid var(--accent);
-  border-radius: 14px;
-  background: #070a24;
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 900;
-  font-size: 28px;
-  line-height: 1.05;
-  text-transform: uppercase;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+.tv__card-art .mcard {
+  --cw: 404px;
+  transform: rotateY(-20deg) rotateX(4deg) rotateZ(3deg);
 }
 
 .tv__card-body {
@@ -744,19 +660,18 @@ button {
   gap: 28px;
 }
 
+/* A save's memory card, small, turned to show its edge. */
 .tv__save-art {
   flex: none;
-  width: 68px;
-  height: 96px;
-  border-radius: 4px;
-  background: var(--art, none) center / cover no-repeat, var(--plate);
-  display: grid;
-  place-items: center;
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 900;
-  font-size: 26px;
-  color: var(--ink);
+  width: 76px;
+  height: 100px;
+  perspective: 700px;
+}
+
+.tv__save-art .mcard {
+  --cw: 72px;
+  margin: 2px auto 0;
+  transform: rotateY(-24deg);
 }
 
 .tv__save-text {
@@ -947,17 +862,7 @@ button {
   color: #ffffff;
 }
 
-/* --- The sleeve (sleeve3d.js) --------------------------------------------- */
-
-.sv {
-  --h: 400px;
-  --w: calc(var(--h) * 71.5 / 101);
-  --d: calc(var(--h) * 16 / 101);
-  position: relative;
-  width: var(--w);
-  height: var(--h);
-  transform-style: preserve-3d;
-}
+/* --- The sleeve, on the shelf (objects.css draws it) -------------------- */
 
 /* The chosen one is lit from behind, as on the design: a layer in the same
    3D space rather than a filter, which would flatten the box. */
@@ -969,167 +874,6 @@ button {
   background: radial-gradient(closest-side, rgba(110, 215, 255, 0.3), transparent);
   transform: translateZ(calc(var(--d) * -2));
   pointer-events: none;
-}
-
-.sv__box {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  transform: rotateY(var(--turn, 24deg));
-  transition: transform 380ms var(--spring);
-}
-
-.sv__face {
-  position: absolute;
-  overflow: hidden;
-  backface-visibility: hidden;
-  background: var(--art, none) center / cover no-repeat, #11163a;
-}
-
-.sv__face--front,
-.sv__face--back {
-  inset: 0;
-  border-radius: 2px;
-}
-
-.sv__face--front {
-  transform: translateZ(calc(var(--d) / 2));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-
-.sv__face--back {
-  transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
-}
-
-.sv__face--left,
-.sv__face--right {
-  top: 0;
-  left: calc(50% - var(--d) / 2);
-  width: var(--d);
-  height: var(--h);
-}
-
-.sv__face--left {
-  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
-}
-
-.sv__face--right {
-  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
-}
-
-.sv__face--top,
-.sv__face--bottom {
-  top: calc(50% - var(--d) / 2);
-  left: 0;
-  width: var(--w);
-  height: var(--d);
-  background: #05071a;
-}
-
-.sv__face--top {
-  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
-}
-
-.sv__face--bottom {
-  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
-}
-
-.sv__initials {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 900;
-  font-size: calc(var(--h) * 0.18);
-}
-
-/* A side drawn from the title, in the sleeve's own layout: the colour bars at
-   the open end, a PC badge, the name running down, the rating at the foot. */
-.sv__drawn-spine {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--d) * 0.18);
-  height: 100%;
-  padding-bottom: calc(var(--d) * 0.25);
-  background: linear-gradient(90deg, #0b1033, #141b4d 50%, #0b1033);
-  color: var(--ink);
-}
-
-.sv__stripes {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 9%;
-  flex: none;
-}
-
-.sv__stripes i {
-  flex: 1;
-}
-
-.sv__pc {
-  flex: none;
-  padding: 0.1em 0.2em;
-  border-radius: 2px;
-  background: #ffffff;
-  color: #000000;
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 900;
-  font-size: calc(var(--d) * 0.36);
-  line-height: 1;
-}
-
-.sv__spine-title {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  writing-mode: vertical-rl;
-  font-weight: 700;
-  font-size: calc(var(--d) * 0.42);
-  letter-spacing: 0.08em;
-  line-height: var(--d);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-transform: uppercase;
-}
-
-.sv__pegi {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: calc(var(--d) * 0.62);
-  height: calc(var(--d) * 0.72);
-  border-radius: 2px;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: calc(var(--d) * 0.36);
-}
-
-.sv__shadow {
-  position: absolute;
-  left: 4%;
-  right: 4%;
-  bottom: calc(var(--h) * -0.05);
-  height: calc(var(--h) * 0.06);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.75), transparent);
-  transform: translateZ(calc(var(--d) * -1));
-}
-
-/* A finished render: a picture, already in 3D. */
-.sv.is-render {
-  width: auto;
-  transform-style: flat;
-}
-
-.sv__render {
-  display: block;
-  height: var(--h);
-  width: auto;
-  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.6));
 }
 
 .tv__item[aria-selected="true"] .sv.is-render .sv__render,

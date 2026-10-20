@@ -42,7 +42,11 @@ cartridge is ever executed automatically** — pressing Play is the gate.
 &nbsp;
 <img width="260" alt="The launcher showing a two-game XCOM collection: the collection's logo in the corner, a rail of games, and the selected game's logo over one Play button" src="docs/launcher-bundle.png" />
 &nbsp;
-<img width="260" alt="The memory card, animated: the card slots into a dark stage and its saves fan out onto a ring round it; God of War, newer on the card, is copied home, then the ring turns to Tunic, changed on both, which asks which copy to keep" src="docs/memcard-demo.gif" />
+<img width="260" alt="The memory card, animated: the drive's memory card slots into a dark stage and its saves fan out round it, each a memory card of its own with its game's art on the label; God of War, newer on the card, is copied home, then the ring turns to Tunic, changed on both, which asks which copy to keep" src="docs/memcard-demo.gif" />
+</div>
+
+<div align="center">
+<img width="800" alt="TV mode, animated: a shelf of cartridge boxes with XCOM in the slot and its holographic sticker shimmering; the selection runs along the shelf, opens XCOM's page with its headline, blurb and games, then shows the memory card screen with each save as a small memory card" src="docs/tv-demo.gif" />
 </div>
 
 ## Features
