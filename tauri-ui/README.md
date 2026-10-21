@@ -116,8 +116,9 @@ which draws the PC-GAMEPAK artwork as vectors at every size:
 - the **six colour bars** on a navy tile are the app — the launcher, its
   taskbar button, and the watcher's notification-area icon, which embeds the
   same `icon.ico`
-- the **planet in its rainbow ring** is the wizard's window (`wizard.ico`), so
-  the two windows of one executable look different in the taskbar
+- a **cartridge** with the bars on its label is the wizard's window
+  (`wizard.ico`), so the two windows of one executable look different in the
+  taskbar
 
 No letters: at 16 px a word is a smudge. The smallest sizes (24 px and down)
 are drawn with bolder proportions rather than shrunk, so they still read on a

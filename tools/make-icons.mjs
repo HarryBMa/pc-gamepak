@@ -7,15 +7,14 @@
  *   the app     the six colour bars of the PC-GAMEPAK mark on a navy tile: the
  *               launcher's executable, its taskbar button, and the watcher's
  *               notification-area icon (the watcher embeds icon.ico)
- *   the wizard  the planet in its rainbow ring (the rainbow planet coin)
+ *   the wizard  a cartridge, with the six bars on its label
  *
- * No letters: at 16 px a word is a smudge, and the mark and the planet say
- * PC-GAMEPAK without one. Both are drawn here from the artwork's own
- * geometry (the bars' parallelograms and the planet's ring and arcs) rather
- * than shrunk from a picture, and the smallest sizes get their own
- * proportions: the tile fills its square, the bars widen to close their gaps,
- * and the coin's ring and planet thicken, so a few pixels still read on a
- * light or a dark taskbar.
+ * No letters: at 16 px a word is a smudge, and the mark says PC-GAMEPAK
+ * without one. Both are drawn here from the mark's own geometry (its bars'
+ * parallelograms) rather than shrunk from a picture, and the smallest sizes
+ * get their own proportions: the tile fills its square, the bars widen to
+ * close their gaps, and the cartridge's label grows, so a few pixels still
+ * read on a light or a dark taskbar.
  *
  *   node tools/make-icons.mjs
  *
@@ -84,29 +83,49 @@ ${bars}
 }
 
 /**
- * The wizard: the planet coin, a dark disc in a rainbow ring with the planet
- * on it. The planet is the artwork's: a ball, and a tilted ring that passes
- * behind it and in front. Drawn on a 300 square.
+ * The wizard: a cartridge, the thing it makes. A navy shell with its grip
+ * notches across the top and chamfered corners at the foot, and a cream label
+ * carrying the mark's six bars, cut to the label so none run over its edge.
+ * Drawn on a 256 square; small sizes get a bigger label, fewer notches and
+ * bolder bars.
  */
 function wizardSvg(size) {
   const small = size <= SMALL;
-  const ring = small ? 30 : 14; // the rainbow
-  const disc = 150 - ring / 2 - (small ? 0 : 4);
-  const k = small ? 1.3 : 1; // the planet, bigger when small
-  const line = (small ? 17 : 11) / k; // its ring, in the planet's own units
-  const arc = "M57.5 150 A92.5 27.5 0 0 0 242.5 150";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 300 300">
+  const shell = small
+    ? "M28 10h200a14 14 0 0 1 14 14v200l-22 22H36l-22-22V24a14 14 0 0 1 14-14z"
+    : "M48 20h160a12 12 0 0 1 12 12v188l-18 18H54l-18-18V32a12 12 0 0 1 12-12z";
+  const notches = small ? 3 : 6;
+  const notchW = small ? 22 : 10;
+  const notchGap = small ? 48 : 20;
+  const notchX = 128 - ((notches - 1) * notchGap + notchW) / 2;
+  const grip = Array.from({ length: notches }, (_, i) =>
+    `<rect x="${notchX + i * notchGap}" y="${small ? 20 : 30}" width="${notchW}" height="${small ? 30 : 26}" rx="${small ? 6 : 3}" fill="#fff" fill-opacity="${small ? 0.28 : 0.18}"/>`,
+  ).join("");
+  const label = small ? { x: 34, y: 66, w: 188, h: 150, r: 16 } : { x: 58, y: 72, w: 140, h: 130, r: 12 };
+  // The bars, as on the app's tile, filling the label and clipped to it.
+  const pitch = 28.8;
+  const bar = small ? pitch : 22.8;
+  const lean = small ? 30 : 40;
+  const tall = 150;
+  const span = pitch * 5 + bar + lean;
+  const scale = (label.w * (small ? 0.92 : 0.84)) / span;
+  const h = Math.min(tall * scale, label.h * (small ? 0.86 : 0.7));
+  const x0 = label.x + (label.w - span * scale) / 2;
+  const y0 = label.y + (label.h - h) / 2;
+  const bars = STRIPES.map((colour, i) => {
+    const x = x0 + (i * pitch + lean) * scale;
+    return `<path d="M${x} ${y0}h${bar * scale}l${-lean * scale} ${h}h${-bar * scale}z" fill="${colour}"/>`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 256 256">
 <defs>
-<linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">${STRIPES.map((c, i) => `<stop offset="${i / 5}" stop-color="${c}"/>`).join("")}</linearGradient>
-<mask id="behind" maskUnits="userSpaceOnUse"><rect width="300" height="300" fill="#fff"/><circle cx="150" cy="150" r="57" fill="#000"/></mask>
-<mask id="front" maskUnits="userSpaceOnUse"><rect width="300" height="300" fill="#fff"/><path d="${arc}" transform="rotate(-22 150 150)" fill="none" stroke="#000" stroke-width="${line + 14}"/></mask>
+<linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3584"/><stop offset="1" stop-color="#0a0e33"/></linearGradient>
+<clipPath id="label"><rect x="${label.x}" y="${label.y}" width="${label.w}" height="${label.h}" rx="${label.r}"/></clipPath>
 </defs>
-<circle cx="150" cy="150" r="${disc}" fill="#0d0d12" stroke="url(#rg)" stroke-width="${ring}"/>
-<g transform="translate(150 150) scale(${k}) translate(-150 -150)">
-<g transform="rotate(-22 150 150)"><ellipse cx="150" cy="150" rx="92.5" ry="27.5" fill="none" stroke="${CREAM}" stroke-width="${line}" mask="url(#behind)"/></g>
-<circle cx="150" cy="150" r="50" fill="${CREAM}" mask="url(#front)"/>
-<path d="${arc}" transform="rotate(-22 150 150)" fill="none" stroke="${CREAM}" stroke-width="${line}" stroke-linecap="round"/>
-</g>
+<path d="${shell}" fill="url(#t)"/>
+${grip}
+<rect x="${label.x}" y="${label.y}" width="${label.w}" height="${label.h}" rx="${label.r}" fill="${CREAM}"/>
+<g clip-path="url(#label)">${bars}</g>
+<path d="${shell}" fill="none" stroke="#fff" stroke-opacity="${small ? 0.3 : 0.18}" stroke-width="3"/>
 </svg>`;
 }
 

@@ -15,8 +15,8 @@ Every version in the repository is checked to agree —
 ### Icons you can read in the taskbar
 
 The app and the wizard have new icons, drawn for their size: the six colour
-bars of the PC-GAMEPAK mark on a navy tile for the app, and the planet in its
-rainbow ring for the wizard. The old ones were the logo pictures shrunk, and
+bars of the PC-GAMEPAK mark on a navy tile for the app, and a cartridge with
+the bars on its label for the wizard. The old ones were the logo pictures shrunk, and
 at taskbar and notification-area sizes their lettering and thin bands turned
 to a smudge and the deep red all but disappeared on a dark taskbar. There are
 no letters now, and 24 px and smaller are drawn bolder, not shrunk.
