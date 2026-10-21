@@ -31,8 +31,11 @@ jobs:
       - name: Install webkit2gtk
         run: |
           sudo apt-get update
+          # libpcsclite-dev: the watcher reads NFC readers through PC/SC
+          # (the pcsc crate), as CI's own install already says.
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
-                                  librsvg2-dev libssl-dev libayatana-appindicator3-dev
+                                  librsvg2-dev libssl-dev libayatana-appindicator3-dev \
+                                  libpcsclite-dev
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tauri-ui/src-tauri

@@ -15,6 +15,7 @@ pkgbase = pc-gamepak
 	depends = polkit
 	depends = udisks2
 	depends = xdg-utils
+	depends = pcsclite
 	optdepends = steam: play Steam games from the cartridge
 	optdepends = btrfs-progs: format cartridges to btrfs instead of exFAT
 	optdepends = udiskie: automount cartridges on desktops that do not do it themselves
