@@ -455,7 +455,7 @@ itself sits in the middle of the window, and every save on it stands round it
 on a track as a memory card of its own, with its game's art on the label: on
 a console a save was a block on the card, and here each one is a card. The
 cards are the PC GamePak set's: cut at one corner like an SD card, with the
-mark, a grip, gold contacts and CoverForge's holographic PC-GAMEPAK sticker,
+mark, a grip, gold contacts and the holographic PC-GAMEPAK sticker,
 which catches the light. The chosen save is at the front; under the
 stage it says which copy is newer, when it was saved, how long it has been
 played and how much it holds, beside the one button that does what it needs:

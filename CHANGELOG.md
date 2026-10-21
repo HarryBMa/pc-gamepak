@@ -31,7 +31,7 @@ manual's *Cartridge format* has the layout.
 X is Eject on every TV screen, as in the popup. The memory card is on View,
 or `M`.
 
-A kit can carry **holo foil**: CoverForge's holographic PC-GAMEPAK sticker
+A kit can carry **holo foil**: the holographic PC-GAMEPAK sticker
 shimmers on the box, through a mask the export cuts for each face. The
 preview's cartridge is an XCOM collection with the sleeve and sticker made for
 it in CoverForge.

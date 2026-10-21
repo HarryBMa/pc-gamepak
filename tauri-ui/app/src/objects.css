@@ -552,7 +552,7 @@
   display: none;
 }
 
-/* CoverForge's holo PC-GAMEPAK sticker, stuck over the corner of the label. */
+/* The PC-GAMEPAK holo sticker, stuck over the corner of the label. */
 .mcard__sticker {
   position: absolute;
   right: calc(var(--u) * 0.9);
