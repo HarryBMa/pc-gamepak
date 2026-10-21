@@ -12,6 +12,15 @@ Every version in the repository is checked to agree —
 
 ## Unreleased
 
+### Icons you can read in the taskbar
+
+The app and the wizard have new icons, drawn for their size: the six colour
+bars of the PC-GAMEPAK mark on a navy tile for the app, and a cartridge with
+the bars on its label for the wizard. The old ones were the logo pictures shrunk, and
+at taskbar and notification-area sizes their lettering and thin bands turned
+to a smudge and the deep red all but disappeared on a dark taskbar. There are
+no letters now, and 24 px and smaller are drawn bolder, not shrunk.
+
 ### The memory card, as a memory card
 
 The memory card view is now a stage: the card itself hovers in the middle, a
