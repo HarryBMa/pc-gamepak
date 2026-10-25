@@ -10,7 +10,7 @@ nothing about either changes.
 Every version in the repository is checked to agree —
 `node tools/check-versions.mjs` — because for three releases they did not.
 
-## Unreleased
+## 1.2.0 — 2026-10-21
 
 ### Icons you can read in the taskbar
 
@@ -89,11 +89,21 @@ with the emulator your desktop uses for that file type. The cartridge also
 carries a `gamelist.xml` and a `metadata.pegasus.txt`, so Pegasus and
 ES-DE — on a PC, or on an Android phone over USB-C — list it with its art when
 pointed at the drive.
+
+### Fixes
+
 - **No Explorer window for a cartridge.** Windows' AutoPlay used to open a
   cartridge as a folder beside the launcher, and the watcher closed it a second
   later. It now answers AutoPlay's own "should I?" question, through the
   documented `IQueryCancelAutoPlay`, so the window never opens — for cartridges
   and memory cards only. Every other drive behaves as AutoPlay is set to.
+- **Eject after formatting.** The wizard ejects and records the drive where it
+  was remounted after a format, not where it was before.
+- **Readable dropdowns on a light desktop theme.** They used to draw light text
+  on the system's light menu.
+- **The launcher opens on Linux after a desktop restart.** The watcher skips
+  display variables left over from a session that has gone, instead of handing
+  them to the launcher, which then could not open a window.
 
 ## 1.1.0 — 2026-10-03
 

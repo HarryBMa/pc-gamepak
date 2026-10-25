@@ -69,6 +69,15 @@
   </supports>
 
   <releases>
+    <release version="1.2.0" date="2026-10-21">
+      <description>
+        <p>A tap of an NFC card or a barcode scan can pick any game, including
+        one on another PC that starts there and streams with Moonlight when you
+        press Play. Emulated games can be made into cartridges that carry their
+        ROM. The memory card is drawn as a card, with its saves round it, and
+        the app and wizard have new icons that read at taskbar size.</p>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-10-03">
       <description>
         <p>Saves, playtime and compiled shaders now travel on the cartridge

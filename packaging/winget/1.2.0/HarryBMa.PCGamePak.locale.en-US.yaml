@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 
 PackageIdentifier: HarryBMa.PCGamePak
-PackageVersion: 1.1.0
+PackageVersion: 1.2.0
 PackageLocale: en-US
 
 Publisher: HarryBMa
@@ -40,13 +40,15 @@ Tags:
   - cartridge
 
 ReleaseNotes: |-
-  Saves, playtime and compiled shaders now travel on the cartridge, so a game
-  carries its progress between machines. Save folders are found from Ludusavi's
-  list, including Steam Cloud saves and games that save to the registry.
+  A GamePak can now be started by any NFC card or barcode: tap or scan, and the
+  launcher opens ready, with Play to start. A GamePak can be a game on another
+  PC, started there on the tap and streamed with Moonlight on Play. Emulated
+  games can be made into cartridges that carry their ROM, listed by Pegasus
+  and ES-DE.
 
-  A drive can be a memory card that carries only saves, or a cartridge can be
-  both. New cartridges format as NTFS by default. A cartridge can say what
-  platform it is for. Eject names whatever is still using the drive.
+  The memory card is drawn as a card with its saves round it. The app and the
+  wizard have new icons that read at taskbar size. Windows no longer opens an
+  Explorer window beside the launcher when a cartridge goes in.
 
   WinGet installs the two executables and puts them on PATH. It cannot register
   the watcher's logon task, so a cartridge will not open its launcher on insert
@@ -58,7 +60,7 @@ ReleaseNotes: |-
   needs none of that and works immediately:
 
     pc-gamepak --create
-ReleaseNotesUrl: https://github.com/HarryBMa/pc-gamepak/releases/tag/v1.1.0
+ReleaseNotesUrl: https://github.com/HarryBMa/pc-gamepak/releases/tag/v1.2.0
 
 Documentations:
   - DocumentLabel: README

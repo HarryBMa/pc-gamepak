@@ -16,7 +16,7 @@
 # zero-resident route and is willing to run the script by hand.
 
 pkgname=pc-gamepak
-pkgver=1.1.0
+pkgver=1.2.0
 pkgrel=1
 pkgdesc="Turn removable storage into physical game cartridges"
 arch=('x86_64')
@@ -55,7 +55,7 @@ options=(!lto)
 makedepends=('rust' 'pkgconf')
 install="$pkgname.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('4cb51e8ce0328786bfd02f99023a4f2cf9f6c8b9eb49e65aed053f9cdb46cd44')
+sha256sums=('SHA256-PENDING-RELEASE')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
